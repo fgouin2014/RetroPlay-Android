@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -585,7 +586,9 @@ fun ComposeEmulatorScreen(
                             // Changer de variante et sauvegarder
                             layoutVariant = newVariant
                             onVariantChanged(newVariant)
-                        }
+                        },
+                        context = this@NativeComposeEmulatorActivity,
+                        prefs = this@NativeComposeEmulatorActivity.prefs
                     )
                 }
                 
@@ -960,7 +963,9 @@ fun GamePadSettingsDialog(
     currentVariant: GamePadLayoutManager.LayoutVariant,
     onDismiss: () -> Unit,
     onApply: (TouchControllerSettingsManager.Settings) -> Unit,
-    onVariantChange: (GamePadLayoutManager.LayoutVariant) -> Unit
+    onVariantChange: (GamePadLayoutManager.LayoutVariant) -> Unit,
+    context: Context,
+    prefs: SharedPreferences
 ) {
     var scale by remember { mutableFloatStateOf(currentSettings.scale) }
     var rotation by remember { mutableFloatStateOf(currentSettings.rotation) }
@@ -968,11 +973,48 @@ fun GamePadSettingsDialog(
     var marginY by remember { mutableFloatStateOf(currentSettings.marginY) }
     var selectedVariant by remember { mutableStateOf(currentVariant) }
     
+    // État pour l'overlay RetroArch
+    val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
+    val availableOverlays = remember { assetManager.getCompatibleOverlays(console) }
+    
+    // Charger préférence actuelle
+    val currentOverlayPref = remember { com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console) }
+    var selectedOverlay by remember { mutableStateOf(currentOverlayPref?.overlayName ?: if (availableOverlays.isNotEmpty()) availableOverlays[0] else "") }
+    var selectedLandscapeLayout by remember { mutableStateOf(currentOverlayPref?.landscapeLayout ?: "landscape-A") }
+    var selectedPortraitLayout by remember { mutableStateOf(currentOverlayPref?.portraitLayout ?: "portrait-A") }
+    var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
+    
     // État pour détecter si un slider est en train d'être bougé
     var isAdjusting by remember { mutableStateOf(false) }
     
     // Liste des variantes disponibles pour cette console
     val availableVariants = GamePadLayoutManager.getAvailableVariants(console)
+    
+    // Charger layouts disponibles pour l'overlay sélectionné (si RetroArch)
+    val availableLayouts = remember(selectedOverlay) {
+        if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH && selectedOverlay.isNotEmpty()) {
+            assetManager.getAvailableLayouts(selectedOverlay)
+        } else {
+            emptyList()
+        }
+    }
+    
+    // Sauvegarder la préférence overlay quand modifiée
+    LaunchedEffect(selectedVariant, selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate) {
+        if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH && selectedOverlay.isNotEmpty()) {
+            val pref = com.retroplay.overlay.models.OverlayPreference(
+                enabled = true,
+                overlayName = selectedOverlay,
+                landscapeLayout = selectedLandscapeLayout,
+                portraitLayout = selectedPortraitLayout,
+                autoRotate = autoRotate
+            )
+            com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
+        } else if (selectedVariant != GamePadLayoutManager.LayoutVariant.RETROARCH) {
+            // Désactiver RetroArch si autre variante choisie
+            com.retroplay.overlay.models.OverlayPreferenceManager.disable(prefs, console)
+        }
+    }
     
     // Alpha du fond : plus transparent quand on ajuste
     val dialogAlpha = if (isAdjusting) 0x33000000 else 0x99000000
@@ -1043,6 +1085,131 @@ fun GamePadSettingsDialog(
                             }
                         }
                     }
+                }
+                
+                // Configuration RetroArch Overlay (affiché seulement si variante RETROARCH sélectionnée)
+                if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
+                    Divider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    Text("RetroArch Overlay", color = Color(0xFFFF9800), style = MaterialTheme.typography.titleMedium)
+                    
+                    // Sélection de l'overlay package
+                    if (availableOverlays.isNotEmpty()) {
+                        Text("Overlay Package", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
+                        Column {
+                            availableOverlays.forEach { overlayName ->
+                                val isSelected = selectedOverlay == overlayName
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { selectedOverlay = overlayName }
+                                        .background(if (isSelected) Color(0xFF4CAF50).copy(alpha = 0.3f) else Color.Transparent)
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = { selectedOverlay = overlayName }
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        overlayName,
+                                        color = if (isSelected) Color.White else Color.Gray,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Sélection des layouts (si overlay chargé)
+                        if (selectedOverlay.isNotEmpty() && availableLayouts.isNotEmpty()) {
+                            Spacer(Modifier.height(12.dp))
+                            
+                            // Filtrer par orientation
+                            val landscapeLayouts = availableLayouts.filter { it.contains("landscape") }
+                            val portraitLayouts = availableLayouts.filter { it.contains("portrait") }
+                            
+                            if (landscapeLayouts.isNotEmpty()) {
+                                Text("Landscape Layout", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    landscapeLayouts.take(3).forEach { layoutName ->
+                                        val isSelected = selectedLandscapeLayout == layoutName
+                                        TextButton(
+                                            onClick = { selectedLandscapeLayout = layoutName },
+                                            colors = ButtonDefaults.textButtonColors(
+                                                containerColor = if (isSelected) Color(0xFFFF9800) else Color.Transparent
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(
+                                                layoutName.substringAfter("-").uppercase(),
+                                                color = if (isSelected) Color.Black else Color.Gray,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (portraitLayouts.isNotEmpty()) {
+                                Text("Portrait Layout", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    portraitLayouts.take(3).forEach { layoutName ->
+                                        val isSelected = selectedPortraitLayout == layoutName
+                                        TextButton(
+                                            onClick = { selectedPortraitLayout = layoutName },
+                                            colors = ButtonDefaults.textButtonColors(
+                                                containerColor = if (isSelected) Color(0xFFFF9800) else Color.Transparent
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(
+                                                layoutName.substringAfter("-").uppercase(),
+                                                color = if (isSelected) Color.Black else Color.Gray,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Auto-rotate option
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = autoRotate,
+                                    onCheckedChange = { autoRotate = it },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = Color(0xFFFF9800),
+                                        uncheckedColor = Color.Gray
+                                    )
+                                )
+                                Text(
+                                    "Auto-switch on rotation",
+                                    color = Color.LightGray,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            "No compatible overlays found for $console",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    
+                    Divider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 8.dp))
                 }
                 
                 // Scale (0.75x - 1.5x)

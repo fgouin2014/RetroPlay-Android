@@ -66,6 +66,9 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
             return;
         }
 
+        // Install RetroArch overlays if needed (first launch)
+        installRetroArchOverlays();
+        
         // Start WebServer only
         startWebServer();
         
@@ -75,6 +78,24 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
         setupGamesButton();
         
         Log.i(TAG, "MainActivity onCreate finished");
+    }
+    
+    /**
+     * Install RetroArch overlays from assets to external storage
+     * Called at first launch only
+     */
+    private void installRetroArchOverlays() {
+        try {
+            com.retroplay.overlay.assets.OverlayAssetManager assetManager = 
+                new com.retroplay.overlay.assets.OverlayAssetManager(this);
+            
+            boolean success = assetManager.installOverlaysIfNeeded();
+            if (success) {
+                Log.i(TAG, "RetroArch overlays installed successfully");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error installing RetroArch overlays", e);
+        }
     }
 
     private void setupWebView() {

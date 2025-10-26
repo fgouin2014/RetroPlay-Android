@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/kitt_black">
+
+    <!-- Header KITT Style -->
+    <LinearLayout
+        android:id="@+id/header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:background="@color/kitt_dark_red"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/backButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="◀ RETOUR"
+            android:textSize="12sp"
+            app:backgroundTint="@color/kitt_red_alpha"
+            app:cornerRadius="8dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="2dp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="DÉTAILS DU JEU"
+            android:textColor="@color/kitt_red"
+            android:textSize="16sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <View
+            android:layout_width="80dp"
+            android:layout_height="1dp" />
+
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:padding="16dp"
+        android:fillViewport="true"
+        app:layout_constraintTop_toBottomOf="@id/header"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Header avec image du jeu -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="6dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="1dp"
+            app:cardBackgroundColor="@color/kitt_medium_red">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/game_image"
+                    android:layout_width="72dp"
+                    android:layout_height="98dp"
+                    android:scaleType="centerCrop"
+                    android:background="@color/kitt_dark_red"
+                    android:padding="2dp"
+                    android:contentDescription="Icône du jeu" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="16dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/game_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Titre du jeu"
+                        android:textSize="22sp"
+                        android:textColor="@color/kitt_red"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:ellipsize="end"
+                        android:maxLines="2" />
+
+                    <TextView
+                        android:id="@+id/game_genre"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Genre: Action"
+                        android:textSize="14sp"
+                        android:textColor="@color/kitt_red_light"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:id="@+id/game_players"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Joueurs: 1"
+                        android:textSize="14sp"
+                        android:textColor="@color/kitt_red_light"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:id="@+id/game_release_date"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Sortie: 1988"
+                        android:textSize="14sp"
+                        android:textColor="@color/kitt_red_light"
+                        android:fontFamily="monospace" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Screenshot du jeu -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="6dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="1dp"
+            app:cardBackgroundColor="@color/kitt_medium_red">
+
+            <ImageView
+                android:id="@+id/game_screenshot"
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:scaleType="centerCrop"
+                android:background="@color/kitt_dark_red"
+                android:padding="4dp"
+                android:contentDescription="Capture d'écran du jeu" />
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Description -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="6dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="1dp"
+            app:cardBackgroundColor="@color/kitt_medium_red">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="DESCRIPTION"
+                        android:textSize="18sp"
+                        android:textColor="@color/kitt_red"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/game_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Description du jeu..."
+                    android:textSize="14sp"
+                    android:textColor="@color/kitt_red_light"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="4dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Bouton Jouer -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/play_button"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="🎮 JOUER (WASM)"
+            android:textSize="16sp"
+            android:backgroundTint="@color/kitt_red"
+            android:textColor="@color/kitt_black"
+            android:elevation="4dp"
+            app:cornerRadius="12dp"
+            app:icon="@android:drawable/ic_media_play"
+            app:iconGravity="textStart"
+            app:iconPadding="8dp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp" />
+
+        <!-- Bouton Play Native -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/play_native_button"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="⚡ PLAY NATIVE"
+            android:textSize="16sp"
+            android:backgroundTint="@color/kitt_red"
+            android:textColor="@color/kitt_black"
+            android:elevation="4dp"
+            app:cornerRadius="12dp"
+            app:icon="@android:drawable/ic_media_play"
+            app:iconGravity="textStart"
+            app:iconPadding="8dp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp"
+            android:visibility="gone" />
+
+        <!-- Bouton Load Save -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/load_save_button"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="📂 LOAD SAVED PROGRESS"
+            android:textSize="14sp"
+            app:backgroundTint="@color/kitt_red_alpha"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="2dp"
+            android:textColor="@color/kitt_red"
+            android:elevation="4dp"
+            app:cornerRadius="12dp"
+            app:icon="@android:drawable/ic_menu_revert"
+            app:iconGravity="textStart"
+            app:iconPadding="8dp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginTop="8dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

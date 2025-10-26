@@ -1,0 +1,4 @@
+include ':app'
+include ':retrograde-util'
+include ':lemuroid-touchinput'
+rootProject.name = "RetroPlay-Android"

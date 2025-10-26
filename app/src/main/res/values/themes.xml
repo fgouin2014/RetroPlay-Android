@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme with Material 3 -->
+    <style name="Base.Theme.ChatAI" parent="Theme.Material3.DayNight">
+        <!-- Customize your light theme here. -->
+        <item name="colorPrimary">#4ECDC4</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorPrimaryContainer">#44A08D</item>
+        <item name="colorOnPrimaryContainer">@android:color/white</item>
+        <item name="colorSecondary">#FF6B6B</item>
+        <item name="colorOnSecondary">@android:color/white</item>
+        <item name="colorSecondaryContainer">#FFB3B3</item>
+        <item name="colorOnSecondaryContainer">#8B0000</item>
+        <item name="colorTertiary">#FFD93D</item>
+        <item name="colorOnTertiary">@android:color/black</item>
+        <item name="colorTertiaryContainer">#FFF59D</item>
+        <item name="colorOnTertiaryContainer">#8B4513</item>
+        <item name="colorError">#F44336</item>
+        <item name="colorOnError">@android:color/white</item>
+        <item name="colorErrorContainer">#FFCDD2</item>
+        <item name="colorOnErrorContainer">#8B0000</item>
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#1C1B1F</item>
+        <item name="colorSurfaceVariant">#E7E0EC</item>
+        <item name="colorOnSurfaceVariant">#49454F</item>
+        <item name="colorOutline">#79747E</item>
+        <item name="colorOutlineVariant">#CAC4D0</item>
+        <item name="colorSurfaceInverse">#313033</item>
+        <item name="colorOnSurfaceInverse">#F4EFF4</item>
+        <item name="colorPrimaryInverse">#4ECDC4</item>
+    </style>
+
+    <style name="Theme.ChatAI" parent="Base.Theme.ChatAI">
+        <item name="colorPrimary">@color/kitt_red</item>
+        <item name="colorPrimaryVariant">@color/kitt_dark_red</item>
+        <item name="colorOnPrimary">@color/kitt_black</item>
+        <item name="colorSecondary">@color/kitt_red_light</item>
+        <item name="colorSecondaryVariant">@color/kitt_medium_red</item>
+        <item name="colorOnSecondary">@color/kitt_black</item>
+        <item name="android:colorBackground">@color/kitt_black</item>
+        <item name="colorOnBackground">@color/kitt_red</item>
+        <item name="colorSurface">@color/kitt_medium_red</item>
+        <item name="colorOnSurface">@color/kitt_red</item>
+        <item name="colorError">@color/kitt_red</item>
+        <item name="colorOnError">@color/kitt_black</item>
+        <item name="android:statusBarColor">@color/kitt_dark_red</item>
+        <item name="android:navigationBarColor">@color/kitt_black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+    
+    <!-- KITT Theme with Material 3 - Authentic Knight Rider -->
+    <style name="Base.Theme.KITT" parent="Theme.Material3.Light.NoActionBar">
+        <!-- KITT Red Theme - Force authentic colors -->
+        <item name="colorPrimary">@color/kitt_red</item>
+        <item name="colorOnPrimary">@color/kitt_black</item>
+        <item name="colorPrimaryContainer">@color/kitt_dark_red</item>
+        <item name="colorOnPrimaryContainer">@color/kitt_black</item>
+        <item name="colorSecondary">@color/kitt_red</item>
+        <item name="colorOnSecondary">@color/kitt_black</item>
+        <item name="colorSecondaryContainer">@color/kitt_red_alpha</item>
+        <item name="colorOnSecondaryContainer">@color/kitt_black</item>
+        <item name="colorTertiary">@color/kitt_red</item>
+        <item name="colorOnTertiary">@color/kitt_black</item>
+        <item name="colorTertiaryContainer">@color/kitt_red_alpha</item>
+        <item name="colorOnTertiaryContainer">@color/kitt_black</item>
+        <item name="colorError">@color/kitt_red</item>
+        <item name="colorOnError">@color/kitt_black</item>
+        <item name="colorErrorContainer">@color/kitt_red_alpha</item>
+        <item name="colorOnErrorContainer">@color/kitt_black</item>
+        <item name="colorSurface">@color/kitt_black</item>
+        <item name="colorOnSurface">@color/kitt_red</item>
+        <item name="colorSurfaceVariant">@color/kitt_gray</item>
+        <item name="colorOnSurfaceVariant">@color/kitt_red</item>
+        <item name="colorOutline">@color/kitt_red</item>
+        <item name="colorOutlineVariant">@color/kitt_light_gray</item>
+        <item name="colorSurfaceInverse">@color/kitt_red</item>
+        <item name="colorOnSurfaceInverse">@color/kitt_black</item>
+        <item name="colorPrimaryInverse">@color/kitt_red</item>
+        
+        <!-- Window styling -->
+        <item name="android:windowBackground">@color/kitt_black</item>
+        <item name="android:statusBarColor">@color/kitt_black</item>
+        <item name="android:navigationBarColor">@color/kitt_black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        
+        <!-- Force Material 3 components to use KITT colors -->
+        <item name="colorPrimaryVariant">@color/kitt_dark_red</item>
+        <item name="colorSecondaryVariant">@color/kitt_red</item>
+    </style>
+
+    <style name="Theme.KITT" parent="Base.Theme.KITT" />
+    
+    <!-- KITT Dark Theme with Material 3 DayNight - Blanc/Noir/Gris -->
+    <style name="Base.Theme.KITT.Dark" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Dark Theme with White Text on Black Background -->
+        <item name="colorPrimary">@color/dark_white</item>
+        <item name="colorOnPrimary">@color/dark_black</item>
+        <item name="colorPrimaryContainer">@color/dark_gray_medium</item>
+        <item name="colorOnPrimaryContainer">@color/dark_white</item>
+        <item name="colorSecondary">@color/dark_gray_light</item>
+        <item name="colorOnSecondary">@color/dark_black</item>
+        <item name="colorSecondaryContainer">@color/dark_gray_dark</item>
+        <item name="colorOnSecondaryContainer">@color/dark_white</item>
+        <item name="colorTertiary">@color/dark_gray_very_light</item>
+        <item name="colorOnTertiary">@color/dark_black</item>
+        <item name="colorTertiaryContainer">@color/dark_gray_medium</item>
+        <item name="colorOnTertiaryContainer">@color/dark_white</item>
+        <item name="colorError">@color/kitt_red</item>
+        <item name="colorOnError">@color/dark_white</item>
+        <item name="colorErrorContainer">@color/kitt_red_alpha</item>
+        <item name="colorOnErrorContainer">@color/dark_white</item>
+        <item name="colorSurface">@color/dark_black</item>
+        <item name="colorOnSurface">@color/dark_white</item>
+        <item name="colorSurfaceVariant">@color/dark_gray_dark</item>
+        <item name="colorOnSurfaceVariant">@color/dark_gray_very_light</item>
+        <item name="colorOutline">@color/dark_gray_light</item>
+        <item name="colorOutlineVariant">@color/dark_gray_medium</item>
+        <item name="colorSurfaceInverse">@color/dark_white</item>
+        <item name="colorOnSurfaceInverse">@color/dark_black</item>
+        <item name="colorPrimaryInverse">@color/dark_black</item>
+        
+        <!-- Window styling -->
+        <item name="android:windowBackground">@color/dark_black</item>
+        <item name="android:statusBarColor">@color/dark_black</item>
+        <item name="android:navigationBarColor">@color/dark_black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        
+        <!-- Keep KITT Red for LEDs and accents -->
+        <item name="colorPrimaryVariant">@color/kitt_red</item>
+        <item name="colorSecondaryVariant">@color/kitt_red</item>
+    </style>
+
+    <style name="Theme.KITT.Dark" parent="Base.Theme.KITT.Dark" />
+    
+    <!-- KITT Amber Theme with Material 3 - Based on VU Warning Color -->
+    <style name="Base.Theme.KITT.Amber" parent="Theme.Material3.Light.NoActionBar">
+        <!-- Amber Theme with Orange/Amber Colors -->
+        <item name="colorPrimary">@color/amber_primary</item>
+        <item name="colorOnPrimary">@color/amber_on_primary</item>
+        <item name="colorPrimaryContainer">@color/amber_primary_dark</item>
+        <item name="colorOnPrimaryContainer">@color/amber_on_primary</item>
+        <item name="colorSecondary">@color/amber_secondary</item>
+        <item name="colorOnSecondary">@color/amber_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/amber_primary_light</item>
+        <item name="colorOnSecondaryContainer">@color/amber_on_primary</item>
+        <item name="colorTertiary">@color/amber_accent</item>
+        <item name="colorOnTertiary">@color/amber_on_primary</item>
+        <item name="colorTertiaryContainer">@color/amber_primary_light</item>
+        <item name="colorOnTertiaryContainer">@color/amber_on_primary</item>
+        <item name="colorError">@color/kitt_red</item>
+        <item name="colorOnError">@color/amber_on_primary</item>
+        <item name="colorErrorContainer">@color/kitt_red_alpha</item>
+        <item name="colorOnErrorContainer">@color/amber_on_primary</item>
+        <item name="colorSurface">@color/amber_surface</item>
+        <item name="colorOnSurface">@color/amber_on_surface</item>
+        <item name="colorSurfaceVariant">@color/amber_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/amber_accent</item>
+        <item name="colorOutline">@color/amber_primary</item>
+        <item name="colorOutlineVariant">@color/amber_primary_light</item>
+        <item name="colorSurfaceInverse">@color/amber_primary</item>
+        <item name="colorOnSurfaceInverse">@color/amber_on_primary</item>
+        <item name="colorPrimaryInverse">@color/amber_primary</item>
+        
+        <!-- Window styling -->
+        <item name="android:windowBackground">@color/amber_surface</item>
+        <item name="android:statusBarColor">@color/amber_surface</item>
+        <item name="android:navigationBarColor">@color/amber_surface</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        
+        <!-- Keep KITT Red for LEDs and accents -->
+        <item name="colorPrimaryVariant">@color/kitt_red</item>
+        <item name="colorSecondaryVariant">@color/kitt_red</item>
+    </style>
+
+    <style name="Theme.KITT.Amber" parent="Base.Theme.KITT.Amber" />
+    
+    <!-- KITT Switch Style -->
+    <style name="Widget.Kitt.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="thumbTint">@color/kitt_red</item>
+        <item name="trackTint">@color/kitt_red_dark</item>
+        <item name="android:scaleX">1.2</item>
+        <item name="android:scaleY">1.2</item>
+    </style>
+
+    <!-- KITT Status Text Style avec défilement rapide -->
+    <style name="Widget.Kitt.StatusText" parent="@android:style/Widget.TextView">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/kitt_red</item>
+        <item name="android:gravity">center</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">marquee</item>
+        <item name="android:marqueeRepeatLimit">marquee_forever</item>
+        <item name="android:scrollHorizontally">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:focusableInTouchMode">true</item>
+        <item name="android:freezesText">true</item>
+    </style>
+</resources>

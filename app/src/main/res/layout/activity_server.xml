@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#f5f5f5">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#4ECDC4"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🌐 Monitoring Serveurs"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF" />
+
+        <Button
+            android:id="@+id/backToChatBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📱 Chat"
+            android:background="#667eea"
+            android:textColor="#FFFFFF"
+            android:padding="12dp"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+
+    <!-- Statuts des serveurs -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#FFFFFF"
+        android:padding="16dp"
+        android:layout_margin="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📊 Statut des Serveurs"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/httpServerStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🌐 HTTP Server (8080): Vérification..."
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/webServerStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📁 WebServer (8888): Vérification..."
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/fileServerStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📂 FileServer (8082): Vérification..."
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/webSocketServerStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🔌 WebSocket Server (8081): Vérification..."
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/aiServiceStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🤖 AI Service: Vérification..."
+            android:textSize="14sp"
+            android:textColor="#666666" />
+
+    </LinearLayout>
+
+    <!-- Boutons de test -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="8dp">
+
+        <Button
+            android:id="@+id/testHttpBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🧪 HTTP"
+            android:background="#4CAF50"
+            android:textColor="#FFFFFF"
+            android:layout_marginEnd="2dp"
+            android:padding="8dp"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/testWebServerBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🧪 WEB"
+            android:background="#FF5722"
+            android:textColor="#FFFFFF"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
+            android:padding="8dp"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/testFileServerBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🧪 FILE"
+            android:background="#9C27B0"
+            android:textColor="#FFFFFF"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
+            android:padding="8dp"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="16dp">
+
+        <Button
+            android:id="@+id/testWebSocketBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🧪 WS"
+            android:background="#2196F3"
+            android:textColor="#FFFFFF"
+            android:layout_marginEnd="4dp"
+            android:padding="8dp"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/testAIBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🧪 IA"
+            android:background="#FF9800"
+            android:textColor="#FFFFFF"
+            android:layout_marginStart="4dp"
+            android:padding="8dp"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
+    <!-- Informations des serveurs -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#FFFFFF"
+        android:padding="16dp"
+        android:layout_margin="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ℹ️ Architecture des Serveurs"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🌐 HTTP Server (8080): API + Redirections intelligentes"
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📁 WebServer (8888): Fichiers statiques + Sites utilisateur"
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📂 FileServer (8082): API de gestion des fichiers"
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🔌 WebSocket (8081): Communication temps réel"
+            android:textSize="12sp"
+            android:textColor="#666666" />
+
+    </LinearLayout>
+
+    <!-- Bouton Actualiser -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="16dp">
+
+        <Button
+            android:id="@+id/refreshStatusBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🔄 Actualiser le Statut"
+            android:background="#9C27B0"
+            android:textColor="#FFFFFF"
+            android:padding="12dp" />
+
+    </LinearLayout>
+
+    <!-- Logs des serveurs -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:background="#FFFFFF"
+        android:padding="16dp"
+        android:layout_margin="16dp">
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:id="@+id/serverLogsText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📋 Chargement des logs..."
+                android:textSize="12sp"
+                android:textColor="#666666"
+                android:fontFamily="monospace" />
+
+        </ScrollView>
+
+    </LinearLayout>
+
+</LinearLayout>

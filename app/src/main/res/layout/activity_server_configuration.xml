@@ -1,0 +1,568 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/kitt_black"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:spacing="16dp">
+
+        <!-- Header -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_dark_red"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="2dp"
+            android:layout_marginBottom="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🌐 CONFIGURATION SERVEUR"
+                    android:textColor="@color/kitt_red"
+                    android:textSize="18sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:gravity="center" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Configuration des ports, fichiers et sécurité serveur"
+                    android:textColor="@color/kitt_red_light"
+                    android:textSize="12sp"
+                    android:fontFamily="monospace"
+                    android:gravity="center"
+                    android:layout_marginTop="4dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Section: Configuration des Ports -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_black"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🔌 CONFIGURATION DES PORTS"
+                    android:textColor="@color/kitt_red"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- HTTP Server Port -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    app:boxStrokeColor="@color/kitt_red"
+                    app:hintTextColor="@color/kitt_red_light"
+                    android:hint="Port HTTP Server">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/httpPortInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/kitt_red"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:inputType="number" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- WebSocket Server Port -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    app:boxStrokeColor="@color/kitt_red"
+                    app:hintTextColor="@color/kitt_red_light"
+                    android:hint="Port WebSocket Server">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/wsPortInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/kitt_red"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:inputType="number" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- File Server Port -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    app:boxStrokeColor="@color/kitt_red"
+                    app:hintTextColor="@color/kitt_red_light"
+                    android:hint="Port File Server">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/filePortInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/kitt_red"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:inputType="number" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- WebServer Port (Port 8888) -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:boxStrokeColor="@color/kitt_orange"
+                    app:hintTextColor="@color/kitt_orange_light"
+                    android:hint="Port WebServer (Statique)">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/webserverPortInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/kitt_orange"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:inputType="number"
+                        android:enabled="false"
+                        android:text="8888" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Section: Configuration des Fichiers -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_black"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📁 CONFIGURATION DES FICHIERS"
+                    android:textColor="@color/kitt_red"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:id="@+id/storagePathText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Emplacement actuel: /storage/emulated/0/ChatAI-Files"
+                    android:textColor="@color/kitt_red_light"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:layout_marginBottom="8dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Section: Configuration de Sécurité -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_black"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🔒 CONFIGURATION DE SÉCURITÉ"
+                    android:textColor="@color/kitt_red"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- SSL -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🔐 SSL/TLS"
+                        android:textColor="@color/kitt_red_light"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/enableSSLSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:thumbTint="@color/kitt_red"
+                        app:trackTint="@color/kitt_red_alpha" />
+
+                </LinearLayout>
+
+                <!-- Authentification -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🔑 Authentification"
+                        android:textColor="@color/kitt_red_light"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/enableAuthSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:thumbTint="@color/kitt_red"
+                        app:trackTint="@color/kitt_red_alpha" />
+
+                </LinearLayout>
+
+                <!-- CORS -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🌐 CORS"
+                        android:textColor="@color/kitt_red_light"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/enableCorsSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:thumbTint="@color/kitt_red"
+                        app:trackTint="@color/kitt_red_alpha" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Section: Configuration de l'Hébergement -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_black"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🚀 CONFIGURATION DES SERVEURS"
+                    android:textColor="@color/kitt_red"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- ChatAI HTTP Server -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🌐 ChatAI HTTP Server (Port 8080)"
+                        android:textColor="@color/kitt_red_light"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/enableWebHostingSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:thumbTint="@color/kitt_red"
+                        app:trackTint="@color/kitt_red_alpha" />
+
+                </LinearLayout>
+
+                <!-- File Server -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="📁 File Server (Port 8082)"
+                        android:textColor="@color/kitt_red_light"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/enableFileSharingSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:thumbTint="@color/kitt_red"
+                        app:trackTint="@color/kitt_red_alpha" />
+
+                </LinearLayout>
+
+                <!-- WebSocket Server -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🔌 WebSocket Server (Port 8081)"
+                        android:textColor="@color/kitt_red_light"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/enableWebSocketSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:thumbTint="@color/kitt_red"
+                        app:trackTint="@color/kitt_red_alpha" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Section: Configuration WebServer (Port 8888) -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_black"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_orange"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🌐 CONFIGURATION WEBSERVER (PORT 8888)"
+                    android:textColor="@color/kitt_orange"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Autoindex -->
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/webserverAutoindexSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Activer l'index automatique des répertoires"
+                    android:textColor="@color/kitt_orange_light"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:layout_marginBottom="8dp"
+                    app:thumbTint="@color/kitt_orange"
+                    app:trackTint="@color/kitt_red_alpha" />
+
+                <!-- Folders First -->
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/webserverFoldersFirstSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Afficher les dossiers en premier"
+                    android:textColor="@color/kitt_orange_light"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:layout_marginBottom="8dp"
+                    app:thumbTint="@color/kitt_orange"
+                    app:trackTint="@color/kitt_red_alpha" />
+
+                <!-- Exact Size -->
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/webserverExactSizeSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Afficher la taille exacte des fichiers"
+                    android:textColor="@color/kitt_orange_light"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:layout_marginBottom="8dp"
+                    app:thumbTint="@color/kitt_orange"
+                    app:trackTint="@color/kitt_red_alpha" />
+
+                <!-- Show Icons -->
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/webserverShowIconsSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Afficher les icônes de fichiers"
+                    android:textColor="@color/kitt_orange_light"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:layout_marginBottom="8dp"
+                    app:thumbTint="@color/kitt_orange"
+                    app:trackTint="@color/kitt_red_alpha" />
+
+                <!-- Custom CSS -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    app:boxStrokeColor="@color/kitt_orange"
+                    app:hintTextColor="@color/kitt_orange_light"
+                    android:hint="CSS personnalisé (optionnel)">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/webserverCustomCssInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/kitt_orange"
+                        android:textSize="11sp"
+                        android:fontFamily="monospace"
+                        android:inputType="textMultiLine"
+                        android:lines="3" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Section: Actions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:spacing="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/saveServerSettingsButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="💾 SAUVEGARDER"
+                android:textSize="10sp"
+                app:backgroundTint="@color/kitt_red"
+                app:cornerRadius="8dp"
+                app:strokeColor="@color/kitt_red"
+                app:strokeWidth="2dp"
+                android:textColor="@color/kitt_black"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/testServersButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🧪 TESTER"
+                android:textSize="10sp"
+                app:backgroundTint="@color/amber_primary"
+                app:cornerRadius="8dp"
+                app:strokeColor="@color/amber_primary"
+                app:strokeWidth="2dp"
+                android:textColor="@color/amber_on_surface"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/resetServerSettingsButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🔄 RÉINITIALISER"
+                android:textSize="10sp"
+                app:backgroundTint="@color/dark_gray_medium"
+                app:cornerRadius="8dp"
+                app:strokeColor="@color/dark_gray_light"
+                app:strokeWidth="2dp"
+                android:textColor="@color/dark_white"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

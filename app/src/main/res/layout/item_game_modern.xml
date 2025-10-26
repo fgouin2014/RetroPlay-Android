@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="6dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="8dp"
+    app:strokeColor="@color/kitt_red"
+    app:strokeWidth="1dp"
+    app:cardBackgroundColor="@color/kitt_medium_red"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    app:rippleColor="@color/kitt_red_alpha">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:gravity="center_horizontal"
+        android:background="@drawable/game_card_background">
+
+        <!-- Game Image -->
+        <ImageView
+            android:id="@+id/image"
+            android:layout_width="110dp"
+            android:layout_height="154dp"
+            android:scaleType="centerCrop"
+            android:background="@drawable/game_image_background"
+            android:padding="2dp"
+            android:contentDescription="Game cover" />
+
+        <!-- Title -->
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Game Title"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:lineSpacingExtra="1dp"
+            android:gravity="center" />
+
+        <!-- Info Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/players_info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="👥 1P"
+                android:textSize="10sp"
+                android:textColor="@color/kitt_red_light"
+                android:fontFamily="monospace" />
+
+            <TextView
+                android:id="@+id/release_year"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="1988"
+                android:textSize="10sp"
+                android:textColor="@color/kitt_red_light"
+                android:fontFamily="monospace" />
+
+            <TextView
+                android:id="@+id/genre_chip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="Action"
+                android:textSize="10sp"
+                android:textColor="@color/kitt_red_light"
+                android:fontFamily="monospace" />
+
+        </LinearLayout>
+
+        <!-- Mini Description -->
+        <TextView
+            android:id="@+id/description"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Mini description du jeu..."
+            android:textSize="9sp"
+            android:textColor="@color/kitt_red_light"
+            android:fontFamily="monospace"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:lineSpacingExtra="1dp"
+            android:gravity="center" />
+
+        <!-- Play Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/play_button"
+            android:layout_width="match_parent"
+            android:layout_height="30dp"
+            android:layout_marginTop="6dp"
+            android:text=""
+            app:backgroundTint="@color/kitt_red"
+            app:cornerRadius="15dp"
+            app:icon="@drawable/ic_play_arrow_24"
+            app:iconSize="16dp"
+            app:iconTint="@color/kitt_black"
+            app:iconGravity="textStart"
+            style="@style/Widget.Material3.Button" />
+
+        <!-- Progress Indicator (for loading) -->
+        <ProgressBar
+            android:id="@+id/loading_progress"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:visibility="gone"
+            android:indeterminateTint="@color/kitt_red"
+            android:layout_marginTop="-166dp"
+            android:layout_marginEnd="-122dp" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

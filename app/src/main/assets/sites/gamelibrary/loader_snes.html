@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNES Emulator</title>
+    <style>
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+        #game { width: 100vw; height: 100vh; }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            text-align: center;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading SNES game...</div>
+    <div id="game"></div>
+
+    <script>
+        const serverIP = window.location.hostname;
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameSlug = urlParams.get('slug');
+        const gameConsole = urlParams.get('console') || 'snes';
+
+        // Configuration SNES
+        window.EJS_player = "#game";
+        window.EJS_core = "snes9x";
+        window.EJS_pathtodata = `http://${serverIP}:7777/gamedata/data/`;
+        window.EJS_startOnLoaded = false;
+        window.EJS_VirtualGamepadSettings = {
+            enabled: true,
+            opacity: 0.8,
+            size: 1.0
+        };
+
+        // Fonction pour générer le slug
+        function generateSlug(name) {
+            return name.toLowerCase()
+                .replace(/['"`]/g, '')
+                .replace(/[^a-z0-9\s-]/g, '')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
+        }
+
+        // Charger le jeu depuis gamelist.json
+        if (gameSlug) {
+            fetch(`http://${serverIP}:7777/gamedata/${gameConsole}/gamelist.json`)
+                .then(response => response.json())
+                .then(data => {
+                    const game = data.games.find(g => generateSlug(g.name) === gameSlug);
+                    if (game) {
+                        const fileName = game.path.replace(/^\.\//, '');
+                        window.EJS_gameUrl = `http://${serverIP}:7777/gamedata/${gameConsole}/${fileName}`;
+                        document.title = `SNES - ${game.name}`;
+                        
+                        // Charger loader.js
+                        document.write(`<script src="http://${serverIP}:7777/gamedata/data/loader.js"><\/script>`);
+                    } else {
+                        document.getElementById('loading').innerHTML = 'Error: Game not found';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('loading').innerHTML = 'Error: ' + error.message;
+                });
+        } else {
+            document.getElementById('loading').innerHTML = 'Error: No game specified';
+        }
+    </script>
+</body>
+</html>
+

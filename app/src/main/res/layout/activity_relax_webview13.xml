@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/kitt_black"
+    tools:context=".activities.RelaxWebViewActivity">
+
+    <!-- WebView principale -->
+    <WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:background="@color/kitt_black" />
+
+    <!-- Bouton de fermeture (optionnel, pour sortir du mode immersif) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/closeButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:text="FERMER"
+        android:textSize="10sp"
+        android:textColor="@color/kitt_red"
+        android:fontFamily="monospace"
+        android:textStyle="bold"
+        app:backgroundTint="@color/kitt_red_alpha"
+        app:cornerRadius="8dp"
+        app:strokeColor="@color/kitt_red"
+        app:strokeWidth="2dp"
+        android:visibility="gone" />
+
+</FrameLayout>

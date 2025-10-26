@@ -1,0 +1,63 @@
+plugins {
+    id 'com.android.library'
+    id 'kotlin-android'
+    id 'kotlin-parcelize'
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.0.21'
+    id 'org.jetbrains.kotlin.plugin.serialization' version '2.0.21'
+}
+
+android {
+    namespace 'com.swordfish.touchinput.controller'
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 35
+    }
+
+    buildFeatures {
+        compose = true
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+        freeCompilerArgs += ['-Xcontext-receivers']
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation project(':retrograde-util')
+
+    // Compose BOM
+    implementation platform('androidx.compose:compose-bom:2024.02.02')
+    implementation 'androidx.compose.ui:ui-geometry'
+    implementation 'androidx.compose.runtime:runtime'
+    implementation 'androidx.compose.material3:material3'
+
+    // AndroidX
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.lifecycle:lifecycle-common-java8:2.7.0'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.preference:preference-ktx:1.2.1'
+    
+    // Flow Preferences
+    implementation 'com.fredporciuncula:flow-preferences:1.8.0'
+    
+    // Kotlin Serialization
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-core:1.6.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0'
+
+    // PadKit & Collections
+    api 'io.github.swordfish90:padkit:1.0.0-beta1'
+    api 'org.jetbrains.kotlinx:kotlinx-collections-immutable:0.3.7'
+
+    // Kotlin stdlib
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+}
+

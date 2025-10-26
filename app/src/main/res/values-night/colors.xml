@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark Theme Colors - Blanc/Noir/Gris -->
+    <color name="dark_white">#FFFFFF</color>
+    <color name="dark_black">#000000</color>
+    <color name="dark_gray_dark">#1A1A1A</color>
+    <color name="dark_gray_medium">#333333</color>
+    <color name="dark_gray_light">#666666</color>
+    <color name="dark_gray_very_light">#CCCCCC</color>
+    
+    <!-- Dark Theme Surface Colors -->
+    <color name="dark_surface">#121212</color>
+    <color name="dark_surface_variant">#1E1E1E</color>
+    <color name="dark_on_surface">#FFFFFF</color>
+    <color name="dark_on_surface_variant">#CCCCCC</color>
+    
+    <!-- Keep KITT Red colors for LEDs -->
+    <color name="kitt_red">#ff3333</color>
+    <color name="kitt_red_alpha">#1aff3333</color>
+    <color name="kitt_red_dark">#660000</color>
+    <color name="kitt_red_medium">#cc0000</color>
+    <color name="kitt_red_light">#ff6666</color>
+    <color name="kitt_red_very_light">#ffaaaa</color>
+    <color name="kitt_black">#000000</color>
+    <color name="kitt_black_alpha">#80000000</color>
+    <color name="kitt_dark_red">#1a0000</color>
+    <color name="kitt_medium_red">#330000</color>
+    
+    <!-- VU Meter Colors - Keep Red -->
+    <color name="kitt_vu_active">#FF0000</color>
+    <color name="kitt_vu_warning">#FF8800</color>
+    <color name="kitt_vu_off">#220000</color>
+    
+    <!-- Scanner Colors - Keep Red -->
+    <color name="kitt_scanner_max">#FF0000</color>
+    <color name="kitt_scanner_high">#CC0000</color>
+    <color name="kitt_scanner_medium">#880000</color>
+    <color name="kitt_scanner_low">#440000</color>
+    <color name="kitt_scanner_off">#110000</color>
+    
+    <!-- Additional KITT Colors -->
+    <color name="kitt_gray">#333333</color>
+    <color name="kitt_light_gray">#666666</color>
+    
+    <!-- Standard Colors -->
+    <color name="black">#000000</color>
+    
+    <!-- Amber Theme Colors -->
+    <color name="amber_primary">#FF8800</color>
+    <color name="amber_primary_dark">#CC6600</color>
+    <color name="amber_primary_light">#FFAA33</color>
+    <color name="amber_secondary">#FFB366</color>
+    <color name="amber_accent">#FFCC99</color>
+    <color name="amber_surface">#1A0F00</color>
+    <color name="amber_surface_variant">#2D1A00</color>
+    <color name="amber_on_surface">#FFCC99</color>
+    <color name="amber_on_primary">#000000</color>
+    <color name="amber_on_secondary">#000000</color>
+</resources>

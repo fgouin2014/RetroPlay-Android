@@ -1,0 +1,67 @@
+[
+  {
+    "id": "nes",
+    "name": "Nintendo (NES)",
+    "icon": "nes",
+    "extensions": [".nes", ".zip"],
+    "needsBios": false
+  },
+  {
+    "id": "snes",
+    "name": "Super Nintendo (SNES)",
+    "icon": "snes",
+    "extensions": [".smc", ".sfc", ".zip"],
+    "needsBios": false
+  },
+  {
+    "id": "n64",
+    "name": "Nintendo 64",
+    "icon": "n64",
+    "extensions": [".n64", ".z64", ".v64", ".zip"],
+    "needsBios": false
+  },
+  {
+    "id": "megadrive",
+    "name": "Sega Genesis / Mega Drive",
+    "icon": "genesis",
+    "extensions": [".md", ".bin", ".gen", ".zip"],
+    "needsBios": false
+  },
+  {
+    "id": "psx",
+    "name": "PlayStation (PSX)",
+    "icon": "playstation",
+    "extensions": [".pbp", ".cue", ".bin", ".chd"],
+    "needsBios": true,
+    "biosFile": "scph5501.bin"
+  },
+  {
+    "id": "gb",
+    "name": "Game Boy",
+    "icon": "gameboy",
+    "extensions": [".gb", ".zip"],
+    "needsBios": false
+  },
+  {
+    "id": "gbc",
+    "name": "Game Boy Color",
+    "icon": "gameboy-color",
+    "extensions": [".gbc", ".zip"],
+    "needsBios": false
+  },
+  {
+    "id": "gba",
+    "name": "Game Boy Advance",
+    "icon": "gameboy-advance",
+    "extensions": [".gba", ".zip"],
+    "needsBios": false
+  },
+  {
+    "id": "psp",
+    "name": "PlayStation Portable",
+    "icon": "psp",
+    "extensions": [".iso", ".cso", ".pbp", ".elf"],
+    "needsBios": false
+  }
+]
+

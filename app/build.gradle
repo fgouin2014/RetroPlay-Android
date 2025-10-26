@@ -1,0 +1,111 @@
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.0.21'
+}
+
+android {
+    namespace 'com.retroplay'
+    compileSdk 35
+    buildToolsVersion "35.0.0"
+
+    defaultConfig {
+        applicationId "com.retroplay"
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+    }
+
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
+            }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    buildFeatures {
+        compose = true
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core-ktx:1.10.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    
+    // Material 3 Design
+    implementation 'com.google.android.material:material:1.11.0'
+    
+    
+    // Kotlin standard library
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+    
+    // Pour les permissions
+    implementation 'androidx.activity:activity-ktx:1.7.2'
+    implementation 'androidx.fragment:fragment-ktx:1.6.1'
+    
+    // ViewModel et LiveData
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.7.0'
+    
+    // Coroutines
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    
+    // HTTP client pour Java 8
+    implementation 'com.squareup.okhttp3:okhttp:4.9.3'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.9.3'
+    
+    // RecyclerView et CardView pour la liste des jeux
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.cardview:cardview:1.0.0'
+    
+    // Glide pour charger les images
+    implementation 'com.github.bumptech.glide:glide:4.16.0'
+    annotationProcessor 'com.github.bumptech.glide:compiler:4.16.0'
+    
+    // Chrome Custom Tabs (pour PSP uniquement)
+    implementation 'androidx.browser:browser:1.7.0'
+    
+    // LibretroDroid 0.13.0 (version stable de Lemuroid)
+    implementation 'com.github.Swordfish90:LibretroDroid:0.13.0'
+    
+    // Gson pour JSON parsing
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // Apache Commons Compress pour extraction .7z (comme Lemuroid)
+    implementation 'org.apache.commons:commons-compress:1.25.0'
+    implementation 'org.tukaani:xz:1.9'  // Dépendance pour .7z
+    
+    // === JETPACK COMPOSE (pour ComposeEmulatorActivity expérimentale) ===
+    implementation platform('androidx.compose:compose-bom:2024.02.02')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-geometry'
+    implementation 'androidx.compose.runtime:runtime'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0'
+    
+    // ConstraintLayout Compose
+    implementation 'androidx.constraintlayout:constraintlayout-compose:1.0.1'
+    
+    // Collections immutables pour Compose
+    implementation 'org.jetbrains.kotlinx:kotlinx-collections-immutable:0.3.7'
+    
+    // === LEMUROID TOUCHINPUT (Gamepads natifs Compose) ===
+    implementation project(':lemuroid-touchinput')
+    implementation project(':retrograde-util')
+    
+    // Dépendances supplémentaires pour lemuroid-touchinput
+    implementation 'io.github.swordfish90:padkit:1.0.0-beta1'
+    implementation 'com.fredporciuncula:flow-preferences:1.8.0'
+}

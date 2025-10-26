@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/kitt_black">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="CONSOLE CONFIGURATION"
+            android:textSize="16sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="INSTRUCTIONS:\n1. The directory name must match Console ID\n2. Path: /storage/emulated/0/ChatAI-Files/sites/gamelibrary/{id}/\n3. If directory doesn't exist, it will be created\n4. Add ROMs manually after creation"
+            android:textSize="10sp"
+            android:textColor="#FFA500"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="2dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Console ID -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Console ID (directory name):"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/consoleIdInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="ex: gba (must match directory name)"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Console Name -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Console Name:"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/consoleNameInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="ex: GBA"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Console Full Name -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Full Name:"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/consoleFullNameInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="ex: Game Boy Advance"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Default Core -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Default Core:"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <Spinner
+            android:id="@+id/coreSpinnerDialog"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@color/kitt_dark_red"
+            android:padding="8dp"
+            android:popupBackground="@color/kitt_dark_red"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Extensions -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Extensions (comma-separated):"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/extensionsInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint=".gba, .zip, .rar"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Color -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Color (hex):"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/colorInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="#10B981"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Gamelist Scanner Section -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#333333"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ROM SCANNER"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Automatically scan directory and create gamelist.json from detected ROMs. Images will be linked from media/box2d/ if available."
+            android:textSize="10sp"
+            android:textColor="#FFA500"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="2dp"
+            android:layout_marginBottom="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/scannerButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="SCANNER &amp; CREER GAMELIST.JSON"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            app:backgroundTint="#FFA500"
+            android:textColor="@android:color/black"
+            app:cornerRadius="8dp"
+            xmlns:app="http://schemas.android.com/apk/res-auto" />
+    </LinearLayout>
+</ScrollView>
+

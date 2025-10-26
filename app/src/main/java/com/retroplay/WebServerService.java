@@ -1,0 +1,188 @@
+package com.retroplay;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.net.wifi.WifiManager;
+import android.os.Binder;
+import android.os.IBinder;
+import android.util.Log;
+import androidx.core.app.NotificationCompat;
+import java.net.NetworkInterface;
+import java.util.Collections;
+
+/**
+ * Service en arrière-plan pour maintenir le WebServer actif
+ * RetroPlay - Port 7777 pour EmulatorJS uniquement
+ */
+public class WebServerService extends Service {
+    private static final String TAG = "WebServerService";
+    private static final String CHANNEL_ID = "webserver_channel";
+    private static final int NOTIFICATION_ID = 7777;
+    
+    private WebServer webServer;
+    private final IBinder binder = new LocalBinder();
+    
+    public class LocalBinder extends Binder {
+        WebServerService getService() {
+            return WebServerService.this;
+        }
+    }
+    
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        Log.i(TAG, "WebServerService onCreate");
+        
+        createNotificationChannel();
+        startWebServer();
+    }
+    
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.i(TAG, "WebServerService onStartCommand");
+        
+        // Start as foreground service with notification
+        startForeground(NOTIFICATION_ID, createNotification());
+        
+        return START_STICKY; // Restart service if killed
+    }
+    
+    @Override
+    public IBinder onBind(Intent intent) {
+        return binder;
+    }
+    
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        Log.i(TAG, "WebServerService onDestroy");
+        
+        // Stop WebServer
+        if (webServer != null) {
+            webServer.stop();
+            Log.i(TAG, "WebServer stopped");
+        }
+    }
+    
+    private void startWebServer() {
+        try {
+            Log.i(TAG, "Starting WebServer on port 7777...");
+            webServer = new WebServer(this);
+            webServer.start();
+            Log.i(TAG, "WebServer started successfully on port 7777");
+            
+            // Update notification with IP address
+            updateNotification();
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting WebServer", e);
+        }
+    }
+    
+    private void createNotificationChannel() {
+        NotificationChannel channel = new NotificationChannel(
+            CHANNEL_ID,
+            "RetroPlay WebServer",
+            NotificationManager.IMPORTANCE_LOW
+        );
+        channel.setDescription("EmulatorJS WebServer - Port 7777");
+        
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager != null) {
+            manager.createNotificationChannel(channel);
+        }
+    }
+    
+    private Notification createNotification() {
+        String deviceIP = getDeviceIP();
+        String message = "WebServer running on port 7777\n" + 
+                        "Access: http://" + deviceIP + ":7777/";
+        
+        Intent notificationIntent = new Intent(this, GameListActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+            this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
+        );
+        
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("RetroPlay WebServer")
+            .setContentText(message)
+            .setStyle(new NotificationCompat.BigTextStyle().bigText(message))
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build();
+    }
+    
+    private void updateNotification() {
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager != null) {
+            manager.notify(NOTIFICATION_ID, createNotification());
+        }
+    }
+    
+    /**
+     * Get device IP address for WiFi connection
+     */
+    private String getDeviceIP() {
+        try {
+            // Try WiFi first
+            WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wifiManager != null) {
+                @SuppressWarnings("deprecation")
+                int ipAddress = wifiManager.getConnectionInfo().getIpAddress();
+                
+                if (ipAddress != 0) {
+                    return String.format("%d.%d.%d.%d",
+                        (ipAddress & 0xff),
+                        (ipAddress >> 8 & 0xff),
+                        (ipAddress >> 16 & 0xff),
+                        (ipAddress >> 24 & 0xff));
+                }
+            }
+            
+            // Fallback: check all network interfaces
+            for (NetworkInterface networkInterface : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (networkInterface.isUp() && !networkInterface.isLoopback()) {
+                    for (java.net.InetAddress address : Collections.list(networkInterface.getInetAddresses())) {
+                        if (!address.isLoopbackAddress() && address.isSiteLocalAddress()) {
+                            String ip = address.getHostAddress();
+                            if (ip != null && isValidIP(ip)) {
+                                return ip;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting device IP", e);
+        }
+        
+        return "localhost";
+    }
+    
+    private boolean isValidIP(String ip) {
+        if (ip == null || ip.isEmpty()) return false;
+        try {
+            String[] parts = ip.split("\\.");
+            if (parts.length != 4) return false;
+            for (String part : parts) {
+                int num = Integer.parseInt(part);
+                if (num < 0 || num > 255) return false;
+            }
+            return !ip.startsWith("127.") && !ip.startsWith("169.254.");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    public boolean isServerRunning() {
+        return webServer != null;
+    }
+}
+

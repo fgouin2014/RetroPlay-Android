@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/kitt_black"
+    android:fitsSystemWindows="true">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- Minimalist Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="2dp"
+        android:background="@color/kitt_dark_red"
+        android:gravity="center_vertical">
+
+        <!-- Back Button -->
+        <TextView
+            android:id="@+id/backButton"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:text="◄"
+            android:textSize="20sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:padding="8dp"
+            android:background="@drawable/filter_chip_background"/>
+
+        <!-- Console Selector as Title -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/consoleSelectorButton"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:text="NES LIBRARY ▼"
+                android:textSize="14sp"
+                android:textColor="@color/kitt_red"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:padding="8dp"
+                android:layout_marginRight="11dp"
+                android:background="@drawable/filter_chip_background"
+                android:clickable="true"
+                android:focusable="true" />
+
+        </LinearLayout>
+
+
+        <!-- Console Config Button -->
+        <TextView
+            android:id="@+id/consoleConfigButton"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:text="⚙"
+            android:textSize="16sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:padding="8dp"
+            android:background="@drawable/filter_chip_background"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginEnd="8dp" />
+
+        <!-- Console Manager Button -->
+        <TextView
+            android:id="@+id/consoleManagerButton"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:text="+"
+            android:textSize="16sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:padding="8dp"
+            android:background="@drawable/filter_chip_background"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginEnd="8dp" />
+
+        <!-- Search Toggle -->
+        <TextView
+            android:id="@+id/searchToggleButton"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginStart="8dp"
+            android:text="🔍"
+            android:textSize="18sp"
+            android:padding="8dp" />
+
+    </LinearLayout>
+
+    <!-- Search Input (Initially Hidden) -->
+    <LinearLayout
+        android:id="@+id/searchInputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:background="@color/kitt_black"
+        android:visibility="gone"
+        android:gravity="center_vertical">
+
+        <EditText
+            android:id="@+id/searchInput"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:hint="Rechercher..."
+            android:textColor="@color/kitt_red"
+            android:textColorHint="@color/kitt_red_light"
+            android:fontFamily="monospace"
+            android:textSize="14sp"
+            android:background="@drawable/search_input_background"
+            android:padding="12dp"
+            android:imeOptions="actionSearch" />
+
+        <TextView
+            android:id="@+id/searchScopeToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginStart="8dp"
+            android:text="ALL"
+            android:textSize="12sp"
+            android:textColor="@color/kitt_red_light"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:padding="8dp"
+            android:background="@drawable/filter_chip_background"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center" />
+
+    </LinearLayout>
+
+    <!-- Games Count and Controls -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:background="@color/kitt_black"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/gamesCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="0 jeux"
+            android:textSize="12sp"
+            android:textColor="@color/kitt_red_light"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:id="@+id/filterChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="Tous"
+            android:textSize="11sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:background="@drawable/filter_chip_background"
+            android:padding="8dp" />
+
+    </LinearLayout>
+
+    <!-- Minimalist Alphabet Navigation -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="4dp"
+        android:background="@color/kitt_black">
+
+        <!-- First row: # A B C D E F G H I J K -->
+        <LinearLayout
+            android:id="@+id/alphabetRow1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="2dp"
+            android:gravity="center">
+
+            <!-- Alphabet buttons will be added dynamically -->
+
+        </LinearLayout>
+
+        <!-- Second row: L M N O P Q R S T U V -->
+        <LinearLayout
+            android:id="@+id/alphabetRow2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="2dp"
+            android:gravity="center">
+
+            <!-- Alphabet buttons will be added dynamically -->
+
+        </LinearLayout>
+
+        <!-- Third row: W X Y Z -->
+        <LinearLayout
+            android:id="@+id/alphabetRow3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="2dp"
+            android:gravity="center">
+
+            <!-- Alphabet buttons will be added dynamically -->
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Content Container -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp">
+
+        <!-- Games RecyclerView -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="8dp"
+            android:clipToPadding="false"
+            android:scrollbars="vertical"
+            android:background="@android:color/transparent"
+            tools:listitem="@layout/item_game_modern" />
+
+        <!-- Loading Progress Bar -->
+        <ProgressBar
+            android:id="@+id/loadingProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            android:indeterminateTint="@color/kitt_red" />
+
+        <!-- Empty State -->
+        <LinearLayout
+            android:id="@+id/emptyState"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp"
+            android:visibility="gone">
+
+        <ImageView
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:src="@drawable/ic_games_24"
+            android:alpha="0.5"
+            android:tint="@color/kitt_red_light" />
+
+        <TextView
+            android:id="@+id/emptyStateTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Aucun jeu trouvé"
+            android:textColor="@color/kitt_red_light"
+            android:textSize="18sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/emptyStateSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Essayez de modifier votre recherche"
+            android:textColor="@color/kitt_red_light"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:gravity="center" />
+
+        </LinearLayout>
+
+        <!-- Floating Action Button -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabRandom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:src="@drawable/ic_shuffle_24"
+            app:backgroundTint="@color/kitt_red"
+            app:tint="@color/kitt_black"
+            app:elevation="8dp"
+            app:fabSize="mini"
+            android:contentDescription="Jeu aléatoire" />
+
+    </FrameLayout>
+
+    <!-- Pagination Footer (Interactive) -->
+    <LinearLayout
+        android:id="@+id/paginationFooter"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="2dp"
+        android:background="@color/kitt_dark_red"
+        android:gravity="center_vertical"
+        android:visibility="visible">
+
+        <!-- Previous Button -->
+        <TextView
+            android:id="@+id/paginationPrev"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="◀"
+            android:textSize="18sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="@drawable/filter_chip_background"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:alpha="0.5" />
+
+        <!-- Page Info -->
+        <TextView
+            android:id="@+id/paginationInfo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Pages 1/1"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:padding="8dp" />
+
+        <!-- Next Button -->
+        <TextView
+            android:id="@+id/paginationNext"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="▶"
+            android:textSize="18sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:background="@drawable/filter_chip_background"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:alpha="0.5" />
+
+    </LinearLayout>
+
+</LinearLayout>
+
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

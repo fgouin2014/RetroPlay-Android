@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="GamePad Settings"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:paddingBottom="16dp" />
+
+    <!-- Layout Variant Selector -->
+    <TextView
+        android:id="@+id/variantLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Layout"
+        android:textSize="16sp"
+        android:fontFamily="sans-serif-medium"
+        android:paddingTop="8dp"
+        android:visibility="gone" />
+
+    <Spinner
+        android:id="@+id/variantSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:paddingBottom="8dp" />
+
+    <!-- Scale Slider -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Scale"
+        android:textSize="16sp"
+        android:fontFamily="sans-serif-medium"
+        android:paddingTop="8dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <SeekBar
+            android:id="@+id/scaleSeekBar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:min="9"
+            android:max="18"
+            android:progress="12" />
+
+        <TextView
+            android:id="@+id/scaleValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="12.0"
+            android:textSize="14sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:minWidth="48dp"
+            android:gravity="center" />
+    </LinearLayout>
+
+    <!-- Alpha Slider -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Transparency"
+        android:textSize="16sp"
+        android:fontFamily="sans-serif-medium"
+        android:paddingTop="16dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <SeekBar
+            android:id="@+id/alphaSeekBar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:max="100"
+            android:progress="85" />
+
+        <TextView
+            android:id="@+id/alphaValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0.85"
+            android:textSize="14sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:minWidth="48dp"
+            android:gravity="center" />
+    </LinearLayout>
+
+    <!-- Horizontal Margin Slider -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Horizontal Margin"
+        android:textSize="16sp"
+        android:fontFamily="sans-serif-medium"
+        android:paddingTop="16dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <SeekBar
+            android:id="@+id/marginXSeekBar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:max="96"
+            android:progress="0" />
+
+        <TextView
+            android:id="@+id/marginXValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0"
+            android:textSize="14sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:minWidth="48dp"
+            android:gravity="center" />
+    </LinearLayout>
+
+    <!-- Vertical Margin Slider -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Vertical Margin"
+        android:textSize="16sp"
+        android:fontFamily="sans-serif-medium"
+        android:paddingTop="16dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <SeekBar
+            android:id="@+id/marginYSeekBar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:max="96"
+            android:progress="0" />
+
+        <TextView
+            android:id="@+id/marginYValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0"
+            android:textSize="14sp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:minWidth="48dp"
+            android:gravity="center" />
+    </LinearLayout>
+
+    <!-- Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:paddingTop="24dp">
+
+        <Button
+            android:id="@+id/resetButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Reset"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/applyButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Apply" />
+    </LinearLayout>
+
+</LinearLayout>
+

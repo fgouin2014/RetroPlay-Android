@@ -1,0 +1,36 @@
+<resources>
+    <string name="app_name">RetroPlay</string>
+    <string name="notification_channel_name">RetroPlay Notifications</string>
+    <string name="notification_channel_desc">Notifications pour l\'emulation</string>
+    
+    <!-- KITT Strings -->
+    <string name="kitt_status_standby">KITT STANDBY</string>
+    <string name="kitt_status_ready">KITT READY</string>
+    <string name="kitt_status_stby">STBY</string>
+    <string name="kitt_status_rdy">RDY</string>
+    
+    <!-- WebServer Strings -->
+    <string name="webserver_config_title">Configuration WebServer</string>
+    <string name="webserver_config_subtitle">Serveur web pour sites statiques (Port 7777)</string>
+    <string name="webserver_autoindex">Activer le listing automatique</string>
+    <string name="webserver_folders_first">Dossiers en premier</string>
+    <string name="webserver_exact_size">Taille exacte en bytes</string>
+    <string name="webserver_show_icons">Afficher les icônes</string>
+    <string name="webserver_custom_css">CSS Personnalisé</string>
+    <string name="webserver_save_config">Sauvegarder</string>
+    <string name="webserver_test_server">Tester</string>
+    <string name="webserver_config_saved">Configuration WebServer sauvegardée</string>
+    <string name="webserver_testing">Test WebServer en cours...</string>
+    <string name="kitt_status_net">NET</string>
+    <string name="kitt_status_speaking">KITT SPEAKING</string>
+    <string name="kitt_message_communication_complete">COMMUNICATION COMPLETE</string>
+    <string name="kitt_input_hint">Entrez votre message...</string>
+    <string name="kitt_button_ok">OK</string>
+    <string name="kitt_power_label">POWER</string>
+
+    <!-- Status Bar Indicators -->
+    <string name="status_indicator_rdy">RDY</string>
+    <string name="status_indicator_bsy">BSY</string>
+    <string name="status_indicator_net">NET</string>
+    <string name="status_indicator_msq">MSQ</string>
+</resources>

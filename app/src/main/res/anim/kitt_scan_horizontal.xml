@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="8"
+    android:interpolator="@android:anim/accelerate_decelerate_interpolator">
+    
+    <!-- Animation de translation horizontale -->
+    <translate
+        android:fromXDelta="-100%"
+        android:toXDelta="100%"
+        android:duration="8" />
+    
+    <!-- Animation d'opacité pour l'effet de lueur -->
+    <alpha
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0"
+        android:duration="1"
+        android:startOffset="0" />
+    
+    <alpha
+        android:fromAlpha="1.0"
+        android:toAlpha="0.0"
+        android:duration="1"
+        android:startOffset="7" />
+        
+</set>

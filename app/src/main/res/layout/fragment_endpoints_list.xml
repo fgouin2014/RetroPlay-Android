@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/kitt_black"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:spacing="16dp">
+
+        <!-- Header -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_dark_red"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="2dp"
+            android:layout_marginBottom="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📋 ENDPOINTS API - TOUS SYSTÈMES"
+                    android:textColor="@color/kitt_red"
+                    android:textSize="18sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:gravity="center" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Liste complète de tous les endpoints disponibles"
+                    android:textColor="@color/kitt_red_light"
+                    android:textSize="12sp"
+                    android:fontFamily="monospace"
+                    android:gravity="center"
+                    android:layout_marginTop="4dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ChatAI HTTP Server (Port 8080) -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_black"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🌐 ChatAI HTTP Server (Port 8080)"
+                    android:textColor="@color/kitt_red"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- API Endpoints -->
+                <TextView
+                    android:id="@+id/chatAIEndpoints"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Chargement des endpoints..."
+                    android:textColor="@color/kitt_red_light"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="2dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- WebServer (Port 8888) -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_black"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_orange"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🌐 WebServer (Port 8888)"
+                    android:textColor="@color/kitt_orange"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- WebServer Endpoints -->
+                <TextView
+                    android:id="@+id/webServerEndpoints"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Chargement des endpoints..."
+                    android:textColor="@color/kitt_orange_light"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="2dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- FileServer (Port 8082) -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_black"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_gray"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📁 FileServer (Port 8082)"
+                    android:textColor="@color/kitt_gray"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- FileServer Endpoints -->
+                <TextView
+                    android:id="@+id/fileServerEndpoints"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Chargement des endpoints..."
+                    android:textColor="@color/kitt_light_gray"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="2dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- WebSocket Server (Port 8081) -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/kitt_black"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/kitt_red_medium"
+            app:strokeWidth="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🔌 WebSocket Server (Port 8081)"
+                    android:textColor="@color/kitt_red_medium"
+                    android:textSize="14sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- WebSocket Endpoints -->
+                <TextView
+                    android:id="@+id/webSocketEndpoints"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Chargement des endpoints..."
+                    android:textColor="@color/kitt_red_light"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="2dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Actions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:spacing="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/refreshEndpointsButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🔄 ACTUALISER"
+                android:textSize="10sp"
+                app:backgroundTint="@color/kitt_red"
+                app:cornerRadius="8dp"
+                app:strokeColor="@color/kitt_red"
+                app:strokeWidth="2dp"
+                android:textColor="@color/kitt_black"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/testEndpointsButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🧪 TESTER"
+                android:textSize="10sp"
+                app:backgroundTint="@color/kitt_orange"
+                app:cornerRadius="8dp"
+                app:strokeColor="@color/kitt_orange"
+                app:strokeWidth="2dp"
+                android:textColor="@color/kitt_black"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

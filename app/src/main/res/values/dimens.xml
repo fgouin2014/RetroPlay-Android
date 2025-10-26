@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- KITT Dimensions -->
+    <!-- KITT Scanner Dimensions -->
+    <dimen name="kitt_segment_width">12dp</dimen>
+    <dimen name="kitt_segment_height">20dp</dimen>
+    <dimen name="kitt_segment_margin">3dp</dimen>
+    
+    <!-- VU Meter Dimensions -->
+    <dimen name="vu_led_width">35dp</dimen>
+    <dimen name="vu_led_height">12dp</dimen>
+    <dimen name="vu_led_margin">1dp</dimen>
+    
+    <!-- Button Dimensions -->
+    <dimen name="kitt_button_height">48dp</dimen>
+    <dimen name="kitt_button_corner_radius">8dp</dimen>
+    
+    <!-- Card Dimensions -->
+    <dimen name="kitt_card_corner_radius">12dp</dimen>
+    <dimen name="kitt_card_elevation">8dp</dimen>
+    
+    <!-- Switch Dimensions -->
+    <dimen name="kitt_switch_width">40dp</dimen>
+    <dimen name="kitt_switch_height">20dp</dimen>
+    
+    <!-- Spacing -->
+    <dimen name="kitt_spacing_small">8dp</dimen>
+    <dimen name="kitt_spacing_medium">16dp</dimen>
+    <dimen name="kitt_spacing_large">24dp</dimen>
+</resources>

@@ -587,8 +587,8 @@ fun ComposeEmulatorScreen(
                             layoutVariant = newVariant
                             onVariantChanged(newVariant)
                         },
-                        context = this@NativeComposeEmulatorActivity,
-                        prefs = this@NativeComposeEmulatorActivity.prefs
+                        context = retroView.context,
+                        prefs = prefs
                     )
                 }
                 

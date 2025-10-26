@@ -319,12 +319,15 @@ private fun DrawScope.drawImage(
     
     drawImage(
         image = imageBitmap,
-        topLeft = topLeft,
-        alpha = alpha,
+        dstOffset = androidx.compose.ui.unit.IntOffset(
+            x = topLeft.x.toInt(),
+            y = topLeft.y.toInt()
+        ),
         dstSize = androidx.compose.ui.unit.IntSize(
             width = size.width.toInt(),
             height = size.height.toInt()
-        )
+        ),
+        alpha = alpha
     )
 }
 

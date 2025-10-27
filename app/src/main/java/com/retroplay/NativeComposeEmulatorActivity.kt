@@ -13,6 +13,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import android.view.KeyEvent
@@ -1046,12 +1048,15 @@ fun GamePadSettingsDialog(
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.85f)
-                    .padding(top = 40.dp)  // Marge du haut
-                    .wrapContentHeight(),
-                colors = CardDefaults.cardColors(containerColor = Color(dialogAlpha))  // Transparent dynamique (+ transparent quand sliders bougent)
+                    .fillMaxHeight(0.8f)  // Limiter hauteur à 80% de l'écran
+                    .padding(top = 40.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(dialogAlpha))
             ) {
+            // Ajouter ScrollView pour le contenu qui peut être long
             Column(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Titre

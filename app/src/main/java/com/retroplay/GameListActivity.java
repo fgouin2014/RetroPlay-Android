@@ -120,6 +120,9 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Démarrer le WebServerService (port 7777) pour EmulatorJS
         startWebServerService();
         
+        // Install RetroArch overlays (first launch only)
+        installRetroArchOverlays();
+        
         // Initialiser SharedPreferences pour la persistance du choix de console
         consolePrefs = getSharedPreferences("game_library_prefs", MODE_PRIVATE);
         
@@ -1521,6 +1524,29 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             Log.e(TAG, "Error starting WebServerService: ", e);
             Toast.makeText(this, "Error starting WebServer: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+    
+    /**
+     * Install RetroArch overlays from assets to external storage
+     * Called at first launch only (async)
+     */
+    private void installRetroArchOverlays() {
+        new Thread(() -> {
+            try {
+                com.retroplay.overlay.assets.OverlayAssetManager assetManager = 
+                    new com.retroplay.overlay.assets.OverlayAssetManager(this);
+                
+                Log.i(TAG, "Installing RetroArch overlays...");
+                boolean success = assetManager.installOverlaysIfNeeded();
+                if (success) {
+                    Log.i(TAG, "RetroArch overlays installed successfully");
+                } else {
+                    Log.w(TAG, "RetroArch overlays already installed or installation failed");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error installing RetroArch overlays", e);
+            }
+        }).start();
     }
     
     /**

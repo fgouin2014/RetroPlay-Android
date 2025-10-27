@@ -522,26 +522,85 @@ fun ComposeEmulatorScreen(
                     .fillMaxSize()
                     .background(Color.Black)
             ) {
-                PadKit(
-                    onInputEvents = { event ->
-                        handlePadKitEvent(event, retroView, showMainMenu)
-                    }
-                ) {
-                    ConstraintLayout(
-                        modifier = Modifier.fillMaxSize(),
-                        constraintSet = constraintSet
-                    ) {
-                        // Emulator View
+                if (layoutVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
+                    // Mode RetroArch : Overlay fullscreen par-dessus le gameView
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // Emulator View fullscreen
                         AndroidView(
                             factory = { retroView },
-                            modifier = Modifier.layoutId("gameView")
+                            modifier = Modifier.fillMaxSize()
                         )
                         
-                        // Left GamePad (dynamique selon console et variante)
-                        layout.left(this@PadKit, Modifier.layoutId("leftPad"), settings)
+                        // Overlay RetroArch fullscreen par-dessus (appelé directement, pas via LayoutPair)
+                        val overlayPreference = remember(console) {
+                            com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)
+                        }
                         
-                        // Right GamePad (dynamique selon console et variante)
-                        layout.right(this@PadKit, Modifier.layoutId("rightPad"), settings)
+                        if (overlayPreference != null) {
+                            val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(retroView.context) }
+                            val overlayConfig = remember(overlayPreference.overlayName) {
+                                assetManager.loadOverlayConfig(overlayPreference.overlayName)
+                            }
+                            
+                            val layoutName = if (overlayPreference.autoRotate) {
+                                if (isLandscape) overlayPreference.landscapeLayout else overlayPreference.portraitLayout
+                            } else {
+                                overlayPreference.landscapeLayout
+                            }
+                            
+                            overlayConfig?.layouts?.get(layoutName)?.let { overlayLayout ->
+                                com.retroplay.overlay.renderer.RetroArchOverlayScreen(
+                                    layout = overlayLayout,
+                                    overlayName = overlayPreference.overlayName,
+                                    assetManager = assetManager,
+                                    onButtonPress = { action ->
+                                        val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
+                                        keyCodes.forEach { keyCode ->
+                                            retroView.sendKeyEvent(android.view.KeyEvent.ACTION_DOWN, keyCode, 0)
+                                        }
+                                    },
+                                    onButtonRelease = { action ->
+                                        val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
+                                        keyCodes.forEach { keyCode ->
+                                            retroView.sendKeyEvent(android.view.KeyEvent.ACTION_UP, keyCode, 0)
+                                        }
+                                    },
+                                    onLayoutSwitch = { newLayoutName ->
+                                        Log.i("ComposeEmulator", "RetroArch layout switched to: $newLayoutName")
+                                        // TODO: Recharger le layout
+                                    },
+                                    onMenuToggle = {
+                                        Log.i("ComposeEmulator", "Menu toggle from RetroArch overlay")
+                                        showMainMenu.value = true
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // Mode Lemuroid : Layout gauche/droite standard
+                    PadKit(
+                        onInputEvents = { event ->
+                            handlePadKitEvent(event, retroView, showMainMenu)
+                        }
+                    ) {
+                        ConstraintLayout(
+                            modifier = Modifier.fillMaxSize(),
+                            constraintSet = constraintSet
+                        ) {
+                            // Emulator View
+                            AndroidView(
+                                factory = { retroView },
+                                modifier = Modifier.layoutId("gameView")
+                            )
+                            
+                            // Left GamePad (dynamique selon console et variante)
+                            layout.left(this@PadKit, Modifier.layoutId("leftPad"), settings)
+                            
+                            // Right GamePad (dynamique selon console et variante)
+                            layout.right(this@PadKit, Modifier.layoutId("rightPad"), settings)
+                        }
                     }
                 }
                 

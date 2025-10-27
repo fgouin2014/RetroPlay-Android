@@ -172,10 +172,11 @@ object GamePadLayoutManager {
         prefs: SharedPreferences,
         onButtonPress: (List<Int>) -> Unit,
         onButtonRelease: (List<Int>) -> Unit,
-        onLayoutSwitch: (String) -> Unit
+        onLayoutSwitch: (String) -> Unit,
+        onMenuToggle: () -> Unit
     ): LayoutPair {
         if (variant == LayoutVariant.RETROARCH) {
-            return createRetroArchLayout(console, context, prefs, onButtonPress, onButtonRelease, onLayoutSwitch)
+            return createRetroArchLayout(console, context, prefs, onButtonPress, onButtonRelease, onLayoutSwitch, onMenuToggle)
         }
         
         // Pour les autres variantes, utiliser la méthode normale
@@ -191,7 +192,8 @@ object GamePadLayoutManager {
         prefs: SharedPreferences,
         onButtonPress: (List<Int>) -> Unit,
         onButtonRelease: (List<Int>) -> Unit,
-        onLayoutSwitch: (String) -> Unit
+        onLayoutSwitch: (String) -> Unit,
+        onMenuToggle: () -> Unit
     ): LayoutPair {
         return LayoutPair(
             left = { mod, set -> 
@@ -207,7 +209,8 @@ object GamePadLayoutManager {
                     modifier = mod,
                     onButtonPress = onButtonPress,
                     onButtonRelease = onButtonRelease,
-                    onLayoutSwitch = onLayoutSwitch
+                    onLayoutSwitch = onLayoutSwitch,
+                    onMenuToggle = onMenuToggle
                 )
             }
         )
@@ -225,7 +228,8 @@ object GamePadLayoutManager {
         modifier: Modifier,
         onButtonPress: (List<Int>) -> Unit,
         onButtonRelease: (List<Int>) -> Unit,
-        onLayoutSwitch: (String) -> Unit
+        onLayoutSwitch: (String) -> Unit,
+        onMenuToggle: () -> Unit
     ) {
         // Charger les préférences d'overlay
         val overlayPreference = remember(console) {
@@ -293,6 +297,7 @@ object GamePadLayoutManager {
                 }
             },
             onLayoutSwitch = onLayoutSwitch,
+            onMenuToggle = onMenuToggle,
             modifier = modifier
         )
     }

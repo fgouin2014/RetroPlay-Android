@@ -489,6 +489,11 @@ fun ComposeEmulatorScreen(
             onLayoutSwitch = { newLayoutName ->
                 currentRetroArchLayout = newLayoutName
                 Log.i("ComposeEmulator", "RetroArch layout switched to: $newLayoutName")
+            },
+            onMenuToggle = {
+                // Ouvrir le menu principal
+                Log.i("ComposeEmulator", "Menu toggle from RetroArch overlay")
+                showMainMenu.value = true
             }
         )
     } else {

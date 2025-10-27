@@ -42,6 +42,7 @@ fun RetroArchOverlayScreen(
     onButtonPress: (String) -> Unit,
     onButtonRelease: (String) -> Unit,
     onLayoutSwitch: (String) -> Unit,
+    onMenuToggle: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"
@@ -67,7 +68,8 @@ fun RetroArchOverlayScreen(
                     pressedButtons = pressedButtons,
                     onButtonPress = onButtonPress,
                     onButtonRelease = onButtonRelease,
-                    onLayoutSwitch = onLayoutSwitch
+                    onLayoutSwitch = onLayoutSwitch,
+                    onMenuToggle = onMenuToggle
                 )
                 true
             }
@@ -97,7 +99,8 @@ private fun handleTouchEvent(
     pressedButtons: MutableMap<Int, Set<String>>,
     onButtonPress: (String) -> Unit,
     onButtonRelease: (String) -> Unit,
-    onLayoutSwitch: (String) -> Unit
+    onLayoutSwitch: (String) -> Unit,
+    onMenuToggle: () -> Unit
 ): Boolean {
     val TAG = "TouchHandler"
     
@@ -125,8 +128,8 @@ private fun handleTouchEvent(
                         Log.i(TAG, "Layout switch requested: ${button.nextTarget}")
                         onLayoutSwitch(button.nextTarget)
                     } else if (action == "menu_toggle") {
-                        Log.i(TAG, "Menu toggle requested")
-                        // Le menu RetroArch sera géré par l'activity
+                        Log.i(TAG, "Menu toggle pressed - opening main menu")
+                        onMenuToggle()
                     }
                 } else {
                     // Actions normales (boutons gamepad)

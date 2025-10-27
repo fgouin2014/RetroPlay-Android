@@ -465,7 +465,7 @@ fun ComposeEmulatorScreen(
         mutableStateOf(initialVariant)
     }
     
-    // État pour le switch de layout RetroArch
+    // État pour le switch de layout RetroArch (overrides la préférence)
     var currentRetroArchLayout by remember { mutableStateOf<String?>(null) }
     
     // Récupérer le layout approprié
@@ -542,39 +542,51 @@ fun ComposeEmulatorScreen(
                                 assetManager.loadOverlayConfig(overlayPreference.overlayName)
                             }
                             
-                            val layoutName = if (overlayPreference.autoRotate) {
-                                if (isLandscape) overlayPreference.landscapeLayout else overlayPreference.portraitLayout
-                            } else {
-                                overlayPreference.landscapeLayout
+                            // Utiliser currentRetroArchLayout si défini (boutons overlay_next), sinon utiliser la préférence
+                            val layoutName = currentRetroArchLayout ?: run {
+                                if (overlayPreference.autoRotate) {
+                                    if (isLandscape) overlayPreference.landscapeLayout else overlayPreference.portraitLayout
+                                } else {
+                                    overlayPreference.landscapeLayout
+                                }
                             }
                             
                             overlayConfig?.layouts?.get(layoutName)?.let { overlayLayout ->
-                                com.retroplay.overlay.renderer.RetroArchOverlayScreen(
-                                    layout = overlayLayout,
-                                    overlayName = overlayPreference.overlayName,
-                                    assetManager = assetManager,
-                                    onButtonPress = { action ->
-                                        val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
-                                        keyCodes.forEach { keyCode ->
-                                            retroView.sendKeyEvent(android.view.KeyEvent.ACTION_DOWN, keyCode, 0)
-                                        }
-                                    },
-                                    onButtonRelease = { action ->
-                                        val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
-                                        keyCodes.forEach { keyCode ->
-                                            retroView.sendKeyEvent(android.view.KeyEvent.ACTION_UP, keyCode, 0)
-                                        }
-                                    },
-                                    onLayoutSwitch = { newLayoutName ->
-                                        Log.i("ComposeEmulator", "RetroArch layout switched to: $newLayoutName")
-                                        // TODO: Recharger le layout
-                                    },
-                                    onMenuToggle = {
-                                        Log.i("ComposeEmulator", "Menu toggle from RetroArch overlay")
-                                        showMainMenu.value = true
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                                // key() force le recompose quand layoutName change
+                                androidx.compose.runtime.key(layoutName) {
+                                    com.retroplay.overlay.renderer.RetroArchOverlayScreen(
+                                        layout = overlayLayout,
+                                        overlayName = overlayPreference.overlayName,
+                                        assetManager = assetManager,
+                                        onButtonPress = { action ->
+                                            val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
+                                            if (keyCodes.isNotEmpty()) {
+                                                Log.d("ComposeEmulator", "Buttons pressed: $action -> $keyCodes")
+                                                keyCodes.forEach { keyCode ->
+                                                    retroView.sendKeyEvent(android.view.KeyEvent.ACTION_DOWN, keyCode, 0)
+                                                }
+                                            }
+                                        },
+                                        onButtonRelease = { action ->
+                                            val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
+                                            if (keyCodes.isNotEmpty()) {
+                                                Log.d("ComposeEmulator", "Buttons released: $action -> $keyCodes")
+                                                keyCodes.forEach { keyCode ->
+                                                    retroView.sendKeyEvent(android.view.KeyEvent.ACTION_UP, keyCode, 0)
+                                                }
+                                            }
+                                        },
+                                        onLayoutSwitch = { newLayoutName ->
+                                            Log.i("ComposeEmulator", "RetroArch layout switch: $layoutName -> $newLayoutName")
+                                            currentRetroArchLayout = newLayoutName
+                                        },
+                                        onMenuToggle = {
+                                            Log.i("ComposeEmulator", "Menu toggle from RetroArch overlay")
+                                            showMainMenu.value = true
+                                        },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
                             }
                         }
                     }

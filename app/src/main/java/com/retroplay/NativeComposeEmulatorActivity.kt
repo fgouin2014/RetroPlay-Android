@@ -465,8 +465,36 @@ fun ComposeEmulatorScreen(
         mutableStateOf(initialVariant)
     }
     
+    // État pour le switch de layout RetroArch
+    var currentRetroArchLayout by remember { mutableStateOf<String?>(null) }
+    
     // Récupérer le layout approprié
-    val layout = GamePadLayoutManager.getLayout(console, layoutVariant)
+    val layout = if (layoutVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
+        // Utiliser getLayoutWithContext pour RetroArch
+        GamePadLayoutManager.getLayoutWithContext(
+            console = console,
+            variant = layoutVariant,
+            context = retroView.context,
+            prefs = prefs,
+            onButtonPress = { keyCodes ->
+                keyCodes.forEach { keyCode ->
+                    retroView.sendKeyEvent(android.view.KeyEvent.ACTION_DOWN, keyCode, 0)
+                }
+            },
+            onButtonRelease = { keyCodes ->
+                keyCodes.forEach { keyCode ->
+                    retroView.sendKeyEvent(android.view.KeyEvent.ACTION_UP, keyCode, 0)
+                }
+            },
+            onLayoutSwitch = { newLayoutName ->
+                currentRetroArchLayout = newLayoutName
+                Log.i("ComposeEmulator", "RetroArch layout switched to: $newLayoutName")
+            }
+        )
+    } else {
+        // Utiliser getLayout normal pour Lemuroid
+        GamePadLayoutManager.getLayout(console, layoutVariant)
+    }
     
     // Détection de l'orientation
     val configuration = LocalConfiguration.current

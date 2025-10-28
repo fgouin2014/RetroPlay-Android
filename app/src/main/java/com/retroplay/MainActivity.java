@@ -40,6 +40,9 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
     // Bouton pour accéder aux jeux
     private Button fabGames;
     
+    // Flag to prevent multiple launches
+    private boolean hasLaunchedGameList = false;
+    
     // Permissions
     private static final int PERMISSION_REQUEST_CODE = 1001;
     private static final String[] REQUIRED_PERMISSIONS = {
@@ -66,16 +69,21 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
             return;
         }
 
-        // Install RetroArch overlays if needed (first launch)
-        installRetroArchOverlays();
-        
-        // Start WebServer only
-        startWebServer();
-        
-        setupWebView();
-        setupKittInterface();
-        setupKittButton();
-        setupGamesButton();
+        // If we get here, permissions are already granted
+        if (!hasLaunchedGameList) {
+            hasLaunchedGameList = true;
+            // Install RetroArch overlays if needed (first launch)
+            installRetroArchOverlays();
+            
+            // DON'T start WebServer - we're closing this activity immediately
+            // GameListActivity will start WebServerService instead
+            
+            // Launch GameListActivity directly
+            Log.i(TAG, "Permissions granted, launching GameListActivity");
+            Intent intent = new Intent(this, GameListActivity.class);
+            startActivity(intent);
+            finish(); // Close MainActivity
+        }
         
         Log.i(TAG, "MainActivity onCreate finished");
     }
@@ -165,10 +173,29 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
      * Check if all permissions are granted
      */
     private boolean checkPermissions() {
-        for (String permission : REQUIRED_PERMISSIONS) {
-            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                Log.w(TAG, "Missing permission: " + permission);
+        // On Android 11+, only check MANAGE_EXTERNAL_STORAGE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                Log.w(TAG, "MANAGE_EXTERNAL_STORAGE not granted");
                 return false;
+            }
+            // Check other permissions except READ/WRITE_EXTERNAL_STORAGE (obsolete on Android 11+)
+            for (String permission : REQUIRED_PERMISSIONS) {
+                if (!permission.equals(Manifest.permission.READ_EXTERNAL_STORAGE) && 
+                    !permission.equals(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                    if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                        Log.w(TAG, "Missing permission: " + permission);
+                        return false;
+                    }
+                }
+            }
+        } else {
+            // On Android 10 and below, check all permissions normally
+            for (String permission : REQUIRED_PERMISSIONS) {
+                if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                    Log.w(TAG, "Missing permission: " + permission);
+                    return false;
+                }
             }
         }
         
@@ -204,6 +231,14 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
         if (requestCode == PERMISSION_REQUEST_CODE) {
             boolean allGranted = true;
             for (int i = 0; i < permissions.length; i++) {
+                // On Android 11+, ignore READ/WRITE_EXTERNAL_STORAGE (obsolete)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && 
+                    (permissions[i].equals(Manifest.permission.READ_EXTERNAL_STORAGE) || 
+                     permissions[i].equals(Manifest.permission.WRITE_EXTERNAL_STORAGE))) {
+                    Log.i(TAG, "Ignoring obsolete permission on Android 11+: " + permissions[i]);
+                    continue;
+                }
+                
                 if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
                     Log.w(TAG, "Permission denied: " + permissions[i]);
                     allGranted = false;
@@ -213,19 +248,12 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
             }
             
             if (allGranted) {
-                Log.i(TAG, "All permissions granted, initializing app");
-                // Restart app with permissions
-                recreate();
+                Log.i(TAG, "All basic permissions granted");
+                // Don't launch GameListActivity here, wait for onResume to check MANAGE_EXTERNAL_STORAGE
             } else {
-                Log.w(TAG, "Some permissions denied, limited features");
-                Toast.makeText(this, "Some features may be limited without permissions", Toast.LENGTH_LONG).show();
-                // Continue anyway with basic features
-                Log.i(TAG, "Permissions denied, basic initialization");
-                startWebServer();
-                setupWebView();
-                setupKittInterface();
-                setupKittButton();
-                setupGamesButton();
+                Log.w(TAG, "Some permissions denied");
+                Toast.makeText(this, "Storage permissions required to access game library", Toast.LENGTH_LONG).show();
+                finish(); // Close app if permissions denied
             }
         }
     }
@@ -344,7 +372,26 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
     @Override
     protected void onResume() {
         super.onResume();
-        Log.i(TAG, "App resumed");
+        Log.i(TAG, "App resumed, hasLaunchedGameList=" + hasLaunchedGameList);
+        
+        // Check permissions again when returning from settings
+        if (!hasLaunchedGameList && checkPermissions()) {
+            hasLaunchedGameList = true;
+            Log.i(TAG, "All permissions granted in onResume, launching GameListActivity");
+            // Install overlays if not already done
+            installRetroArchOverlays();
+            
+            // DON'T start WebServer - we're closing this activity immediately
+            // GameListActivity will start WebServerService instead
+            
+            // Launch GameListActivity with a small delay to ensure we're fully resumed
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                Log.i(TAG, "Launching GameListActivity now");
+                Intent intent = new Intent(this, GameListActivity.class);
+                startActivity(intent);
+                finish();
+            }, 500);
+        }
     }
     
     /**

@@ -78,7 +78,8 @@ object GamePadLayoutManager {
      * Sauvegarder la variante choisie
      */
     fun saveVariant(prefs: SharedPreferences, console: String, variant: LayoutVariant) {
-        prefs.edit().putString("gamepad_${console}_variant", variant.name).apply()
+        // Utiliser commit() pour synchronisation immédiate et déclenchement du listener
+        prefs.edit().putString("gamepad_${console}_variant", variant.name).commit()
     }
     
     /**

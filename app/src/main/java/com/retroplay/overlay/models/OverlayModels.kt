@@ -27,14 +27,16 @@ data class OverlayLayout(
  * Un bouton d'overlay avec sa position et configuration
  */
 data class OverlayButton(
-    val action: String,                   // "a", "b", "left", "a|b" (combo), "overlay_next"
+    val action: String,                   // "a", "b", "left", "analog_left", "analog_right", "overlay_next"
     val x: Float,                         // Position X (0.0-1.0 if normalized)
     val y: Float,                         // Position Y (0.0-1.0 if normalized)
     val shape: ButtonShape,               // RADIAL or RECT
     val width: Float,                     // Width (0.0-1.0 if normalized)
     val height: Float,                    // Height (0.0-1.0 if normalized)
     val imagePath: String? = null,        // "img/A.png"
-    val nextTarget: String? = null        // Pour overlay_next buttons
+    val nextTarget: String? = null,       // Pour overlay_next buttons
+    val type: OverlayButtonType = OverlayButtonType.BUTTONS,  // Type de bouton
+    val rangeModifier: Float = 1.0f       // Multiplier pour analog sticks (sensibilité)
 )
 
 /**
@@ -43,6 +45,18 @@ data class OverlayButton(
 enum class ButtonShape {
     RADIAL,   // Circular/elliptical hitbox (default pour la plupart des boutons)
     RECT      // Rectangular hitbox (utilisé pour les zones combo comme "left|up")
+}
+
+/**
+ * Type de bouton d'overlay
+ * Basé sur RetroArch overlay_type enum
+ */
+enum class OverlayButtonType {
+    BUTTONS,        // Bouton standard (A, B, Start, etc.)
+    ANALOG_LEFT,    // Stick analogique gauche
+    ANALOG_RIGHT,   // Stick analogique droit
+    DPAD_AREA,      // Zone D-pad (non implémenté pour l'instant)
+    ABXY_AREA       // Zone ABXY (non implémenté pour l'instant)
 }
 
 /**
@@ -134,13 +148,15 @@ object OverlayPreferenceManager {
         console: String,
         preference: OverlayPreference
     ) {
+        // Utiliser commit() au lieu de apply() pour synchronisation immédiate
+        // Cela garantit que le listener se déclenche immédiatement
         prefs.edit()
             .putBoolean("overlay_${console}_enabled", preference.enabled)
             .putString("overlay_${console}_name", preference.overlayName)
             .putString("overlay_${console}_layout_landscape", preference.landscapeLayout)
             .putString("overlay_${console}_layout_portrait", preference.portraitLayout)
             .putBoolean("overlay_${console}_auto_rotate", preference.autoRotate)
-            .apply()
+            .commit()
     }
     
     fun load(
@@ -162,9 +178,10 @@ object OverlayPreferenceManager {
         prefs: android.content.SharedPreferences,
         console: String
     ) {
+        // Utiliser commit() pour synchronisation immédiate
         prefs.edit()
             .putBoolean("overlay_${console}_enabled", false)
-            .apply()
+            .commit()
     }
 }
 

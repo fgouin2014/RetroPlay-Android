@@ -34,6 +34,16 @@ import kotlin.math.sqrt
  * @param onButtonRelease Callback quand un bouton est relâché
  * @param onLayoutSwitch Callback pour changer de layout (overlay_next)
  */
+/**
+ * État d'un stick analogique
+ */
+data class AnalogStickState(
+    val x: Float = 0f,    // -1.0 à 1.0
+    val y: Float = 0f,    // -1.0 à 1.0
+    val pointerId: Int? = null,  // ID du doigt qui contrôle ce stick
+    val isActivated: Boolean = false  // true si le stick a été touché (permet hitbox étendue)
+)
+
 @Composable
 fun RetroArchOverlayScreen(
     layout: OverlayLayout,
@@ -43,6 +53,8 @@ fun RetroArchOverlayScreen(
     onButtonRelease: (String) -> Unit,
     onLayoutSwitch: (String) -> Unit,
     onMenuToggle: () -> Unit = {},
+    onAnalogMove: (String, Float, Float) -> Unit = { _, _, _ -> },  // Callback pour analog sticks (action, x, y)
+    showDebug: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"
@@ -51,7 +63,11 @@ fun RetroArchOverlayScreen(
     var screenSize by remember { mutableStateOf(IntSize(1920, 1080)) }
     
     // État des boutons (tracking multi-touch)
-    val pressedButtons = remember { mutableStateMapOf<Int, Set<String>>() }
+    val pressedButtons = remember { mutableStateMapOf<Int, Set<OverlayButton>>() }
+    
+    // État des analog sticks
+    val analogLeftState = remember { mutableStateOf(AnalogStickState()) }
+    val analogRightState = remember { mutableStateOf(AnalogStickState()) }
     
     Box(
         modifier = modifier
@@ -59,6 +75,16 @@ fun RetroArchOverlayScreen(
             .onSizeChanged { size ->
                 screenSize = size
                 Log.d(TAG, "Screen size: ${size.width}x${size.height}")
+                Log.d(TAG, "Layout: ${layout.name} | Buttons: ${layout.buttons.size} | RangeMod: ${layout.rangeModifier} | AlphaMod: ${layout.alphaModifier}")
+                
+                // DEBUG: Afficher TOUS les boutons système dans le layout
+                val systemButtons = layout.buttons.filter { 
+                    it.action.startsWith("overlay_next") || it.action == "menu_toggle"
+                }
+                Log.w(TAG, "🔍 SYSTEM BUTTONS IN LAYOUT: ${systemButtons.size} total")
+                systemButtons.forEach { btn ->
+                    Log.w(TAG, "  → action='${btn.action}' | pos=(${btn.x},${btn.y}) | size=(${btn.width},${btn.height}) | img='${btn.imagePath}' | target='${btn.nextTarget}'")
+                }
             }
             .pointerInteropFilter { event ->
                 handleTouchEvent(
@@ -66,25 +92,120 @@ fun RetroArchOverlayScreen(
                     layout = layout,
                     screenSize = screenSize,
                     pressedButtons = pressedButtons,
+                    analogLeftState = analogLeftState,
+                    analogRightState = analogRightState,
                     onButtonPress = onButtonPress,
                     onButtonRelease = onButtonRelease,
                     onLayoutSwitch = onLayoutSwitch,
-                    onMenuToggle = onMenuToggle
+                    onMenuToggle = onMenuToggle,
+                    onAnalogMove = onAnalogMove
                 )
                 true
             }
     ) {
-        // Afficher chaque bouton
-        layout.buttons.forEach { button ->
-            RetroArchButton(
-                button = button,
-                overlayName = overlayName,
-                assetManager = assetManager,
-                screenSize = screenSize,
-                rangeModifier = layout.rangeModifier,
-                alphaModifier = layout.alphaModifier,
-                isPressed = pressedButtons.values.any { it.contains(button.action) }
-            )
+        // Canvas unique pour afficher TOUS les boutons
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            layout.buttons.forEach { button ->
+                // Convertir coordonnées normalisées → pixels
+                val xPx = button.x * screenSize.width
+                val yPx = button.y * screenSize.height
+                // Utiliser layout.rangeModifier pour le rendu visuel (tous les boutons)
+                // button.rangeModifier est utilisé UNIQUEMENT pour le calcul des valeurs, pas le rendu
+                val widthPx = button.width * screenSize.width * layout.rangeModifier
+                val heightPx = button.height * screenSize.height * layout.rangeModifier
+                
+                // Charger et afficher l'image du bouton
+                button.imagePath?.let { path ->
+                    val bitmap = assetManager.loadButtonImage(overlayName, path)
+                    if (bitmap != null) {
+                        val imageBitmap = bitmap.asImageBitmap()
+                        val alpha = if (pressedButtons.values.any { it.contains(button) }) 1.0f else (0.7f * layout.alphaModifier)
+                        
+                        // Position top-left depuis le centre
+                        val topLeft = Offset(
+                            x = xPx - widthPx / 2,
+                            y = yPx - heightPx / 2
+                        )
+                        
+                        drawImage(
+                            image = imageBitmap,
+                            dstOffset = androidx.compose.ui.unit.IntOffset(
+                                x = topLeft.x.toInt(),
+                                y = topLeft.y.toInt()
+                            ),
+                            dstSize = androidx.compose.ui.unit.IntSize(
+                                width = widthPx.toInt(),
+                                height = heightPx.toInt()
+                            ),
+                            alpha = alpha
+                        )
+                    }
+                }
+                
+                // MODE DEBUG: Afficher les hitboxes
+                if (showDebug) {
+                    val debugColor = when (button.type) {
+                        OverlayButtonType.ANALOG_LEFT, OverlayButtonType.ANALOG_RIGHT -> Color.Green
+                        else -> Color.Red
+                    }
+                    
+                    when (button.shape) {
+                        ButtonShape.RADIAL -> {
+                            drawCircle(
+                                color = debugColor,
+                                radius = (widthPx / 2).coerceAtLeast(heightPx / 2),
+                                center = Offset(xPx, yPx),
+                                alpha = 0.5f
+                            )
+                        }
+                        ButtonShape.RECT -> {
+                            drawRect(
+                                color = Color.Blue,
+                                topLeft = Offset(xPx - widthPx / 2, yPx - heightPx / 2),
+                                size = Size(widthPx, heightPx),
+                                alpha = 0.5f
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // MODE DEBUG: Afficher la position actuelle des analog sticks
+            if (showDebug) {
+                // Stick gauche
+                val leftStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
+                if (leftStick != null && (analogLeftState.value.x != 0f || analogLeftState.value.y != 0f)) {
+                    val centerX = leftStick.x * screenSize.width
+                    val centerY = leftStick.y * screenSize.height
+                    val radius = leftStick.width * screenSize.width * layout.rangeModifier
+                    val currentX = centerX + analogLeftState.value.x * radius
+                    val currentY = centerY + analogLeftState.value.y * radius
+                    
+                    drawCircle(
+                        color = Color.Yellow,
+                        radius = 20f,
+                        center = Offset(currentX, currentY),
+                        alpha = 0.8f
+                    )
+                }
+                
+                // Stick droit
+                val rightStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
+                if (rightStick != null && (analogRightState.value.x != 0f || analogRightState.value.y != 0f)) {
+                    val centerX = rightStick.x * screenSize.width
+                    val centerY = rightStick.y * screenSize.height
+                    val radius = rightStick.width * screenSize.width * layout.rangeModifier
+                    val currentX = centerX + analogRightState.value.x * radius
+                    val currentY = centerY + analogRightState.value.y * radius
+                    
+                    drawCircle(
+                        color = Color.Cyan,
+                        radius = 20f,
+                        center = Offset(currentX, currentY),
+                        alpha = 0.8f
+                    )
+                }
+            }
         }
     }
 }
@@ -96,13 +217,17 @@ private fun handleTouchEvent(
     event: MotionEvent,
     layout: OverlayLayout,
     screenSize: IntSize,
-    pressedButtons: MutableMap<Int, Set<String>>,
+    pressedButtons: MutableMap<Int, Set<OverlayButton>>,
+    analogLeftState: MutableState<AnalogStickState>,
+    analogRightState: MutableState<AnalogStickState>,
     onButtonPress: (String) -> Unit,
     onButtonRelease: (String) -> Unit,
     onLayoutSwitch: (String) -> Unit,
-    onMenuToggle: () -> Unit
+    onMenuToggle: () -> Unit,
+    onAnalogMove: (String, Float, Float) -> Unit
 ): Boolean {
     val TAG = "TouchHandler"
+    val ANALOG_DEADZONE = 0.15f  // 15% dead zone (zone morte)
     
     when (event.actionMasked) {
         MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
@@ -111,30 +236,80 @@ private fun handleTouchEvent(
             val x = event.getX(pointerIndex)
             val y = event.getY(pointerIndex)
             
-            // Détecter quels boutons sont touchés
+            // D'abord vérifier si c'est un analog stick
+            // Pour analog sticks : utiliser button.rangeModifier même pour détection initiale (large zone tactile)
+            val analogStick = layout.buttons.find { button ->
+                (button.type == OverlayButtonType.ANALOG_LEFT || button.type == OverlayButtonType.ANALOG_RIGHT) &&
+                isTouchInsideButton(x, y, button, button.rangeModifier, screenSize)
+            }
+            
+            // DEBUG: Log pour comprendre pourquoi les analog sticks ne sont pas détectés
+            if (analogStick == null) {
+                val allAnalogSticks = layout.buttons.filter { it.type == OverlayButtonType.ANALOG_LEFT || it.type == OverlayButtonType.ANALOG_RIGHT }
+                if (allAnalogSticks.isNotEmpty()) {
+                    Log.w(TAG, "❌ NO ANALOG DETECTED at ($x,$y). Available analog sticks:")
+                    allAnalogSticks.forEach { stick ->
+                        val centerX = stick.x * screenSize.width
+                        val centerY = stick.y * screenSize.height
+                        val radius = stick.width * screenSize.width * stick.rangeModifier
+                        val distance = sqrt((x - centerX).pow(2) + (y - centerY).pow(2))
+                        Log.w(TAG, "  ${stick.type}: center=($centerX,$centerY) radius=$radius distance=$distance action='${stick.action}'")
+                    }
+                }
+            }
+            
+            if (analogStick != null) {
+                // C'est un analog stick
+                val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier)
+                if (values != null) {
+                    // Enregistrer le pointerId et activer le stick pour permettre hitbox étendue
+                    when (analogStick.type) {
+                        OverlayButtonType.ANALOG_LEFT -> {
+                            analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
+                            onAnalogMove("analog_left", values.first, values.second)
+                            Log.d(TAG, "Analog LEFT: x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
+                        }
+                        OverlayButtonType.ANALOG_RIGHT -> {
+                            analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
+                            onAnalogMove("analog_right", values.first, values.second)
+                            Log.d(TAG, "Analog RIGHT: x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
+                        }
+                        else -> {}
+                    }
+                }
+                // Ne pas traiter comme bouton normal
+                return true
+            }
+            
+            // Si ce n'est pas un analog stick, traiter comme bouton normal
             val touchedButtons = detectButtonsAtPosition(
                 x, y, layout, screenSize
             )
+            
+            // DEBUG: Log si plusieurs boutons détectés (chevauchement potentiel)
+            if (touchedButtons.size > 1) {
+                Log.w(TAG, "OVERLAP: ${touchedButtons.size} buttons detected at ($x,$y): ${touchedButtons.joinToString()}")
+            }
             
             // Enregistrer les boutons pressés pour ce pointeur
             pressedButtons[pointerId] = touchedButtons
             
             // Déclencher les callbacks
-            touchedButtons.forEach { action ->
+            touchedButtons.forEach { button ->
                 // Actions spéciales
-                if (RetroArchButtonMapping.isOverlayControlAction(action)) {
-                    val button = layout.buttons.find { it.action == action }
-                    if (action.startsWith("overlay_next") && button?.nextTarget != null) {
-                        Log.i(TAG, "Layout switch requested: ${button.nextTarget}")
+                if (RetroArchButtonMapping.isOverlayControlAction(button.action)) {
+                    if (button.action.startsWith("overlay_next") && button.nextTarget != null) {
+                        // Tous les boutons overlay_next changent de layout (RetroArch officiel)
+                        Log.i(TAG, "SYSTEM BUTTON: target='${button.nextTarget}' | Img='${button.imagePath}' | Normalized center: (${button.x}, ${button.y}) | Touch px: ($x, $y)")
                         onLayoutSwitch(button.nextTarget)
-                    } else if (action == "menu_toggle") {
-                        Log.i(TAG, "Menu toggle pressed - opening main menu")
+                    } else if (button.action == "menu_toggle") {
+                        Log.i(TAG, "SYSTEM BUTTON: MENU | Img='${button.imagePath}' | Normalized center: (${button.x}, ${button.y}) | Touch px: ($x, $y)")
                         onMenuToggle()
                     }
                 } else {
                     // Actions normales (boutons gamepad)
-                    Log.d(TAG, "Button pressed: $action")
-                    onButtonPress(action)
+                    Log.d(TAG, "Button pressed: ${button.action}")
+                    onButtonPress(button.action)
                 }
             }
         }
@@ -146,28 +321,60 @@ private fun handleTouchEvent(
                 val x = event.getX(i)
                 val y = event.getY(i)
                 
-                val currentButtons = detectButtonsAtPosition(x, y, layout, screenSize)
-                val previousButtons = pressedButtons[pointerId] ?: emptySet()
+                // Vérifier si ce pointeur est sur un analog stick
+                var handledByAnalog = false
                 
-                // Boutons nouvellement pressés
-                val newButtons = currentButtons - previousButtons
-                newButtons.forEach { action ->
-                    if (!RetroArchButtonMapping.isOverlayControlAction(action)) {
-                        Log.d(TAG, "Button pressed (move): $action")
-                        onButtonPress(action)
+                if (analogLeftState.value.pointerId == pointerId) {
+                    // Ce doigt contrôle le stick gauche
+                    val leftStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
+                    if (leftStick != null) {
+                        val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier)
+                        if (values != null) {
+                            analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
+                            onAnalogMove("analog_left", values.first, values.second)
+                        }
+                        handledByAnalog = true
                     }
                 }
                 
-                // Boutons relâchés
-                val releasedButtons = previousButtons - currentButtons
-                releasedButtons.forEach { action ->
-                    if (!RetroArchButtonMapping.isOverlayControlAction(action)) {
-                        Log.d(TAG, "Button released (move): $action")
-                        onButtonRelease(action)
+                if (analogRightState.value.pointerId == pointerId) {
+                    // Ce doigt contrôle le stick droit
+                    val rightStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
+                    if (rightStick != null) {
+                        val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier)
+                        if (values != null) {
+                            analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
+                            onAnalogMove("analog_right", values.first, values.second)
+                        }
+                        handledByAnalog = true
                     }
                 }
                 
-                pressedButtons[pointerId] = currentButtons
+                // Si pas géré par analog, traiter comme bouton normal
+                if (!handledByAnalog) {
+                    val currentButtons = detectButtonsAtPosition(x, y, layout, screenSize)
+                    val previousButtons = pressedButtons[pointerId] ?: emptySet()
+                    
+                    // Boutons nouvellement pressés
+                    val newButtons = currentButtons - previousButtons
+                    newButtons.forEach { button ->
+                        if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
+                            Log.d(TAG, "Button pressed (move): ${button.action}")
+                            onButtonPress(button.action)
+                        }
+                    }
+                    
+                    // Boutons relâchés
+                    val releasedButtons = previousButtons - currentButtons
+                    releasedButtons.forEach { button ->
+                        if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
+                            Log.d(TAG, "Button released (move): ${button.action}")
+                            onButtonRelease(button.action)
+                        }
+                    }
+                    
+                    pressedButtons[pointerId] = currentButtons
+                }
             }
         }
         
@@ -175,12 +382,27 @@ private fun handleTouchEvent(
             val pointerIndex = event.actionIndex
             val pointerId = event.getPointerId(pointerIndex)
             
+            // Vérifier si ce pointeur contrôle un analog stick
+            if (analogLeftState.value.pointerId == pointerId) {
+                // Relâcher le stick gauche - reset complet (isActivated = false)
+                analogLeftState.value = AnalogStickState()  // Reset à 0,0, désactivé
+                onAnalogMove("analog_left", 0f, 0f)
+                Log.d(TAG, "Analog LEFT released")
+            }
+            
+            if (analogRightState.value.pointerId == pointerId) {
+                // Relâcher le stick droit - reset complet (isActivated = false)
+                analogRightState.value = AnalogStickState()  // Reset à 0,0, désactivé
+                onAnalogMove("analog_right", 0f, 0f)
+                Log.d(TAG, "Analog RIGHT released")
+            }
+            
             // Relâcher tous les boutons de ce pointeur
             val releasedButtons = pressedButtons[pointerId] ?: emptySet()
-            releasedButtons.forEach { action ->
-                if (!RetroArchButtonMapping.isOverlayControlAction(action)) {
-                    Log.d(TAG, "Button released: $action")
-                    onButtonRelease(action)
+            releasedButtons.forEach { button ->
+                if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
+                    Log.d(TAG, "Button released: ${button.action}")
+                    onButtonRelease(button.action)
                 }
             }
             
@@ -188,11 +410,23 @@ private fun handleTouchEvent(
         }
         
         MotionEvent.ACTION_CANCEL -> {
+            // Relâcher tous les analog sticks
+            if (analogLeftState.value.pointerId != null) {
+                analogLeftState.value = AnalogStickState()
+                onAnalogMove("analog_left", 0f, 0f)
+                Log.d(TAG, "Analog LEFT released (cancel)")
+            }
+            if (analogRightState.value.pointerId != null) {
+                analogRightState.value = AnalogStickState()
+                onAnalogMove("analog_right", 0f, 0f)
+                Log.d(TAG, "Analog RIGHT released (cancel)")
+            }
+            
             // Relâcher tous les boutons
-            pressedButtons.flatMap { it.value }.distinct().forEach { action ->
-                if (!RetroArchButtonMapping.isOverlayControlAction(action)) {
-                    Log.d(TAG, "Button released (cancel): $action")
-                    onButtonRelease(action)
+            pressedButtons.flatMap { it.value }.distinct().forEach { button ->
+                if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
+                    Log.d(TAG, "Button released (cancel): ${button.action}")
+                    onButtonRelease(button.action)
                 }
             }
             pressedButtons.clear()
@@ -203,19 +437,92 @@ private fun handleTouchEvent(
 }
 
 /**
+ * Calculer les valeurs analogiques depuis une position de toucher
+ * Implémentation basée sur RetroArch input_overlay_get_analog_state()
+ * @return Pair(x, y) normalisées entre -1.0 et 1.0, ou null si hors dead zone
+ */
+private fun calculateAnalogValues(
+    touchX: Float,
+    touchY: Float,
+    button: OverlayButton,
+    screenSize: IntSize,
+    deadzone: Float,
+    layoutRangeMod: Float = 1.5f
+): Pair<Float, Float>? {
+    // Centre du stick en pixels (x_shift, y_shift dans RetroArch)
+    val centerX = button.x * screenSize.width
+    val centerY = button.y * screenSize.height
+    
+    // Range (rayon) en pixels pour le calcul des valeurs
+    // Utiliser layout.rangeModifier (même que le rendu visuel) pour cohérence
+    val rangeX = button.width * screenSize.width * layoutRangeMod
+    val rangeY = button.height * screenSize.height * layoutRangeMod
+    
+    // Distance depuis le centre (x_dist, y_dist dans RetroArch)
+    val xDist = touchX - centerX
+    val yDist = touchY - centerY
+    
+    // Valeurs normalisées comme RetroArch
+    val xVal = xDist / rangeX
+    val yVal = yDist / rangeY
+    
+    // Saturation (analog_saturate_pct = 1.0 par défaut dans RetroArch)
+    // Nous pourrions parser ce paramètre depuis les .cfg si nécessaire
+    val saturate_pct = 1.0f
+    val xValSat = xVal / saturate_pct
+    val yValSat = yVal / saturate_pct
+    
+    // Clamp entre -1.0 et 1.0 (comme RetroArch)
+    val finalX = xValSat.coerceIn(-1.0f, 1.0f)
+    val finalY = yValSat.coerceIn(-1.0f, 1.0f)
+    
+    // Vérifier dead zone simple (magnitude euclidienne)
+    val magnitude = sqrt(finalX * finalX + finalY * finalY)
+    if (magnitude < deadzone) {
+        return Pair(0f, 0f)
+    }
+    
+    return Pair(finalX, finalY)
+}
+
+/**
  * Détecter quels boutons sont touchés à une position donnée
+ * Exclut les analog sticks (gérés séparément)
  */
 private fun detectButtonsAtPosition(
     x: Float,
     y: Float,
     layout: OverlayLayout,
     screenSize: IntSize
-): Set<String> {
-    val touched = mutableSetOf<String>()
+): Set<OverlayButton> {
+    val touched = mutableSetOf<OverlayButton>()
     
     layout.buttons.forEach { button ->
+        // Skip analog sticks (gérés séparément)
+        if (button.type == OverlayButtonType.ANALOG_LEFT || button.type == OverlayButtonType.ANALOG_RIGHT) {
+            return@forEach
+        }
+        
+        // Skip zones tactiles et boutons décoratifs (dpad_area, abxy_area, "nul")
+        if (button.type == OverlayButtonType.DPAD_AREA || button.type == OverlayButtonType.ABXY_AREA) {
+            return@forEach
+        }
+        
+        // Skip boutons purement décoratifs (action="nul" ou "null")
+        if (button.action == "nul" || button.action == "null") {
+            return@forEach
+        }
+        
+        // Utiliser layout.rangeModifier pour les boutons normaux
         if (isTouchInsideButton(x, y, button, layout.rangeModifier, screenSize)) {
-            touched.add(button.action)
+            touched.add(button)
+            
+            // DEBUG: Log détaillé de la détection
+            val buttonX = button.x * screenSize.width
+            val buttonY = button.y * screenSize.height
+            val buttonWidth = button.width * screenSize.width * layout.rangeModifier
+            val buttonHeight = button.height * screenSize.height * layout.rangeModifier
+            Log.d("TouchHandler", "HIT: ${button.action} | Touch: ($x,$y) | Center: ($buttonX,$buttonY) | Size: ${buttonWidth.toInt()}x${buttonHeight.toInt()} | Shape: ${button.shape}")
         }
     }
     
@@ -238,7 +545,7 @@ private fun isTouchInsideButton(
     val buttonWidth = button.width * screenSize.width * rangeModifier
     val buttonHeight = button.height * screenSize.height * rangeModifier
     
-    return when (button.shape) {
+    val isInside = when (button.shape) {
         ButtonShape.RADIAL -> {
             // Hitbox elliptique
             val dx = (touchX - buttonX) / (buttonWidth / 2)
@@ -256,6 +563,13 @@ private fun isTouchInsideButton(
             touchX >= left && touchX <= right && touchY >= top && touchY <= bottom
         }
     }
+    
+    // DEBUG: Log détaillé pour les boutons système
+    if (isInside && (button.action.startsWith("overlay_next") || button.action == "menu_toggle")) {
+        Log.e("TouchHandler", "🔴 HITBOX: action='${button.action}' | normalized=(${button.x},${button.y}) size=(${button.width},${button.height}) | pixels=($buttonX,$buttonY) size=(${buttonWidth.toInt()}x${buttonHeight.toInt()}) | touch=($touchX,$touchY)")
+    }
+    
+    return isInside
 }
 
 /**
@@ -347,10 +661,27 @@ fun RetroArchOverlayDebug(
         modifier = modifier.fillMaxSize()
     ) {
         layout.buttons.forEach { button ->
+            // Skip zones tactiles et boutons décoratifs
+            if (button.type == OverlayButtonType.DPAD_AREA || button.type == OverlayButtonType.ABXY_AREA) {
+                return@forEach
+            }
+            
+            // Skip boutons purement décoratifs (action="nul" ou "null")
+            if (button.action == "nul" || button.action == "null") {
+                return@forEach
+            }
+            
             val x = button.x * screenSize.width
             val y = button.y * screenSize.height
-            val width = button.width * screenSize.width * layout.rangeModifier
-            val height = button.height * screenSize.height * layout.rangeModifier
+            // Pour debug hitbox : utiliser button.rangeModifier pour analog sticks (zone de détection)
+            // Pour les autres boutons : layout.rangeModifier
+            val rangeMod = if (button.type == OverlayButtonType.ANALOG_LEFT || button.type == OverlayButtonType.ANALOG_RIGHT) {
+                button.rangeModifier  // 3.5x pour grande zone tactile
+            } else {
+                layout.rangeModifier  // 1.5x pour boutons normaux
+            }
+            val width = button.width * screenSize.width * rangeMod
+            val height = button.height * screenSize.height * rangeMod
             
             // Dessiner hitbox
             when (button.shape) {

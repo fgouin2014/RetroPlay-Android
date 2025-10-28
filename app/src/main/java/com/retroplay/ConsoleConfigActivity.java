@@ -33,6 +33,7 @@ public class ConsoleConfigActivity extends AppCompatActivity {
     private TextView touchAlphaValue;
     private MaterialButton saveButton;
     private MaterialButton editHtmlButton;
+    private MaterialButton resetNativeGamePadButton;
     
     // Available cores per console
     private static final String[] NES_CORES = {"fceumm", "nestopia"};
@@ -137,6 +138,10 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         // Edit HTML button
         editHtmlButton = findViewById(R.id.editHtmlButton);
         editHtmlButton.setOnClickListener(v -> openHtmlEditor());
+        
+        // Reset Native GamePad button
+        resetNativeGamePadButton = findViewById(R.id.resetNativeGamePadButton);
+        resetNativeGamePadButton.setOnClickListener(v -> resetNativeGamePad());
     }
     
     private void setupPresetSpinner() {
@@ -853,6 +858,48 @@ public class ConsoleConfigActivity extends AppCompatActivity {
                 android.content.ClipData clip = android.content.ClipData.newPlainText("HTML Path", htmlPath);
                 clipboard.setPrimaryClip(clip);
                 android.widget.Toast.makeText(this, "Path copied to clipboard", android.widget.Toast.LENGTH_SHORT).show();
+            })
+            .setNegativeButton("CANCEL", null)
+            .show();
+    }
+    
+    /**
+     * Réinitialiser les paramètres gamepad natifs pour cette console
+     */
+    private void resetNativeGamePad() {
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("Reset Native GamePad")
+            .setMessage("This will reset the gamepad settings for " + currentConsole.toUpperCase() + " in NATIVE mode (NativeCompose) to DEFAULT.\n\n" +
+                       "This does NOT affect EmulatorJS (WebView/WASM) mode.\n\nContinue?")
+            .setPositiveButton("RESET", (dialog, which) -> {
+                // Supprimer les préférences gamepad pour cette console
+                SharedPreferences gamepadPrefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE);
+                SharedPreferences.Editor editor = gamepadPrefs.edit();
+                
+                // Supprimer toutes les clés liées à cette console
+                // Layout variant (DEFAULT, RETROARCH, etc.)
+                editor.remove("gamepad_" + currentConsole + "_variant");
+                
+                // Overlay preferences (RetroArch)
+                editor.remove("overlay_" + currentConsole + "_enabled");
+                editor.remove("overlay_" + currentConsole + "_name");
+                editor.remove("overlay_" + currentConsole + "_layout_landscape");
+                editor.remove("overlay_" + currentConsole + "_layout_portrait");
+                editor.remove("overlay_" + currentConsole + "_auto_rotate");
+                
+                // Settings gamepad (scale, rotation, margins)
+                editor.remove("gamepad_" + currentConsole + "_settings_scale");
+                editor.remove("gamepad_" + currentConsole + "_settings_rotation");
+                editor.remove("gamepad_" + currentConsole + "_settings_marginX");
+                editor.remove("gamepad_" + currentConsole + "_settings_marginY");
+                
+                editor.apply();
+                
+                android.widget.Toast.makeText(this, 
+                    "Native gamepad reset to DEFAULT for " + currentConsole.toUpperCase(), 
+                    android.widget.Toast.LENGTH_LONG).show();
+                    
+                android.util.Log.i("ConsoleConfig", "Reset native gamepad settings for " + currentConsole);
             })
             .setNegativeButton("CANCEL", null)
             .show();

@@ -1,0 +1,12 @@
+// PRESET SNES - Copier ce bloc à la place de EJS_VirtualGamepadSettings (ligne 214-218)
+window.EJS_VirtualGamepadSettings = [
+    { type: \ dpad\, location: \left\, left: \10%\, top: \50%\, joystickInput: false, inputValues: [4, 5, 6, 7] },
+    { type: \button\, text: \Y\, id: \y\, location: \right\, right: 40, top: 40, bold: true, fontSize: 24, input_value: 9 },
+    { type: \button\, text: \X\, id: \x\, location: \right\, right: 100, top: 80, bold: true, fontSize: 24, input_value: 1 },
+    { type: \button\, text: \B\, id: \b\, location: \right\, right: 100, top: 120, bold: true, fontSize: 24, input_value: 8 },
+    { type: \button\, text: \A\, id: \a\, location: \right\, right: 160, top: 80, bold: true, fontSize: 24, input_value: 0 },
+    { type: \button\, text: \L\, id: \l\, location: \left\, left: 20, top: 10, fontSize: 18, input_value: 10 },
+    { type: \button\, text: \R\, id: \r\, location: \right\, right: 20, top: 10, fontSize: 18, input_value: 11 },
+    { type: \button\, text: \START\, id: \start\, location: \center\, left: 60, fontSize: 14, block: true, input_value: 3 },
+    { type: \button\, text: \SELECT\, id: \select\, location: \center\, left: -5, fontSize: 14, block: true, input_value: 2 }
+];

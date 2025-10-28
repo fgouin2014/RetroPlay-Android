@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PSX Test - RetroArch Bug Reproduction</title>
+    <style>
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+        #game { 
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="game"></div>
+    <script>
+        // Cette page reproduit le bug "retroarch" avec PSX
+        // Pour tester: http://localhost:8888/test_psx_retroarch_bug.html?game=http://localhost:8888/gamedata/psx/Resident%20Evil%201.5.PBP
+        
+        const serverIP = window.location.hostname;
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameUrl = urlParams.get('game');
+
+        // Clear any existing localStorage that might interfere
+        localStorage.removeItem('EJS-controlScheme');
+
+        // Configure EmulatorJS for PSX
+        window.EJS_player = "#game";
+        window.EJS_core = 'pcsx_rearmed';
+        window.EJS_pathtodata = `http://${serverIP}:8888/gamedata/data/`;
+        window.EJS_biosUrl = `http://${serverIP}:8888/gamedata/data/bios/scph5501.bin`;
+        window.EJS_skipBios = false;
+        window.EJS_startOnLoaded = false;
+        window.EJS_language = 'en-US';
+        window.EJS_VirtualGamepadSettings = {
+            enabled: true,
+            opacity: 0.8,
+            size: 1.0,
+            scheme: 'psx'
+        };
+
+        // Use the game URL from parameter
+        if (gameUrl) {
+            window.EJS_gameUrl = gameUrl;
+            
+            console.log('[BUG REPRODUCTION] Game URL:', gameUrl);
+            console.log('[BUG REPRODUCTION] Using appendChild() method (causes retroarch bug)');
+            
+            // Load PSX control script
+            const psxScript = document.createElement('script');
+            psxScript.src = 'https://www.lemon-web.net/includes/psxcontrol.js';
+            document.body.appendChild(psxScript);
+
+            // Load EmulatorJS loader
+            const loaderScript = document.createElement('script');
+            loaderScript.src = `http://${serverIP}:8888/gamedata/data/loader.js`;
+            loaderScript.onload = () => console.log('[BUG REPRODUCTION] EmulatorJS loaded - should show retroarch bug');
+            loaderScript.onerror = () => console.error('[BUG REPRODUCTION] Failed to load EmulatorJS');
+            document.body.appendChild(loaderScript);
+        } else {
+            document.body.innerHTML = '<h1 style="color: white; text-align: center; padding-top: 50px;">No game URL provided</h1><p style="color: white; text-align: center;">Add ?game=URL to test</p>';
+        }
+    </script>
+</body>
+</html>
+

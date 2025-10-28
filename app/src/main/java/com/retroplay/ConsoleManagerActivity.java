@@ -1072,6 +1072,8 @@ public class ConsoleManagerActivity extends AppCompatActivity {
         availableCores.add("snes9x");
         availableCores.add("parallel_n64");
         availableCores.add("mupen64plus_next");
+        availableCores.add("mupen64plus_next_gles3");
+        availableCores.add("mupen64plus_next_gles2");
         availableCores.add("mgba");
         availableCores.add("gambatte");
         availableCores.add("melonds");

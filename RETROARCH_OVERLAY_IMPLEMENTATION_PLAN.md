@@ -835,3 +835,4 @@ User taps overlay_next button (e.g. "rotate" icon)
 
 *Ce document sera mis à jour au fur et à mesure de l'implémentation.*
 
+

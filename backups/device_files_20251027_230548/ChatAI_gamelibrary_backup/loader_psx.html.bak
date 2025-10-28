@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover">
+    <title>PSX Emulator</title>
+    <style>
+        * { box-sizing: border-box; }
+        html, body { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            position: fixed;
+        }
+        #game { 
+            width: 100vw; 
+            height: 100vh;
+            position: relative;
+        }
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            text-align: center;
+            z-index: 10000;
+        }
+        
+        /* Forcer TOUS les éléments EmulatorJS à être dans le viewport */
+        #game > * {
+            max-height: 100vh !important;
+        }
+        
+        /* Centrer le bouton Start sur mobile */
+        .ejs_start_button,
+        [class*="start"],
+        [class*="play"],
+        button[class*="ejs"] {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            z-index: 9999 !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading PSX game...</div>
+    <div id="game"></div>
+
+    <script>
+        const serverIP = window.location.hostname;
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameSlug = urlParams.get('slug');
+        const gameConsole = urlParams.get('console') || 'psx';
+
+        // Vider le cache pour forcer PSX
+        localStorage.removeItem('EJS-controlScheme');
+        localStorage.removeItem('EJS-settings');
+
+        // Configuration PSX (SIMPLE comme test_psx.html)
+        window.EJS_player = "#game";
+        window.EJS_core = "pcsx_rearmed";
+        window.EJS_pathtodata = `http://${serverIP}:8888/gamedata/data/`;
+        window.EJS_biosUrl = `http://${serverIP}:8888/gamedata/data/bios/scph5501.bin`;
+        window.EJS_skipBios = false;
+        window.EJS_startOnLoaded = false;
+        window.EJS_language = 'en-US';
+        window.EJS_VirtualGamepadSettings = {
+            enabled: true,
+            opacity: 0.8,
+            size: 1.0,
+            scheme: 'psx'
+        };
+
+        // Fonction pour générer le slug
+        function generateSlug(name) {
+            return name.toLowerCase()
+                .replace(/['"`]/g, '')
+                .replace(/[^a-z0-9\s-]/g, '')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
+        }
+
+        // Charger le jeu depuis gamelist.json
+        if (gameSlug) {
+            fetch(`http://${serverIP}:8888/gamedata/${gameConsole}/gamelist.json`)
+                .then(response => response.json())
+                .then(data => {
+                    const game = data.games.find(g => generateSlug(g.name) === gameSlug);
+                    if (game) {
+                        const fileName = game.path.replace(/^\.\//, '');
+                        window.EJS_gameUrl = `http://${serverIP}:8888/gamedata/${gameConsole}/${fileName}`;
+                        document.title = `PSX - ${game.name}`;
+                        
+                        // Maintenant charger loader.js APRÈS avoir défini gameUrl
+                        const script = document.createElement('script');
+                        script.src = `http://${serverIP}:8888/gamedata/data/loader.js`;
+                        script.onload = () => {
+                            document.getElementById('loading').style.display = 'none';
+                        };
+                        document.body.appendChild(script);
+                    } else {
+                        document.getElementById('loading').innerHTML = 'Error: Game not found';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('loading').innerHTML = 'Error: ' + error.message;
+                });
+        } else {
+            document.getElementById('loading').innerHTML = 'Error: No game specified';
+        }
+    </script>
+    
+    <!-- Charger psxcontrol.js pour tous les boutons PSX -->
+    <script src="https://www.lemon-web.net/includes/psxcontrol.js"></script>
+</body>
+</html>
+

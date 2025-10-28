@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emulator</title>
+    <style>
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+        #game {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <script>
+        // Bloquer le verrouillage d'orientation pour permettre portrait ET paysage en fullscreen
+        if (screen.orientation && screen.orientation.lock) {
+            // Remplacer screen.orientation.lock par une fonction qui ne fait rien
+            screen.orientation.lock = function() {
+                console.log('[ORIENTATION] Lock bloqué - rotation libre activée');
+                return Promise.resolve();
+            };
+        }
+        
+        // Bloquer aussi lockOrientation (ancienne API)
+        if (screen.lockOrientation) {
+            screen.lockOrientation = function() {
+                console.log('[ORIENTATION] lockOrientation bloqué - rotation libre activée');
+                return true;
+            };
+        }
+        
+        // Empêcher les tentatives de verrouillage via d'autres méthodes
+        const originalRequestFullscreen = Element.prototype.requestFullscreen;
+        Element.prototype.requestFullscreen = function(options) {
+            // Supprimer navigationUI et orientationLock des options
+            const cleanOptions = options ? {...options} : {};
+            delete cleanOptions.orientationLock;
+            
+            console.log('[FULLSCREEN] Fullscreen sans verrouillage d\'orientation');
+            return originalRequestFullscreen.call(this, cleanOptions);
+        };
+        
+        // FULLSCREEN AUTOMATIQUE AU LANCEMENT
+        window.addEventListener('load', () => {
+            // Attendre qu'EmulatorJS soit chargé (délai pour être sûr)
+            setTimeout(() => {
+                const gameContainer = document.querySelector('#game');
+                if (gameContainer) {
+                    console.log('[AUTO-FULLSCREEN] Activation du fullscreen au lancement...');
+                    
+                    // Activer le fullscreen sans forcer l'orientation
+                    if (document.documentElement.requestFullscreen) {
+                        document.documentElement.requestFullscreen({ navigationUI: "hide" })
+                            .then(() => console.log('[AUTO-FULLSCREEN] Fullscreen activé!'))
+                            .catch(err => console.log('[AUTO-FULLSCREEN] Erreur:', err));
+                    } else if (document.documentElement.webkitRequestFullscreen) {
+                        document.documentElement.webkitRequestFullscreen();
+                    }
+                }
+            }, 2000); // 2 secondes pour laisser EmulatorJS s'initialiser
+        });
+    </script>
+</head>
+<body>
+    <div id="game"></div>
+    <script>
+        // Use current hostname (le serveur redirigera vers localhost si nécessaire pour COEP/COOP)
+        const serverIP = window.location.hostname;
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameConsole = urlParams.get('console') || 'nes';
+
+        console.log('Server IP:', serverIP, 'Console:', gameConsole);
+
+        // Pour les sous-consoles (ex: fbneo/sega), utiliser le loader parent (fbneo)
+        let loaderName = gameConsole;
+        if (gameConsole.includes('/')) {
+            loaderName = gameConsole.split('/')[0];
+            console.log('Subconsole detected:', gameConsole, '- Using parent loader:', loaderName);
+        }
+
+        // Charger le loader spécifique à la console
+        const loaderScript = document.createElement('script');
+        loaderScript.src = `http://${serverIP}:8888/gamelibrary/loader_${loaderName}.js`;
+        loaderScript.onerror = function() {
+            console.error('Failed to load loader for console:', gameConsole);
+            document.body.innerHTML = '<h1 style="color: white; text-align: center; padding-top: 50px;">Error: Console "' + gameConsole + '" not supported</h1><p style="color: white; text-align: center;">Loader path: ' + loaderScript.src + '</p>';
+        };
+        loaderScript.onload = function() {
+            console.log('Loader loaded successfully for:', gameConsole);
+        };
+        document.head.appendChild(loaderScript);
+    </script>
+</body>
+</html>

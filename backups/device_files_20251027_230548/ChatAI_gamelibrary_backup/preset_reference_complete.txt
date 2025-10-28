@@ -1,0 +1,379 @@
+// ========================================================================
+// === PRESET DE RÉFÉRENCE COMPLET - TOUTES LES OPTIONS DISPONIBLES ===
+// ========================================================================
+// Ce fichier documente TOUTES les options possibles pour EJS_VirtualGamepadSettings
+// Utilisez-le comme référence pour créer vos propres presets personnalisés
+
+window.EJS_VirtualGamepadSettings = [
+    // ==================== D-PAD (Directionnel) ====================
+    {
+        type: "dpad",                    // Type de contrôle
+        location: "left",                // Position: "left", "right", "center"
+        left: "10%",                     // Distance du bord gauche (px ou %)
+        // right: 100,                   // Alternative: distance du bord droit
+        top: "50%",                      // Distance du haut (px ou %)
+        // bottom: 100,                  // Alternative: distance du bas
+        joystickInput: false,            // true = joystick analogique, false = d-pad digital
+        inputValues: [4, 5, 6, 7],       // [Up, Down, Left, Right] - codes de touches
+        // size: 150,                    // Taille du d-pad en pixels (défaut: auto)
+        // opacity: 0.8,                 // Opacité du d-pad (0.0 - 1.0)
+        // color: "#ff3333"              // Couleur personnalisée (hex ou rgba)
+    },
+
+    // ==================== BOUTONS D'ACTION ====================
+    // Bouton A (exemple complet avec toutes les options)
+    {
+        type: "button",                  // Type de contrôle
+        text: "A",                       // Texte affiché sur le bouton
+        id: "btn_a",                     // ID unique pour le bouton
+        location: "right",               // Position: "left", "right", "center"
+        right: 80,                       // Distance du bord droit en pixels
+        top: 120,                        // Distance du haut en pixels
+        // left: 100,                    // Alternative: distance du bord gauche
+        // bottom: 100,                  // Alternative: distance du bas
+        bold: true,                      // Texte en gras
+        fontSize: 24,                    // Taille de la police
+        input_value: 8,                  // Code de touche mappé (BUTTON_1)
+        // size: 60,                     // Taille du bouton en pixels
+        // opacity: 0.8,                 // Opacité du bouton (0.0 - 1.0)
+        // color: "#ff3333",             // Couleur de fond
+        // textColor: "#ffffff",         // Couleur du texte
+        // block: false,                 // true = bouton rectangulaire, false = circulaire
+        // borderRadius: 30              // Rayon des coins (si block = true)
+    },
+
+    // Bouton B
+    {
+        type: "button",
+        text: "B",
+        id: "btn_b",
+        location: "right",
+        right: 20,
+        top: 80,
+        bold: true,
+        fontSize: 24,
+        input_value: 0                   // BUTTON_2
+    },
+
+    // Bouton C
+    {
+        type: "button",
+        text: "C",
+        id: "btn_c",
+        location: "right",
+        right: 140,
+        top: 80,
+        bold: true,
+        fontSize: 24,
+        input_value: 9                   // BUTTON_3
+    },
+
+    // Bouton X
+    {
+        type: "button",
+        text: "X",
+        id: "btn_x",
+        location: "right",
+        right: 80,
+        top: 40,
+        bold: true,
+        fontSize: 20,
+        input_value: 1                   // BUTTON_4
+    },
+
+    // Bouton Y
+    {
+        type: "button",
+        text: "Y",
+        id: "btn_y",
+        location: "right",
+        right: 20,
+        top: 10,
+        bold: true,
+        fontSize: 20,
+        input_value: 10                  // BUTTON_5
+    },
+
+    // Bouton Z
+    {
+        type: "button",
+        text: "Z",
+        id: "btn_z",
+        location: "right",
+        right: 140,
+        top: 10,
+        bold: true,
+        fontSize: 20,
+        input_value: 11                  // BUTTON_6
+    },
+
+    // ==================== TRIGGERS/BUMPERS ====================
+    // L Trigger (épaule gauche)
+    {
+        type: "button",
+        text: "L",
+        id: "l_trigger",
+        location: "left",
+        left: 20,
+        top: 10,
+        fontSize: 18,
+        input_value: 10,                 // L1
+        block: true,                     // Bouton rectangulaire pour triggers
+        // size: 80,                     // Largeur pour boutons rectangulaires
+        // opacity: 0.7
+    },
+
+    // R Trigger (épaule droite)
+    {
+        type: "button",
+        text: "R",
+        id: "r_trigger",
+        location: "right",
+        right: 20,
+        top: 10,
+        fontSize: 18,
+        input_value: 11,                 // R1
+        block: true
+    },
+
+    // L2 Trigger (gâchette gauche)
+    {
+        type: "button",
+        text: "L2",
+        id: "l2_trigger",
+        location: "left",
+        left: 20,
+        top: 60,
+        fontSize: 16,
+        input_value: 12,                 // L2
+        block: true,
+        opacity: 0.6
+    },
+
+    // R2 Trigger (gâchette droite)
+    {
+        type: "button",
+        text: "R2",
+        id: "r2_trigger",
+        location: "right",
+        right: 20,
+        top: 60,
+        fontSize: 16,
+        input_value: 13,                 // R2
+        block: true,
+        opacity: 0.6
+    },
+
+    // ==================== BOUTONS SYSTÈME ====================
+    // Start
+    {
+        type: "button",
+        text: "START",
+        id: "start",
+        location: "center",              // Centré horizontalement
+        left: 60,                        // Décalage depuis le centre
+        // top: "90%",                   // Peut utiliser % pour position relative
+        fontSize: 15,
+        block: true,                     // Bouton rectangulaire
+        input_value: 3,                  // START
+        // size: 100,                    // Largeur du bouton
+        opacity: 0.7
+    },
+
+    // Select
+    {
+        type: "button",
+        text: "SELECT",
+        id: "select",
+        location: "center",
+        left: -65,                       // Décalage négatif = à gauche du centre
+        fontSize: 15,
+        block: true,
+        input_value: 2,                  // SELECT
+        opacity: 0.7
+    },
+
+    // Home/Guide (optionnel)
+    {
+        type: "button",
+        text: "HOME",
+        id: "home",
+        location: "center",
+        left: 0,                         // Exactement au centre
+        top: 10,
+        fontSize: 12,
+        block: true,
+        input_value: 16,                 // HOME/GUIDE
+        opacity: 0.5,
+        size: 60
+    },
+
+    // ==================== JOYSTICK ANALOGIQUE (Optionnel) ====================
+    // Joystick analogique droit (pour les jeux modernes)
+    {
+        type: "dpad",
+        location: "right",
+        right: "10%",
+        top: "60%",
+        joystickInput: true,             // Mode joystick analogique
+        inputValues: [14, 15, 16, 17],   // [Up, Down, Left, Right] pour stick droit
+        size: 120,
+        opacity: 0.6,
+        color: "#3333ff"                 // Couleur différente pour différencier
+    },
+
+    // ==================== BOUTONS ADDITIONNELS (consoles spécifiques) ====================
+    // C-Buttons (N64) - exemple de 4 boutons en croix
+    {
+        type: "button",
+        text: "C↑",
+        id: "c_up",
+        location: "right",
+        right: 200,
+        top: 200,
+        fontSize: 20,
+        input_value: 18,
+        color: "#ffff00"                 // Jaune pour C-buttons N64
+    },
+    {
+        type: "button",
+        text: "C↓",
+        id: "c_down",
+        location: "right",
+        right: 200,
+        top: 280,
+        fontSize: 20,
+        input_value: 19,
+        color: "#ffff00"
+    },
+    {
+        type: "button",
+        text: "C←",
+        id: "c_left",
+        location: "right",
+        right: 240,
+        top: 240,
+        fontSize: 20,
+        input_value: 20,
+        color: "#ffff00"
+    },
+    {
+        type: "button",
+        text: "C→",
+        id: "c_right",
+        location: "right",
+        right: 160,
+        top: 240,
+        fontSize: 20,
+        input_value: 21,
+        color: "#ffff00"
+    },
+
+    // ==================== BOUTONS TURBO (optionnel) ====================
+    // Turbo A (auto-fire)
+    {
+        type: "button",
+        text: "T.A",
+        id: "turbo_a",
+        location: "right",
+        right: 80,
+        top: 180,
+        fontSize: 14,
+        input_value: 22,                 // Peut nécessiter émulation logicielle
+        opacity: 0.5,
+        color: "#ff6600"
+    }
+];
+
+// ========================================================================
+// === CODES INPUT_VALUE DE RÉFÉRENCE (EmulatorJS) ===
+// ========================================================================
+/*
+MAPPING STANDARD:
+0  = B / Circle / A (bas)
+1  = Y / Square / X (gauche)
+2  = SELECT / BACK
+3  = START / FORWARD
+4  = D-PAD UP
+5  = D-PAD DOWN
+6  = D-PAD LEFT
+7  = D-PAD RIGHT
+8  = A / Cross / B (droite)
+9  = X / Triangle / Y (haut)
+10 = L / L1
+11 = R / R1
+12 = L2
+13 = R2
+14 = L3 (click stick gauche)
+15 = R3 (click stick droit)
+16 = HOME / GUIDE
+
+CONSOLES SPÉCIFIQUES:
+Genesis 6-button: 0-11 (A,B,C,X,Y,Z,Start,Select,L,R)
+SNES: 0-11 (B,A,Y,X,L,R,Select,Start)
+N64: 0-9 + C-buttons (18-21)
+PSX: 0-15 (tous les boutons PS1)
+*/
+
+// ========================================================================
+// === PROPRIÉTÉS CSS PERSONNALISABLES ===
+// ========================================================================
+/*
+Vous pouvez personnaliser l'apparence avec CSS dans emulator.html:
+
+.ejs__virtual_button {
+    border: 2px solid rgba(255, 51, 51, 0.8) !important;
+    box-shadow: 0 0 10px rgba(255, 51, 51, 0.5) !important;
+    background: radial-gradient(circle, rgba(255, 51, 51, 0.3), rgba(0, 0, 0, 0.6)) !important;
+}
+
+.ejs__virtual_dpad .front {
+    border: 2px solid rgba(255, 51, 51, 0.6) !important;
+    background: radial-gradient(circle, rgba(255, 51, 51, 0.2), rgba(0, 0, 0, 0.5)) !important;
+}
+
+.ejs__virtual_button_label {
+    color: #ff3333 !important;
+    font-weight: bold !important;
+    text-shadow: 0 0 5px rgba(255, 51, 51, 0.8) !important;
+}
+*/
+
+// ========================================================================
+// === CONSEILS D'UTILISATION ===
+// ========================================================================
+/*
+1. POSITIONNEMENT:
+   - Utilisez % pour des positions relatives à la taille d'écran
+   - Utilisez px pour des positions fixes
+   - "location" définit l'ancre de base (left/right/center)
+
+2. TAILLE ET ESPACEMENT:
+   - Laissez ~80-100px entre chaque bouton pour éviter les clics accidentels
+   - Utilisez opacity pour rendre certains boutons moins intrusifs
+   - Les boutons rectangulaires (block: true) sont mieux pour Start/Select
+
+3. OPTIMISATION MOBILE:
+   - Ne mettez pas trop de boutons (max 10-12)
+   - Les boutons trop petits (<50px) sont difficiles à utiliser
+   - Testez sur différentes tailles d'écran
+
+4. ORGANISATION PAR CONSOLE:
+   - NES: D-Pad + A + B + Start + Select (4 boutons)
+   - SNES: D-Pad + 4 face buttons + L/R + Start/Select (8 boutons)
+   - Genesis: D-Pad + 6 face buttons + Start + Mode (9 boutons)
+   - N64: D-Pad + Analog stick + A/B + C-buttons + L/R/Z + Start (complexe)
+   - PSX: D-Pad + 4 face + L1/R1/L2/R2 + Start/Select (12 boutons)
+
+5. MODE OBJET vs ARRAY:
+   - Objet simple: {enabled: true, opacity: 0.8, scale: 1.0}
+     → Laisse EmulatorJS auto-détecter le layout
+   - Array: [...] comme ci-dessus
+     → Contrôle total sur chaque bouton
+
+6. PERFORMANCES:
+   - Plus de boutons = plus de calculs tactiles
+   - Utilisez opacity < 1.0 pour rendre les boutons translucides
+   - Désactivez les boutons inutiles pour la console choisie
+*/
+

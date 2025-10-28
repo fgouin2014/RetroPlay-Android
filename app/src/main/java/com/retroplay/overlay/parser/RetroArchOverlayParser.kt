@@ -143,6 +143,12 @@ class RetroArchOverlayParser {
             
             // Parser les composants
             val action = parts[0]
+            
+            // Ignorer seulement les actions complètement vides
+            if (action.isBlank()) {
+                return null
+            }
+            
             val x = parts[1].toFloatOrNull() ?: return null
             val y = parts[2].toFloatOrNull() ?: return null
             val shape = when (parts[3].lowercase()) {
@@ -166,7 +172,20 @@ class RetroArchOverlayParser {
             val nextTargetLine = lines.find { it.trim().startsWith("${descKey}_next_target = ") }
             val nextTarget = nextTargetLine?.substringAfter("\"")?.substringBefore("\"")
             
-            return OverlayButton(
+            // Range modifier pour analog sticks (sensibilité)
+            val rangeModLine = lines.find { it.trim().startsWith("${descKey}_range_mod = ") }
+            val rangeModifier = rangeModLine?.substringAfter("= ")?.trim()?.toFloatOrNull() ?: 1.0f
+            
+            // Déterminer le type de bouton
+            val buttonType = when (action.lowercase()) {
+                "analog_left" -> OverlayButtonType.ANALOG_LEFT
+                "analog_right" -> OverlayButtonType.ANALOG_RIGHT
+                "dpad_area" -> OverlayButtonType.DPAD_AREA
+                "abxy_area" -> OverlayButtonType.ABXY_AREA
+                else -> OverlayButtonType.BUTTONS
+            }
+            
+            val button = OverlayButton(
                 action = action,
                 x = x,
                 y = y,
@@ -174,8 +193,17 @@ class RetroArchOverlayParser {
                 width = width,
                 height = height,
                 imagePath = imagePath,
-                nextTarget = nextTarget
+                nextTarget = nextTarget,
+                type = buttonType,
+                rangeModifier = rangeModifier
             )
+            
+            // Log détaillé pour boutons système
+            if (action == "overlay_next" || action == "menu_toggle") {
+                Log.d(TAG, "PARSED SYSTEM BUTTON: $descKey | action='$action' | pos=($x,$y) | img='$imagePath' | target='$nextTarget'")
+            }
+            
+            return button
             
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing button $descKey", e)

@@ -378,6 +378,21 @@
             app:strokeWidth="2dp"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
+        
+        <!-- Reset Native GamePad Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/resetNativeGamePadButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="RESET TO NATIVE GAMEPAD"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            app:backgroundTint="#FF5722"
+            android:textColor="@android:color/white"
+            app:cornerRadius="8dp"
+            android:layout_marginTop="8dp"
             android:layout_marginBottom="16dp" />
     </LinearLayout>
 </ScrollView>

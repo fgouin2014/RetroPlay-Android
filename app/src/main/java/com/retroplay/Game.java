@@ -136,9 +136,9 @@ public class Game implements java.io.Serializable {
      */
     public void initializePaths(ObbManager obbManager) {
         String baseName = getBaseNameFromPath(path);
-        // Utiliser les noms de fichiers tels quels (sans encodage URL)
-        this.imagePath = "http://localhost:7777/gamedata/nes/media/box2d/" + baseName + ".png";
-        this.screenshotPath = "http://localhost:7777/gamedata/nes/media/screenshot/" + baseName + ".png";
+        // Utiliser consoleId au lieu de "nes" hardcodé
+        this.imagePath = "http://localhost:7777/gamedata/" + consoleId + "/media/box2d/" + baseName + ".png";
+        this.screenshotPath = "http://localhost:7777/gamedata/" + consoleId + "/media/screenshot/" + baseName + ".png";
         
         // Debug: afficher les chemins générés
         System.out.println("Game: " + name);

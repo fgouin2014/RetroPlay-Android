@@ -1,0 +1,12 @@
+// PRESET GENESIS/MEGADRIVE - Copier ce bloc à la place de EJS_VirtualGamepadSettings (ligne 214-218)
+window.EJS_VirtualGamepadSettings = [
+    { type: \ dpad\, location: \left\, left: \10%\, top: \50%\, joystickInput: false, inputValues: [4, 5, 6, 7] },
+    { type: \button\, text: \A\, id: \btn_a\, location: \right\, right: 80, top: 120, bold: true, fontSize: 24, input_value: 8 },
+    { type: \button\, text: \B\, id: \btn_b\, location: \right\, right: 20, top: 80, bold: true, fontSize: 24, input_value: 0 },
+    { type: \button\, text: \C\, id: \btn_c\, location: \right\, right: 140, top: 80, bold: true, fontSize: 24, input_value: 9 },
+    { type: \button\, text: \X\, id: \btn_x\, location: \right\, right: 80, top: 40, bold: true, fontSize: 20, input_value: 1 },
+    { type: \button\, text: \Y\, id: \btn_y\, location: \right\, right: 20, top: 10, bold: true, fontSize: 20, input_value: 10 },
+    { type: \button\, text: \Z\, id: \btn_z\, location: \right\, right: 140, top: 10, bold: true, fontSize: 20, input_value: 11 },
+    { type: \button\, text: \START\, id: \start\, location: \center\, left: 60, fontSize: 15, block: true, input_value: 3 },
+    { type: \button\, text: \SELECT\, id: \select\, location: \center\, left: -5, fontSize: 15, block: true, input_value: 2 }
+];

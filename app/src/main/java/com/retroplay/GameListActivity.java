@@ -1,6 +1,7 @@
 
 package com.retroplay;
 
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
@@ -702,6 +703,8 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         currentLetter = letter;
         currentPage = 0;
         
+        Log.i(TAG, "filterByLetter: letter='" + letter + "' total games=" + games.size());
+        
         filteredGames.clear();
         if ("#".equals(letter)) {
             // Show games starting with numbers
@@ -720,6 +723,8 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 }
             }
         }
+        
+        Log.i(TAG, "filterByLetter: filteredGames.size=" + filteredGames.size() + " games matched letter '" + letter + "'");
         
         // Pagination
         updateCurrentPage();
@@ -790,9 +795,14 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         int startIndex = currentPage * gamesPerPage;
         int endIndex = Math.min(startIndex + gamesPerPage, filteredGames.size());
         
+        Log.d(TAG, "updateCurrentPage: page=" + currentPage + " gamesPerPage=" + gamesPerPage + 
+                   " filteredGames.size=" + filteredGames.size() + " startIndex=" + startIndex + " endIndex=" + endIndex);
+        
         for (int i = startIndex; i < endIndex; i++) {
             currentPageGames.add(filteredGames.get(i));
         }
+        
+        Log.d(TAG, "updateCurrentPage: currentPageGames.size=" + currentPageGames.size() + " games added");
     }
     
     private void showPagination() {
@@ -1515,6 +1525,12 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
      * Le service est persistant et reste actif en arrière-plan
      */
     private void startWebServerService() {
+        // Vérifier si le service est déjà démarré
+        if (isServiceRunning(WebServerService.class)) {
+            Log.i(TAG, "WebServerService already running, skipping start");
+            return;
+        }
+        
         try {
             Log.i(TAG, "Starting WebServerService on port 7777...");
             Intent serviceIntent = new Intent(this, WebServerService.class);
@@ -1524,6 +1540,22 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             Log.e(TAG, "Error starting WebServerService: ", e);
             Toast.makeText(this, "Error starting WebServer: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+    
+    /**
+     * Vérifie si un service est déjà en cours d'exécution
+     */
+    private boolean isServiceRunning(Class<?> serviceClass) {
+        android.app.ActivityManager manager = (android.app.ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        if (manager != null) {
+            for (android.app.ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+                if (serviceClass.getName().equals(service.service.getClassName())) {
+                    Log.i(TAG, "Service " + serviceClass.getSimpleName() + " is already running");
+                    return true;
+                }
+            }
+        }
+        return false;
     }
     
     /**

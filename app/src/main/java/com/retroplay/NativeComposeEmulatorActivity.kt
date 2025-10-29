@@ -314,13 +314,12 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         val emulatorMode = GamepadPreferenceManager.loadMode(this, console)
         val savedVariant = if (emulatorMode == GamepadPreferenceManager.EmulatorMode.RETROARCH) {
             // User chose RETROARCH mode in settings -> force RetroArch overlays
-            Log.i(TAG, "Emulator mode: RETROARCH (forced via ConsoleConfigActivity)")
+            Log.i(TAG, "⚙️ Emulator mode: RETROARCH (forced via ConsoleConfigActivity)")
             GamePadLayoutManager.LayoutVariant.RETROARCH
         } else {
-            // User chose NATIVE mode or no preference -> use saved variant (allows in-game switching)
-            val variant = GamePadLayoutManager.loadVariant(prefs, console)
-            Log.i(TAG, "Emulator mode: NATIVE (using saved variant: $variant)")
-            variant
+            // User chose NATIVE mode -> force Radial/Lemuroid gamepad
+            Log.i(TAG, "⚙️ Emulator mode: NATIVE (forced DEFAULT variant)")
+            GamePadLayoutManager.LayoutVariant.DEFAULT
         }
         
         // Créer GLRetroView avec GLRetroViewData

@@ -273,7 +273,7 @@ Ce projet est en développement actif. Les contributions sont bienvenues!
 ---
 
 **Créé le:** 20 octobre 2025  
-**Dernière mise à jour:** 27 octobre 2025  
+**Dernière mise à jour:** 29 octobre 2025  
 **Version:** 1.0  
 
 **🎮 Bon gaming sur RetroPlay! 🚀**

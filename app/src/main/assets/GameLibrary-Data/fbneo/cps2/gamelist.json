@@ -1,0 +1,46 @@
+{
+  "games": [
+    {
+      "title": "CPS2 Example Game",
+      "file": "example_cps2.zip",
+      "description": "Example CPS2 (Capcom Play System 2) game. CPS2 is famous for classic Capcom fighting games like Street Fighter Alpha, Marvel vs Capcom, etc.",
+      "developer": "Capcom",
+      "publisher": "Capcom",
+      "releaseYear": "1995",
+      "genre": "Fighting",
+      "players": "1-2",
+      "rating": "4.9",
+      "favorite": false,
+      "image": "media/box2d/fallback.png",
+      "screenshot": "media/screenshot/fallback.png",
+      "arcade": {
+        "system": "CPS2",
+        "romset": "FBNeo latest",
+        "hasDipSwitches": true,
+        "orientation": "horizontal",
+        "screenResolution": "384x224",
+        "requiresDecryption": true
+      }
+    }
+  ],
+  "metadata": {
+    "console": "fbneo",
+    "subsystem": "cps2",
+    "totalGames": 1,
+    "lastUpdated": "2024-10-29",
+    "version": "1.0",
+    "systemInfo": {
+      "name": "Capcom Play System 2",
+      "manufacturer": "Capcom",
+      "year": "1993-2003",
+      "description": "Powerful arcade board used for Capcom's fighting games",
+      "notableGames": [
+        "Street Fighter Alpha series",
+        "Marvel vs Capcom series",
+        "Darkstalkers series",
+        "19XX: The War Against Destiny"
+      ]
+    }
+  }
+}
+

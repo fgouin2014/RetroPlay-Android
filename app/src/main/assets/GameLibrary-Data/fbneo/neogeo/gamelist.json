@@ -1,0 +1,47 @@
+{
+  "games": [
+    {
+      "title": "Neo Geo Example Game",
+      "file": "example_neogeo.zip",
+      "description": "Example Neo Geo game. Neo Geo was SNK's premium arcade and home console system, famous for Metal Slug, King of Fighters, and Samurai Shodown.",
+      "developer": "SNK",
+      "publisher": "SNK",
+      "releaseYear": "1994",
+      "genre": "Action",
+      "players": "1-2",
+      "rating": "4.8",
+      "favorite": false,
+      "image": "media/box2d/fallback.png",
+      "screenshot": "media/screenshot/fallback.png",
+      "arcade": {
+        "system": "Neo Geo MVS",
+        "romset": "FBNeo latest",
+        "hasDipSwitches": true,
+        "orientation": "horizontal",
+        "screenResolution": "320x224",
+        "requiresBios": "neogeo.zip"
+      }
+    }
+  ],
+  "metadata": {
+    "console": "fbneo",
+    "subsystem": "neogeo",
+    "totalGames": 1,
+    "lastUpdated": "2024-10-29",
+    "version": "1.0",
+    "systemInfo": {
+      "name": "Neo Geo MVS (Multi Video System)",
+      "manufacturer": "SNK",
+      "year": "1990-2004",
+      "description": "Premium arcade system with home console counterpart (AES)",
+      "notableGames": [
+        "Metal Slug series",
+        "The King of Fighters series",
+        "Samurai Shodown series",
+        "Fatal Fury series"
+      ],
+      "biosRequired": "neogeo.zip must be in data/bios/"
+    }
+  }
+}
+

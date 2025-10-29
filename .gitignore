@@ -108,6 +108,33 @@ app/src/main/assets/GameLibrary-Data/fbneo/media/box2d/*
 app/src/main/assets/GameLibrary-Data/fbneo/media/screenshot/*
 !app/src/main/assets/GameLibrary-Data/fbneo/media/screenshot/fallback.png
 
+# FBNeo subdirectories (CPS2, Neo Geo, etc.)
+!app/src/main/assets/GameLibrary-Data/fbneo/cps2/
+app/src/main/assets/GameLibrary-Data/fbneo/cps2/*
+!app/src/main/assets/GameLibrary-Data/fbneo/cps2/gamelist.json
+!app/src/main/assets/GameLibrary-Data/fbneo/cps2/media/
+app/src/main/assets/GameLibrary-Data/fbneo/cps2/media/*
+!app/src/main/assets/GameLibrary-Data/fbneo/cps2/media/fallback.png
+!app/src/main/assets/GameLibrary-Data/fbneo/cps2/media/box2d/
+app/src/main/assets/GameLibrary-Data/fbneo/cps2/media/box2d/*
+!app/src/main/assets/GameLibrary-Data/fbneo/cps2/media/box2d/fallback.png
+!app/src/main/assets/GameLibrary-Data/fbneo/cps2/media/screenshot/
+app/src/main/assets/GameLibrary-Data/fbneo/cps2/media/screenshot/*
+!app/src/main/assets/GameLibrary-Data/fbneo/cps2/media/screenshot/fallback.png
+
+!app/src/main/assets/GameLibrary-Data/fbneo/neogeo/
+app/src/main/assets/GameLibrary-Data/fbneo/neogeo/*
+!app/src/main/assets/GameLibrary-Data/fbneo/neogeo/gamelist.json
+!app/src/main/assets/GameLibrary-Data/fbneo/neogeo/media/
+app/src/main/assets/GameLibrary-Data/fbneo/neogeo/media/*
+!app/src/main/assets/GameLibrary-Data/fbneo/neogeo/media/fallback.png
+!app/src/main/assets/GameLibrary-Data/fbneo/neogeo/media/box2d/
+app/src/main/assets/GameLibrary-Data/fbneo/neogeo/media/box2d/*
+!app/src/main/assets/GameLibrary-Data/fbneo/neogeo/media/box2d/fallback.png
+!app/src/main/assets/GameLibrary-Data/fbneo/neogeo/media/screenshot/
+app/src/main/assets/GameLibrary-Data/fbneo/neogeo/media/screenshot/*
+!app/src/main/assets/GameLibrary-Data/fbneo/neogeo/media/screenshot/fallback.png
+
 app/src/main/assets/GameLibrary-Data/arcade/*
 !app/src/main/assets/GameLibrary-Data/arcade/gamelist.json
 !app/src/main/assets/GameLibrary-Data/arcade/README_*.txt

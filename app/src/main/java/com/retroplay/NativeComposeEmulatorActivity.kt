@@ -309,7 +309,19 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         // Charger les settings depuis SharedPreferences
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
         val savedSettings = loadSettings(prefs, console)
-        val savedVariant = GamePadLayoutManager.loadVariant(prefs, console)
+        
+        // Check emulator mode preference (from ConsoleConfigActivity)
+        val emulatorMode = GamepadPreferenceManager.loadMode(this, console)
+        val savedVariant = if (emulatorMode == GamepadPreferenceManager.EmulatorMode.RETROARCH) {
+            // User chose RETROARCH mode in settings -> force RetroArch overlays
+            Log.i(TAG, "Emulator mode: RETROARCH (forced via ConsoleConfigActivity)")
+            GamePadLayoutManager.LayoutVariant.RETROARCH
+        } else {
+            // User chose NATIVE mode or no preference -> use saved variant (allows in-game switching)
+            val variant = GamePadLayoutManager.loadVariant(prefs, console)
+            Log.i(TAG, "Emulator mode: NATIVE (using saved variant: $variant)")
+            variant
+        }
         
         // Créer GLRetroView avec GLRetroViewData
         val data = com.swordfish.libretrodroid.GLRetroViewData(this).apply {

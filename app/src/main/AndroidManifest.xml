@@ -113,12 +113,8 @@
                 android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
                 android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
 
-            <activity
-                android:name=".RetroArchEmulatorActivity"
-                android:exported="false"
-                android:screenOrientation="sensor"
-                android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-                android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
+            <!-- RetroArchEmulatorActivity: Temporarily disabled, will be properly implemented later -->
+            <!-- NativeComposeEmulatorActivity already supports both NATIVE and RETROARCH modes -->
 
             <!-- Cheat Activity (Codes de triche) -->
             <activity

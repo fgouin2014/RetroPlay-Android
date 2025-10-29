@@ -1204,19 +1204,22 @@ public class GameDetailsActivity extends AppCompatActivity {
     /**
      * Get the appropriate emulator activity class based on user preference
      * 
+     * NOTE: Currently always uses NativeComposeEmulatorActivity which supports both modes:
+     * - NATIVE mode: Uses Radial/Lemuroid gamepads
+     * - RETROARCH mode: Uses RetroArch overlays
+     * 
+     * The mode preference is still saved and NativeComposeEmulatorActivity will
+     * automatically use the correct gamepad system based on the user's choice.
+     * 
      * @param console Console ID (e.g., "nes", "snes", "psx")
-     * @return Class of emulator activity (NativeComposeEmulatorActivity or RetroArchEmulatorActivity)
+     * @return Class of emulator activity (always NativeComposeEmulatorActivity for now)
      */
     private Class<?> getEmulatorActivityClass(String console) {
         GamepadPreferenceManager.EmulatorMode mode = GamepadPreferenceManager.INSTANCE.loadMode(this, console);
         
-        if (mode == GamepadPreferenceManager.EmulatorMode.RETROARCH) {
-            Log.i(TAG, "Launching with RetroArchEmulatorActivity for " + console);
-            return RetroArchEmulatorActivity.class;
-        } else {
-            Log.i(TAG, "Launching with NativeComposeEmulatorActivity for " + console);
-            return NativeComposeEmulatorActivity.class;
-        }
+        // For now, always use NativeComposeEmulatorActivity (supports both NATIVE and RETROARCH modes)
+        Log.i(TAG, "Launching with NativeComposeEmulatorActivity (mode: " + mode + ") for " + console);
+        return NativeComposeEmulatorActivity.class;
     }
     
     @Override

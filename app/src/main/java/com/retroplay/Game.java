@@ -16,6 +16,9 @@ public class Game implements java.io.Serializable {
     public String imagePath;
     public String screenshotPath;
     public String consoleId = "nes"; // Console par défaut
+    
+    // État favori (non sérialisé, recalculé à chaque fois)
+    private transient boolean isFavorite = false;
 
     public Game(String id, String name, String path, String desc, String releasedate, String genre, String players) {
         this.id = id;
@@ -97,6 +100,14 @@ public class Game implements java.io.Serializable {
     
     public void setConsole(String consoleId) {
         this.consoleId = consoleId;
+    }
+    
+    public boolean isFavorite() {
+        return isFavorite;
+    }
+    
+    public void setFavorite(boolean favorite) {
+        this.isFavorite = favorite;
     }
 
     public String getImagePath() {

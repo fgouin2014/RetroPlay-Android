@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/kitt_black">
+
+    <!-- Toolbar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:background="@color/kitt_black"
+        android:gravity="center_vertical">
+
+        <!-- Back Button -->
+        <TextView
+            android:id="@+id/backButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BACK"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:padding="8dp"
+            android:background="@drawable/filter_chip_background"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- Title -->
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="MY FAVORITES"
+            android:textSize="18sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp" />
+
+        <!-- Clear All Button -->
+        <TextView
+            android:id="@+id/clearAllButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CLEAR"
+            android:textSize="12sp"
+            android:textColor="@color/kitt_red_light"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:padding="8dp"
+            android:background="@drawable/filter_chip_background"
+            android:clickable="true"
+            android:focusable="true" />
+
+    </LinearLayout>
+
+    <!-- Favorites Count -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:background="@color/kitt_black"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/favoritesCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="0 favorites"
+            android:textSize="12sp"
+            android:textColor="@color/kitt_red_light"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:id="@+id/sortButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SORT: A-Z"
+            android:textSize="11sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:background="@drawable/filter_chip_background"
+            android:padding="8dp"
+            android:clickable="true"
+            android:focusable="true" />
+
+    </LinearLayout>
+
+    <!-- Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:background="@color/kitt_red" />
+
+    <!-- Games RecyclerView -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="8dp"
+        android:clipToPadding="false" />
+
+    <!-- Empty State -->
+    <LinearLayout
+        android:id="@+id/emptyState"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="NO FAVORITES YET"
+            android:textSize="18sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Add games to your favorites\nfrom the game list or details page"
+            android:textSize="12sp"
+            android:textColor="@color/kitt_red_light"
+            android:fontFamily="monospace"
+            android:gravity="center" />
+
+    </LinearLayout>
+
+    <!-- Loading Progress -->
+    <ProgressBar
+        android:id="@+id/loadingProgress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone"
+        style="@style/Widget.AppCompat.ProgressBar" />
+
+</LinearLayout>
+

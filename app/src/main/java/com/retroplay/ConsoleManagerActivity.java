@@ -49,6 +49,13 @@ public class ConsoleManagerActivity extends AppCompatActivity {
         loadConsoles();
     }
     
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Recharger les consoles pour avoir les infos à jour (nouveaux jeux, nouveaux dossiers)
+        loadConsoles();
+    }
+    
     private void setupViews() {
         TextView backButton = findViewById(R.id.backButton);
         backButton.setOnClickListener(v -> finish());

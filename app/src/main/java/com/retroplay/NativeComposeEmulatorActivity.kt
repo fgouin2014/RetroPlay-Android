@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.ConstraintSet
 import androidx.constraintlayout.compose.Dimension
@@ -82,6 +83,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 "mame2003" -> "MAME 2003"
                 "mame2010" -> "MAME 2010"
                 "fceumm" -> "FCEUmm"
+                "mesen" -> "Mesen"
                 "snes9x" -> "Snes9x"
                 "parallel_n64" -> "ParaLLEl N64"
                 "mupen64plus_next" -> "Mupen64Plus Next"
@@ -104,6 +106,9 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var cheatApplier: com.retroplay.cheat.CheatApplier
     private var currentCoreFilePath: String? = null
+    
+    // Zapper support (NES light gun)
+    private var isZapperGame: Boolean = false
     
     // États des menus
     private val showMainMenu = mutableStateOf(false)
@@ -150,6 +155,43 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 Log.i(TAG, "✓ Normal activity finish (returning to GameDetails)")
                 finish() // Retourne à GameDetailsActivity
             }
+        }
+    }
+    
+    /**
+     * Gestion des touches Zapper - Émule le bouton A au port 2 (Zapper port)
+     * Port 1 (index 0) = Manette standard (Start/Select pour menus)
+     * Port 2 (index 1) = Zapper (Button A pour tirer)
+     */
+    private fun handleZapperTouch(event: android.view.MotionEvent): Boolean {
+        if (!isZapperGame) {
+            return false
+        }
+        
+        when (event.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> {
+                Log.d(TAG, "[ZAPPER] Touch DOWN - Button A pressed (port 2)")
+                // Envoyer au port 1 (Player 2 / Zapper port)
+                retroView.sendKeyEvent(
+                    android.view.KeyEvent.ACTION_DOWN,
+                    android.view.KeyEvent.KEYCODE_BUTTON_A,
+                    1  // Port 2 (index 1)
+                )
+                return true
+            }
+            
+            android.view.MotionEvent.ACTION_UP -> {
+                Log.d(TAG, "[ZAPPER] Touch UP - Button A released (port 2)")
+                // Envoyer au port 1 (Player 2 / Zapper port)
+                retroView.sendKeyEvent(
+                    android.view.KeyEvent.ACTION_UP,
+                    android.view.KeyEvent.KEYCODE_BUTTON_A,
+                    1  // Port 2 (index 1)
+                )
+                return true
+            }
+            
+            else -> return false
         }
     }
     
@@ -232,6 +274,13 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         gameName = intent.getStringExtra("gameName") ?: "Game"
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
         
+        // Détecter les jeux Zapper AVANT la création de GLRetroViewData
+        // pour pouvoir passer les variables initiales au core
+        isZapperGame = ZapperGameDetector.isZapperGame(gameName, console)
+        if (isZapperGame) {
+            Log.i(TAG, "[ZAPPER] Zapper game detected EARLY: $gameName")
+        }
+        
         Log.i(TAG, "🟢 NativeComposeEmulator starting: $gameName ($console) from $romPath" + 
                 if (loadSlot > 0) " [LOAD SLOT $loadSlot]" else " [NEW GAME]")
         
@@ -313,6 +362,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             val isMupen64Plus = actualCoreFile.contains("mupen64plus")
 
             // Configuration des variables selon la console
+            Log.i(TAG, "[INIT] Configuring core variables for console: '$console', isZapperGame=$isZapperGame")
             when (console) {
                 "n64" -> {
                     val resolution = corePrefs.getInt("${prefix}n64_resolution", 0)
@@ -394,6 +444,13 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                         Log.i(TAG, "[PSX] Core variables set via GLRetroViewData.variables API")
                     } catch (e: Exception) {
                         Log.w(TAG, "[PSX] Failed to set variables via GLRetroViewData API: ${e.message}")
+                    }
+                }
+                "nes" -> {
+                    // Note: Zapper configuration désactivée car LibretroDroid ne supporte pas RETRO_DEVICE_LIGHTGUN
+                    // L'utilisateur doit utiliser le bouton A du gamepad pour tirer dans Duck Hunt
+                    if (isZapperGame) {
+                        Log.i(TAG, "[NES] Zapper game detected: $gameName - use gamepad button A to shoot")
                     }
                 }
                 "snes" -> {
@@ -536,6 +593,20 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 }
             }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
         }
+        
+        // Configuration pour les jeux Zapper (Duck Hunt, etc.)
+        // Port 1 = Gamepad (Start/Select), Port 2 = Zapper (Touch to shoot)
+        if (isZapperGame) {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                runOnUiThread {
+                    Toast.makeText(
+                        this@NativeComposeEmulatorActivity,
+                        "Zapper detected!\nPort 1: Gamepad (Start/Select)\nPort 2: Touch game area to shoot",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }, 1000)
+        }
 
         // Configurer les extensions contrôleur pour N64
         if (console.equals("n64", ignoreCase = true)) {
@@ -647,6 +718,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 },
                 onSaveState = { slot ->
                     saveGameState(slot)
+                },
+                isZapperGame = isZapperGame,
+                onZapperTouch = { event ->
+                    handleZapperTouch(event)
                 },
                 onLoadState = { slot ->
                     loadGameState(slot)
@@ -1190,7 +1265,9 @@ fun ComposeEmulatorScreen(
     showDipSwitchDialog: MutableState<Boolean>,
     showCoreOptionsDialog: MutableState<Boolean>,
     dipSwitches: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
-    coreOptions: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>
+    coreOptions: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
+    isZapperGame: Boolean = false,
+    onZapperTouch: (android.view.MotionEvent) -> Boolean = { false }
 ) {
     // Settings manager pour les gamepads (state mutable)
     var settings by remember {
@@ -1834,6 +1911,26 @@ fun ComposeEmulatorScreen(
                         },
                         containerColor = Color(0xFF2C2C2C),
                         tonalElevation = 8.dp
+                    )
+                }
+                
+                // Box Zapper transparent par-dessus l'overlay RetroArch (zone de jeu uniquement)
+                // Permet le touch-to-shoot sans bloquer les boutons du gamepad sur les côtés
+                if (isZapperGame && !showMainMenu.value && !showGamePadSettings.value && !showQuickMenu.value) {
+                    val zapperVerticalOffsetDp = if (isLandscape) {
+                        0.dp  // Landscape : pas d'offset
+                    } else {
+                        (-configuration.screenHeightDp * 0.20f).dp  // Portrait : 20% vers le haut
+                    }
+                    
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                            .offset(y = zapperVerticalOffsetDp)
+                            .pointerInteropFilter { event ->
+                                onZapperTouch(event)
+                            }
                     )
                 }
             }

@@ -43,7 +43,9 @@ public class GameDetailsActivity extends AppCompatActivity {
     private MaterialButton loadSaveButton;
     private MaterialButton cheatButton;
     private MaterialButton coreOverrideButton;
+    private MaterialButton favoriteButton;
     private LinearLayout nativeButtonsContainer;
+    private FavoritesManager favoritesManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,6 +65,9 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
         
         Log.i(TAG, "Affichage des détails pour: " + game.getName());
+        
+        // Initialiser le manager des favoris
+        favoritesManager = FavoritesManager.getInstance(this);
         
         setupToolbar();
         setupViews();
@@ -186,7 +191,8 @@ public class GameDetailsActivity extends AppCompatActivity {
         fabPlay.setOnClickListener(v -> launchGame());
         
         // Favorite button
-        MaterialButton favoriteButton = findViewById(R.id.favorite_button);
+        favoriteButton = findViewById(R.id.favorite_button);
+        updateFavoriteButton();
         favoriteButton.setOnClickListener(v -> toggleFavorite());
     }
     
@@ -903,8 +909,36 @@ public class GameDetailsActivity extends AppCompatActivity {
     }
     
     private void toggleFavorite() {
-        // TODO: Implement favorite functionality
-        Log.i(TAG, "Toggle favorite for: " + game.getName());
+        if (favoritesManager == null) {
+            return;
+        }
+        
+        // Toggle dans le manager et mettre à jour l'état du jeu
+        boolean isFavorite = favoritesManager.toggleFavorite(game);
+        game.setFavorite(isFavorite);
+        
+        // Mettre à jour l'UI
+        updateFavoriteButton();
+        
+        // Afficher un message de confirmation
+        String message = isFavorite ? "Added to favorites" : "Removed from favorites";
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        
+        Log.i(TAG, "Toggle favorite for: " + game.getName() + " - isFavorite: " + isFavorite);
+    }
+    
+    private void updateFavoriteButton() {
+        if (favoriteButton == null || favoritesManager == null) {
+            return;
+        }
+        
+        if (favoritesManager.isFavorite(game)) {
+            favoriteButton.setIconResource(R.drawable.ic_favorite_24);
+            game.setFavorite(true);
+        } else {
+            favoriteButton.setIconResource(R.drawable.ic_favorite_border_24);
+            game.setFavorite(false);
+        }
     }
     
     /**
@@ -1017,6 +1051,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             "Flycast (Dreamcast Arcade)",
             "── CONSOLE CORES ──",
             "FCEUmm (NES)",
+            "Mesen (NES)",
             "Snes9x (SNES)",
             "ParaLLEl N64 (N64)",
             "Mupen64Plus Next GLES3 (N64)",
@@ -1041,6 +1076,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             "flycast",
             null,           // Header CONSOLE
             "fceumm",
+            "mesen",
             "snes9x",
             "parallel_n64",
             "mupen64plus_next_gles3",

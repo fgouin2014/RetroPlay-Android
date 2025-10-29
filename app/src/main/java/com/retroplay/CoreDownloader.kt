@@ -38,6 +38,7 @@ object CoreDownloader {
         return listOf(
             // Nintendo
             CoreInfo("fceumm", "fceumm_libretro_android.so", "Nintendo - NES / Famicom (FCEUmm)"),
+            CoreInfo("mesen", "mesen_libretro_android.so", "Nintendo - NES / Famicom (Mesen)"),
             CoreInfo("snes9x", "snes9x_libretro_android.so", "Nintendo - SNES (Snes9x)"),
             CoreInfo("parallel_n64", "parallel_n64_libretro_android.so", "Nintendo - N64 (ParaLLEl N64)"),
             CoreInfo("mupen64plus_next", "mupen64plus_next_libretro_android.so", "Nintendo - N64 (Mupen64Plus Next)"),

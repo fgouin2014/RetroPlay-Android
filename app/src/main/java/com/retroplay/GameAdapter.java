@@ -20,6 +20,7 @@ import java.util.List;
 public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
     private List<Game> games;
     private OnGameClickListener listener;
+    private FavoritesManager favoritesManager;
 
     public interface OnGameClickListener {
         void onClick(Game game);
@@ -28,6 +29,10 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
     public GameAdapter(List<Game> games, OnGameClickListener listener) {
         this.games = games;
         this.listener = listener;
+    }
+    
+    public void setFavoritesManager(FavoritesManager manager) {
+        this.favoritesManager = manager;
     }
 
     @NonNull
@@ -88,8 +93,10 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         });
         
         if (holder.favoriteButton != null) {
+            // Mettre à jour l'état du bouton favori
+            updateFavoriteButton(holder.favoriteButton, game);
+            
             holder.favoriteButton.setOnClickListener(v -> {
-                // TODO: Implement favorite functionality
                 toggleFavorite(holder, game);
             });
         }
@@ -112,13 +119,25 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
     }
     
     private void toggleFavorite(ViewHolder holder, Game game) {
-        // TODO: Implement favorite persistence
-        // For now, just toggle the text
-        String currentText = holder.favoriteButton.getText().toString();
-        if ("❤".equals(currentText)) {
-            holder.favoriteButton.setText("🤍");
+        if (favoritesManager == null) {
+            return;
+        }
+        
+        // Toggle dans le manager et mettre à jour l'état du jeu
+        boolean isFavorite = favoritesManager.toggleFavorite(game);
+        game.setFavorite(isFavorite);
+        
+        // Mettre à jour l'UI
+        updateFavoriteButton(holder.favoriteButton, game);
+    }
+    
+    private void updateFavoriteButton(MaterialButton button, Game game) {
+        if (favoritesManager != null && favoritesManager.isFavorite(game)) {
+            button.setIconResource(R.drawable.ic_favorite_24);
+            game.setFavorite(true);
         } else {
-            holder.favoriteButton.setText("❤");
+            button.setIconResource(R.drawable.ic_favorite_border_24);
+            game.setFavorite(false);
         }
     }
 

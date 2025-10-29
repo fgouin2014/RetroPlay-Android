@@ -9,6 +9,8 @@ import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -44,13 +46,13 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     private static final String TAG = "GameListActivity";
     
     // UI Components
-    private TextView backButton;
     private TextView consoleSelectorButton;
-    private TextView consoleConfigButton;
-    private TextView consoleManagerButton;
+    private com.google.android.material.button.MaterialButton consoleConfigButton;
+    private com.google.android.material.button.MaterialButton consoleManagerButton;
+    private com.google.android.material.button.MaterialButton favoritesButton;
     private RecyclerView recyclerView;
     private EditText searchInput;
-    private TextView searchToggleButton;
+    private com.google.android.material.button.MaterialButton searchToggleButton;
     private TextView searchScopeToggle;
     private TextView paginationPrev;
     private TextView paginationInfo;
@@ -59,6 +61,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     private ProgressBar loadingProgress;
     private TextView gamesCount;
     private TextView filterChip;
+    private com.google.android.material.button.MaterialButton favoritesFilterButton;
     private View emptyState;
     private TextView emptyStateTitle;
     private TextView emptyStateSubtitle;
@@ -71,6 +74,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     private List<Game> games = new ArrayList<>();
     private List<Game> filteredGames = new ArrayList<>();
     private GameAdapter adapter;
+    private FavoritesManager favoritesManager;
     
     // Console Selection
     private String currentConsole = "nes"; // Default: NES (will be overridden by saved preference)
@@ -104,6 +108,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     private String currentFilter = "Tous";
     private boolean isLoading = false;
     private boolean searchAllConsoles = false; // false = console actuelle, true = toutes les consoles
+    private boolean showOnlyFavorites = false; // false = tous les jeux, true = favoris uniquement
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -126,6 +131,9 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
         // Initialiser SharedPreferences pour la persistance du choix de console
         consolePrefs = getSharedPreferences("game_library_prefs", MODE_PRIVATE);
+        
+        // Initialiser le manager des favoris
+        favoritesManager = FavoritesManager.getInstance(this);
         
         // Charger la dernière console sélectionnée (ou "nes" par défaut)
         currentConsole = consolePrefs.getString("last_selected_console", "nes");
@@ -188,10 +196,10 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     
     private void setupViews() {
                // Initialize views
-               backButton = findViewById(R.id.backButton);
                consoleSelectorButton = findViewById(R.id.consoleSelectorButton);
                consoleConfigButton = findViewById(R.id.consoleConfigButton);
                consoleManagerButton = findViewById(R.id.consoleManagerButton);
+               favoritesButton = findViewById(R.id.favoritesButton);
                searchInput = findViewById(R.id.searchInput);
                searchToggleButton = findViewById(R.id.searchToggleButton);
                searchScopeToggle = findViewById(R.id.searchScopeToggle);
@@ -206,6 +214,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                loadingProgress = findViewById(R.id.loadingProgress);
                gamesCount = findViewById(R.id.gamesCount);
                filterChip = findViewById(R.id.filterChip);
+               favoritesFilterButton = findViewById(R.id.favoritesFilterButton);
                emptyState = findViewById(R.id.emptyState);
                emptyStateTitle = findViewById(R.id.emptyStateTitle);
                emptyStateSubtitle = findViewById(R.id.emptyStateSubtitle);
@@ -217,6 +226,13 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // Empêcher les retours à la ligne
+                if (s.toString().contains("\n")) {
+                    String filtered = s.toString().replaceAll("\n", "");
+                    searchInput.setText(filtered);
+                    searchInput.setSelection(filtered.length());
+                    return;
+                }
                 filterGames(s.toString());
             }
 
@@ -224,11 +240,24 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             public void afterTextChanged(Editable s) {}
         });
         
-               // Setup back button
-               backButton.setOnClickListener(v -> finish());
-               
+        // Setup search on Enter key press
+        searchInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                // Masquer le clavier après la recherche
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
+                }
+                return true;
+            }
+            return false;
+        });
+        
                // Setup console selector
                consoleSelectorButton.setOnClickListener(v -> showConsoleSelector());
+               
+               // Setup favorites button
+               favoritesButton.setOnClickListener(v -> openFavorites());
                
                // Setup console config button
                consoleConfigButton.setOnClickListener(v -> openConsoleConfig());
@@ -253,6 +282,9 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                
                // Setup filter chip
                filterChip.setOnClickListener(v -> showGenreFilter());
+               
+               // Setup favorites filter button
+               favoritesFilterButton.setOnClickListener(v -> toggleFavoritesFilter());
                
                // Setup alphabetical pagination
                setupAlphabetPagination();
@@ -380,10 +412,15 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             
             runOnUiThread(() -> {
                 games = tempGames;
+                
+                // Mettre à jour l'état favori de chaque jeu
+                updateFavoriteStates(games);
+                
                 // Auto-selectionner la premiere lettre disponible
                 autoSelectFirstAvailableLetter();
                 
                 adapter = new GameAdapter(currentPageGames, this);
+                adapter.setFavoritesManager(favoritesManager);
                 recyclerView.setAdapter(adapter);
                 
                 updateGamesCount();
@@ -409,6 +446,57 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         Intent intent = new Intent(this, GameDetailsActivity.class);
         intent.putExtra("game", game);
         startActivity(intent);
+    }
+    
+    /**
+     * Met à jour l'état favori de tous les jeux
+     */
+    private void updateFavoriteStates(List<Game> gameList) {
+        if (favoritesManager == null) {
+            return;
+        }
+        
+        for (Game game : gameList) {
+            game.setFavorite(favoritesManager.isFavorite(game));
+        }
+    }
+    
+    /**
+     * Obtient la liste des jeux favoris
+     */
+    private List<Game> getFavoriteGames() {
+        List<Game> favorites = new ArrayList<>();
+        if (favoritesManager != null) {
+            for (Game game : games) {
+                if (favoritesManager.isFavorite(game)) {
+                    favorites.add(game);
+                }
+            }
+        }
+        return favorites;
+    }
+    
+    /**
+     * Toggle le filtre des favoris
+     */
+    private void toggleFavoritesFilter() {
+        showOnlyFavorites = !showOnlyFavorites;
+        
+        // Mettre à jour l'apparence du bouton
+        if (showOnlyFavorites) {
+            favoritesFilterButton.setIconResource(R.drawable.ic_favorite_24);
+            favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.kitt_red)));
+            favoritesFilterButton.setIconTintResource(R.color.kitt_black);
+            Log.i(TAG, "Favorites filter ENABLED");
+        } else {
+            favoritesFilterButton.setIconResource(R.drawable.ic_favorite_border_24);
+            favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.kitt_medium_red)));
+            favoritesFilterButton.setIconTintResource(R.color.kitt_red);
+            Log.i(TAG, "Favorites filter DISABLED");
+        }
+        
+        // Réappliquer le filtre alphabétique actuel avec la nouvelle liste de base
+        filterByLetter(currentLetter);
     }
     
     private void filterGames(String query) {
@@ -537,15 +625,30 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     private void toggleSearch() {
         if (searchInputLayout.getVisibility() == View.GONE) {
             searchInputLayout.setVisibility(View.VISIBLE);
-            searchToggleButton.setText("✖");
+            searchToggleButton.setIconResource(R.drawable.ic_close_24);
             
             // Afficher le mode de recherche actuel
             updateSearchPlaceholder();
+            
+            // Focus sur le textbox et déployer le clavier
+            searchInput.requestFocus();
+            searchInput.post(() -> {
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT);
+                }
+            });
         } else {
             searchInputLayout.setVisibility(View.GONE);
-            searchToggleButton.setText("🔍");
+            searchToggleButton.setIconResource(R.drawable.ic_search_24);
             searchInput.setText(""); // Clear search
             filterGames(""); // Reset filter
+            
+            // Masquer le clavier
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
+            }
         }
     }
     
@@ -644,8 +747,11 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             letterCounts.put(String.valueOf(c), 0);
         }
         
+        // Obtenir la liste de base (tous les jeux ou favoris uniquement)
+        List<Game> baseList = showOnlyFavorites ? getFavoriteGames() : games;
+        
         // Compter les jeux
-        for (Game game : games) {
+        for (Game game : baseList) {
             if (game.getName().length() > 0) {
                 String firstChar = game.getName().substring(0, 1).toUpperCase();
                 if (Character.isDigit(firstChar.charAt(0))) {
@@ -711,10 +817,13 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
         Log.i(TAG, "filterByLetter: letter='" + letter + "' total games=" + games.size());
         
+        // Obtenir la liste de base (tous les jeux ou favoris uniquement)
+        List<Game> baseList = showOnlyFavorites ? getFavoriteGames() : games;
+        
         filteredGames.clear();
         if ("#".equals(letter)) {
             // Show games starting with numbers
-            for (Game game : games) {
+            for (Game game : baseList) {
                 String firstChar = game.getName().substring(0, 1).toUpperCase();
                 if (Character.isDigit(firstChar.charAt(0))) {
                     filteredGames.add(game);
@@ -722,7 +831,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             }
         } else {
             // Show games starting with the selected letter
-            for (Game game : games) {
+            for (Game game : baseList) {
                 String firstChar = game.getName().substring(0, 1).toUpperCase();
                 if (firstChar.equals(letter)) {
                     filteredGames.add(game);
@@ -858,6 +967,12 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     private void openConsoleManager() {
         Intent intent = new Intent(this, ConsoleManagerActivity.class);
         startActivityForResult(intent, 100); // Request code 100 pour Console Manager
+    }
+    
+    private void openFavorites() {
+        Intent intent = new Intent(this, FavoritesActivity.class);
+        startActivity(intent);
+        Log.i(TAG, "Opening Favorites page");
     }
     
     @Override

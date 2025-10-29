@@ -52,25 +52,25 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Note: Core selection is managed in EmulatorJS settings menu (during gameplay)"
-            android:textSize="11sp"
+            android:textSize="14sp"
             android:textColor="@android:color/white"
             android:fontFamily="monospace"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="16dp"
-            android:padding="8dp"
+            android:padding="12dp"
             android:background="@color/kitt_dark_red" />
 
-        <!-- Advanced Settings Section -->
+        <!-- EmulatorJS Settings Section -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ADVANCED SETTINGS"
-            android:textSize="14sp"
+            android:text="🖥️ EMULATORJS SETTINGS"
+            android:textSize="16sp"
             android:textColor="@color/kitt_red"
             android:fontFamily="monospace"
             android:textStyle="bold"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="12dp" />
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
@@ -85,6 +85,66 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Touch Control Scale:"
+                    android:textSize="14sp"
+                    android:textColor="@android:color/white"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <SeekBar
+                    android:id="@+id/touchScaleSeekBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="20"
+                    android:progress="10"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/touchScaleValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="1.0x"
+                    android:textSize="12sp"
+                    android:textColor="@color/kitt_red"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Touch Control Opacity:"
+                    android:textSize="14sp"
+                    android:textColor="@android:color/white"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <SeekBar
+                    android:id="@+id/touchAlphaSeekBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="10"
+                    android:progress="8"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/touchAlphaValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="0.8"
+                    android:textSize="12sp"
+                    android:textColor="@color/kitt_red"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:layout_marginBottom="16dp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -102,7 +162,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="Enable Multi-Threading (EJS_threads)"
-                            android:textSize="12sp"
+                            android:textSize="14sp"
                             android:textColor="@android:color/white"
                             android:fontFamily="monospace"
                             android:textStyle="bold" />
@@ -112,60 +172,18 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content" />
                     </LinearLayout>
-                    
+
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Improves performance on heavy consoles (N64, PSP). Requires Custom Tabs for SharedArrayBuffer support."
-                        android:textSize="10sp"
+                        android:textSize="12sp"
                         android:textColor="#ff6666"
                         android:fontFamily="monospace"
-                        android:layout_marginTop="4dp"
-                        android:layout_marginBottom="8dp" />
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="12dp" />
                 </LinearLayout>
 
-                <!-- PSX D-Pad Option (only visible for PSX) -->
-                <LinearLayout
-                    android:id="@+id/psxDpadContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone"
-                    android:layout_marginTop="12dp"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="8dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
-                        
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="PSX: Use D-Pad (Digital) instead of Analog Sticks"
-                            android:textSize="12sp"
-                            android:textColor="@android:color/white"
-                            android:fontFamily="monospace"
-                            android:textStyle="bold" />
-
-                        <androidx.appcompat.widget.SwitchCompat
-                            android:id="@+id/psxDpadSwitch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
-                    </LinearLayout>
-                    
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="OFF: Uses psxcontrol.js with analog sticks (DualShock). ON: Uses psxcontroldpad.js with D-Pad only."
-                        android:textSize="10sp"
-                        android:textColor="#ff6666"
-                        android:fontFamily="monospace"
-                        android:layout_marginTop="4dp" />
-                </LinearLayout>
 
                 <!-- Custom Tabs Option (for better performance on heavy consoles) -->
                 <LinearLayout
@@ -188,7 +206,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="Use Chrome Custom Tabs"
-                            android:textSize="12sp"
+                            android:textSize="14sp"
                             android:textColor="@android:color/white"
                             android:fontFamily="monospace"
                             android:textStyle="bold" />
@@ -198,30 +216,34 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content" />
                     </LinearLayout>
-                    
+
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="ON: Opens in Chrome browser (better performance, supports threads). OFF: Uses WebView (integrated, no threads support)."
-                        android:textSize="10sp"
+                        android:textSize="12sp"
                         android:textColor="#ff6666"
                         android:fontFamily="monospace"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginTop="8dp" />
                 </LinearLayout>
+
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Virtual Gamepad Preset Section -->
+
+
+
+        <!-- Native Settings Section -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="VIRTUAL GAMEPAD PRESET"
-            android:textSize="14sp"
+            android:text="📱 NATIVE SETTINGS"
+            android:textSize="16sp"
             android:textColor="@color/kitt_red"
             android:fontFamily="monospace"
             android:textStyle="bold"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="12dp" />
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
@@ -237,114 +259,421 @@
                 android:orientation="vertical"
                 android:padding="12dp">
 
-                <TextView
+                <!-- PSX D-Pad Option (only visible for PSX) -->
+                <LinearLayout
+                    android:id="@+id/psxDpadContainer"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Gamepad Layout:"
-                    android:textSize="12sp"
-                    android:textColor="@android:color/white"
-                    android:fontFamily="monospace"
-                    android:layout_marginBottom="8dp" />
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginBottom="12dp"
+                    android:background="@color/kitt_dark_red"
+                    android:padding="12dp">
 
-                <Spinner
-                    android:id="@+id/presetSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:background="@color/kitt_black"
-                    android:padding="8dp"
-                    android:popupBackground="@color/kitt_dark_red" />
-                    
-                <TextView
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🎮 PSX CONTROLLER MODE"
+                        android:textSize="14sp"
+                        android:textColor="@color/kitt_red"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp"
+                        android:gravity="center" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Use D-Pad (Digital) instead of Analog Sticks"
+                            android:textSize="14sp"
+                            android:textColor="@android:color/white"
+                            android:fontFamily="monospace"
+                            android:textStyle="bold" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/psxDpadSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="OFF: Uses psxcontrol.js with analog sticks (DualShock). ON: Uses psxcontroldpad.js with D-Pad only."
+                        android:textSize="12sp"
+                        android:textColor="#ff6666"
+                        android:fontFamily="monospace"
+                        android:layout_marginTop="8dp" />
+                </LinearLayout>
+
+                <!-- N64 Controller Extensions (only visible for N64) -->
+                <LinearLayout
+                    android:id="@+id/n64PakContainer"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Default: Auto-detect | Custom: Full control positioning"
-                    android:textSize="10sp"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginBottom="12dp"
+                    android:background="@color/kitt_dark_red"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🎮 N64 CONTROLLER EXTENSIONS"
+                        android:textSize="14sp"
+                        android:textColor="@color/kitt_red"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp"
+                        android:gravity="center" />
+
+                    <!-- Port 1 & 2 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:layout_marginEnd="8dp">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="PORT 1"
+                                android:textSize="12sp"
+                                android:textColor="@color/kitt_red"
+                                android:fontFamily="monospace"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="8dp"
+                                android:gravity="center" />
+
+                            <Spinner
+                                android:id="@+id/n64PakSpinner1"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@color/kitt_black"
+                                android:popupBackground="@color/kitt_dark_red"
+                                android:textColor="@android:color/white"
+                                android:padding="8dp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="PORT 2"
+                                android:textSize="12sp"
+                                android:textColor="@color/kitt_red"
+                                android:fontFamily="monospace"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="8dp"
+                                android:gravity="center" />
+
+                            <Spinner
+                                android:id="@+id/n64PakSpinner2"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@color/kitt_black"
+                                android:popupBackground="@color/kitt_dark_red"
+                                android:textColor="@android:color/white"
+                                android:padding="8dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Port 3 & 4 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:layout_marginEnd="8dp">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="PORT 3"
+                                android:textSize="12sp"
+                                android:textColor="@color/kitt_red"
+                                android:fontFamily="monospace"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="8dp"
+                                android:gravity="center" />
+
+                            <Spinner
+                                android:id="@+id/n64PakSpinner3"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@color/kitt_black"
+                                android:popupBackground="@color/kitt_dark_red"
+                                android:textColor="@android:color/white"
+                                android:padding="8dp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="PORT 4"
+                                android:textSize="12sp"
+                                android:textColor="@color/kitt_red"
+                                android:fontFamily="monospace"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="8dp"
+                                android:gravity="center" />
+
+                            <Spinner
+                                android:id="@+id/n64PakSpinner4"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@color/kitt_black"
+                                android:popupBackground="@color/kitt_dark_red"
+                                android:textColor="@android:color/white"
+                                android:padding="8dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Legend -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:cardBackgroundColor="@color/kitt_black"
+                        app:cardElevation="2dp"
+                        app:cardCornerRadius="4dp"
+                        android:layout_marginTop="4dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="🎯 Controller Pak: Memory\n🔊 Rumble Pak: Vibration\n🎮 Transfer Pak: Game Boy Link"
+                            android:textSize="12sp"
+                            android:textColor="@android:color/white"
+                            android:fontFamily="monospace"
+                            android:padding="12dp"
+                            android:lineSpacingExtra="4dp" />
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+
+                <!-- Core Specific Options -->
+                <LinearLayout
+                    android:id="@+id/n64CoreOptions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="⚡ ParaLLEl N64 Options:"
+                        android:textSize="14sp"
+                        android:textColor="@android:color/white"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Internal Resolution:"
+                        android:textSize="13sp"
+                        android:textColor="#ff6666"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="8dp" />
+
+                    <Spinner
+                        android:id="@+id/n64ResolutionSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@color/kitt_black"
+                        android:popupBackground="@color/kitt_dark_red"
+                        android:textColor="@android:color/white"
+                        android:padding="8dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Anti-Aliasing:"
+                        android:textSize="13sp"
+                        android:textColor="#ff6666"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="8dp" />
+
+                    <Spinner
+                        android:id="@+id/n64AntiAliasingSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@color/kitt_black"
+                        android:popupBackground="@color/kitt_dark_red"
+                        android:textColor="@android:color/white"
+                        android:padding="8dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/n64BilinearSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Bilinear Filtering"
+                        android:textColor="@android:color/white"
+                        android:textSize="14sp"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- PSX Options (only visible for PSX) -->
+                <LinearLayout
+                    android:id="@+id/psxCoreOptions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🎮 Beetle PSX Options:"
+                        android:textSize="14sp"
+                        android:textColor="@android:color/white"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Internal Resolution:"
+                        android:textSize="13sp"
+                        android:textColor="#ff6666"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="8dp" />
+
+                    <Spinner
+                        android:id="@+id/psxResolutionSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@color/kitt_black"
+                        android:popupBackground="@color/kitt_dark_red"
+                        android:textColor="@android:color/white"
+                        android:padding="8dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/psxTextureFilteringSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Texture Filtering"
+                        android:textColor="@android:color/white"
+                        android:textSize="14sp"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="8dp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/psxDitheringSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Dithering"
+                        android:textColor="@android:color/white"
+                        android:textSize="14sp"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- SNES Options (only visible for SNES) -->
+                <LinearLayout
+                    android:id="@+id/snesCoreOptions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🕹️ Snes9x Options:"
+                        android:textSize="14sp"
+                        android:textColor="@android:color/white"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Blend Mode:"
+                        android:textSize="13sp"
+                        android:textColor="#ff6666"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="8dp" />
+
+                    <Spinner
+                        android:id="@+id/snesBlendModeSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@color/kitt_black"
+                        android:popupBackground="@color/kitt_dark_red"
+                        android:textColor="@android:color/white"
+                        android:padding="8dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/snesHiResSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Hi-Res Mode (256x239)"
+                        android:textColor="@android:color/white"
+                        android:textSize="14sp"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- No options message for other consoles -->
+                <TextView
+                    android:id="@+id/noCoreOptionsText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="No native core options available for this console"
+                    android:textSize="14sp"
                     android:textColor="@android:color/darker_gray"
                     android:fontFamily="monospace"
-                    android:layout_marginTop="4dp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Control Settings Section -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="CONTROL SETTINGS"
-            android:textSize="14sp"
-            android:textColor="@color/kitt_red"
-            android:fontFamily="monospace"
-            android:textStyle="bold"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp" />
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardBackgroundColor="@color/kitt_dark_red"
-            app:cardElevation="4dp"
-            app:cardCornerRadius="8dp"
-            android:layout_marginBottom="16dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="12dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Touch Control Scale:"
-                    android:textSize="12sp"
-                    android:textColor="@android:color/white"
-                    android:fontFamily="monospace"
-                    android:layout_marginBottom="8dp" />
-
-                <SeekBar
-                    android:id="@+id/touchScaleSeekBar"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="20"
-                    android:progress="10"
-                    android:layout_marginBottom="4dp" />
-
-                <TextView
-                    android:id="@+id/touchScaleValue"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="1.0x"
-                    android:textSize="10sp"
-                    android:textColor="@color/kitt_red"
-                    android:fontFamily="monospace"
+                    android:textStyle="bold"
                     android:gravity="center"
-                    android:layout_marginBottom="12dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Touch Control Opacity:"
-                    android:textSize="12sp"
-                    android:textColor="@android:color/white"
-                    android:fontFamily="monospace"
-                    android:layout_marginBottom="8dp" />
-
-                <SeekBar
-                    android:id="@+id/touchAlphaSeekBar"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="10"
-                    android:progress="8"
-                    android:layout_marginBottom="4dp" />
-
-                <TextView
-                    android:id="@+id/touchAlphaValue"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="0.8"
-                    android:textSize="10sp"
-                    android:textColor="@color/kitt_red"
-                    android:fontFamily="monospace"
-                    android:gravity="center" />
+                    android:padding="20dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -352,23 +681,23 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/saveButton"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:text="SAVE CONFIGURATION"
-            android:textSize="14sp"
+            android:layout_height="60dp"
+            android:text="💾 SAVE CONFIGURATION"
+            android:textSize="16sp"
             android:fontFamily="monospace"
             android:textStyle="bold"
             app:backgroundTint="@color/kitt_red"
             android:textColor="@android:color/black"
             app:cornerRadius="8dp"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="20dp" />
         
         <!-- Edit HTML Button -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/editHtmlButton"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="EDIT EMULATOR.HTML (PRESETS)"
-            android:textSize="12sp"
+            android:text="📝 EDIT EMULATOR.HTML (PRESETS)"
+            android:textSize="14sp"
             android:fontFamily="monospace"
             android:textStyle="bold"
             app:backgroundTint="@color/kitt_dark_red"
@@ -377,23 +706,23 @@
             app:strokeColor="@color/kitt_red"
             app:strokeWidth="2dp"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp" />
-        
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="12dp" />
+
         <!-- Reset Native GamePad Button -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/resetNativeGamePadButton"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="RESET TO NATIVE GAMEPAD"
-            android:textSize="12sp"
+            android:text="🔄 RESET TO NATIVE GAMEPAD"
+            android:textSize="14sp"
             android:fontFamily="monospace"
             android:textStyle="bold"
             app:backgroundTint="#FF5722"
             android:textColor="@android:color/white"
             app:cornerRadius="8dp"
             android:layout_marginTop="8dp"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="24dp" />
     </LinearLayout>
 </ScrollView>
 

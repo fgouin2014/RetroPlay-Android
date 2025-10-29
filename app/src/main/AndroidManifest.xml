@@ -91,6 +91,12 @@
                    android:exported="false"
                    android:screenOrientation="portrait"
                    android:configChanges="orientation|screenSize" />
+        
+        <activity
+                   android:name=".CoreManagerActivity"
+                   android:exported="false"
+                   android:screenOrientation="portrait"
+                   android:configChanges="orientation|screenSize" />
 
                <!-- Native Compose Emulator Activity (LibretroDroid cores + Lemuroid gamepads) -->
             <activity

@@ -147,3 +147,4 @@ Le répertoire `/storage/emulated/0/GameLibrary-Data/` conserve son nom historiq
 **Dernière mise à jour:** 27 octobre 2025, 22:45  
 **Prochaine révision:** Après corrections du branding
 
+

@@ -69,5 +69,6 @@ Thumbs.db
 # Large assets (cheats, data)
 app/src/main/assets/GameLibrary-Data/cheats/
 app/src/main/assets/GameLibrary-Data/data/
+app/src/main/assets/cheats.zip
 app/build/
 

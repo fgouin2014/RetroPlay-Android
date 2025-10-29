@@ -3,6 +3,8 @@ package com.retroplay;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.SeekBar;
 import android.widget.Spinner;
@@ -19,14 +21,37 @@ public class ConsoleConfigActivity extends AppCompatActivity {
     private String currentConsole;
     private SharedPreferences prefs;
     
-    // UI Components
-    private TextView consoleTitleConfig;
-    private Spinner presetSpinner;
-    private SwitchCompat threadsSwitch;
+        // UI Components
+        private TextView consoleTitleConfig;
+        private SwitchCompat threadsSwitch;
     private SwitchCompat psxDpadSwitch;
     private android.view.View psxDpadContainer;
     private SwitchCompat customTabsSwitch;
     private android.view.View customTabsContainer;
+
+    // N64 controller extension settings
+    private android.widget.Spinner n64PakSpinner1;
+    private android.widget.Spinner n64PakSpinner2;
+    private android.widget.Spinner n64PakSpinner3;
+    private android.widget.Spinner n64PakSpinner4;
+    private android.view.View n64PakContainer;
+
+    // Core specific options
+    private android.view.View n64CoreOptions;
+    private android.widget.Spinner n64ResolutionSpinner;
+    private android.widget.Spinner n64AntiAliasingSpinner;
+    private androidx.appcompat.widget.SwitchCompat n64BilinearSwitch;
+
+    private android.view.View psxCoreOptions;
+    private android.widget.Spinner psxResolutionSpinner;
+    private androidx.appcompat.widget.SwitchCompat psxTextureFilteringSwitch;
+    private androidx.appcompat.widget.SwitchCompat psxDitheringSwitch;
+
+    private android.view.View snesCoreOptions;
+    private android.widget.Spinner snesBlendModeSpinner;
+    private androidx.appcompat.widget.SwitchCompat snesHiResSwitch;
+
+    private android.widget.TextView noCoreOptionsText;
     private SeekBar touchScaleSeekBar;
     private SeekBar touchAlphaSeekBar;
     private TextView touchScaleValue;
@@ -74,9 +99,6 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         consoleTitleConfig = findViewById(R.id.consoleTitleConfig);
         consoleTitleConfig.setText(currentConsole.toUpperCase() + " - ADVANCED CONFIG");
         
-        // Preset spinner
-        presetSpinner = findViewById(R.id.presetSpinner);
-        setupPresetSpinner();
         
         // Performance settings
         threadsSwitch = findViewById(R.id.threadsSwitch);
@@ -95,7 +117,71 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         // Custom Tabs option (for SharedArrayBuffer support)
         customTabsSwitch = findViewById(R.id.customTabsSwitch);
         customTabsContainer = findViewById(R.id.customTabsContainer);
-        
+
+        // N64 Controller Pak settings
+        n64PakSpinner1 = findViewById(R.id.n64PakSpinner1);
+        n64PakSpinner2 = findViewById(R.id.n64PakSpinner2);
+        n64PakSpinner3 = findViewById(R.id.n64PakSpinner3);
+        n64PakSpinner4 = findViewById(R.id.n64PakSpinner4);
+        n64PakContainer = findViewById(R.id.n64PakContainer);
+
+        // Core specific options
+        n64CoreOptions = findViewById(R.id.n64CoreOptions);
+        n64ResolutionSpinner = findViewById(R.id.n64ResolutionSpinner);
+        n64AntiAliasingSpinner = findViewById(R.id.n64AntiAliasingSpinner);
+        n64BilinearSwitch = findViewById(R.id.n64BilinearSwitch);
+
+        psxCoreOptions = findViewById(R.id.psxCoreOptions);
+        psxResolutionSpinner = findViewById(R.id.psxResolutionSpinner);
+        psxTextureFilteringSwitch = findViewById(R.id.psxTextureFilteringSwitch);
+        psxDitheringSwitch = findViewById(R.id.psxDitheringSwitch);
+
+        snesCoreOptions = findViewById(R.id.snesCoreOptions);
+        snesBlendModeSpinner = findViewById(R.id.snesBlendModeSpinner);
+        snesHiResSwitch = findViewById(R.id.snesHiResSwitch);
+
+        noCoreOptionsText = findViewById(R.id.noCoreOptionsText);
+
+        // Setup core specific options visibility
+        setupCoreOptionsVisibility();
+
+        // Show N64 Pak options only for N64
+        if (currentConsole.equals("n64")) {
+            n64PakContainer.setVisibility(android.view.View.VISIBLE);
+
+            // Setup spinners with Pak options
+            String[] pakOptions = {"🎯 Controller Pak (Memory)", "🔊 Rumble Pak (Vibration)", "🎮 Transfer Pak (Game Boy)"};
+            ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, pakOptions) {
+                @Override
+                public View getView(int position, View convertView, ViewGroup parent) {
+                    TextView view = (TextView) super.getView(position, convertView, parent);
+                    view.setTextColor(getResources().getColor(R.color.kitt_red));
+                    view.setTextSize(12);
+                    view.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+                    return view;
+                }
+
+                @Override
+                public View getDropDownView(int position, View convertView, ViewGroup parent) {
+                    TextView view = (TextView) super.getDropDownView(position, convertView, parent);
+                    view.setTextColor(android.graphics.Color.WHITE);
+                    view.setBackgroundColor(getResources().getColor(R.color.kitt_dark_red));
+                    view.setTextSize(12);
+                    view.setTypeface(android.graphics.Typeface.MONOSPACE);
+                    view.setPadding(16, 12, 16, 12);
+                    return view;
+                }
+            };
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+            n64PakSpinner1.setAdapter(adapter);
+            n64PakSpinner2.setAdapter(adapter);
+            n64PakSpinner3.setAdapter(adapter);
+            n64PakSpinner4.setAdapter(adapter);
+        } else {
+            n64PakContainer.setVisibility(android.view.View.GONE);
+        }
+
         // Control settings
         touchScaleSeekBar = findViewById(R.id.touchScaleSeekBar);
         touchAlphaSeekBar = findViewById(R.id.touchAlphaSeekBar);
@@ -144,34 +230,6 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         resetNativeGamePadButton.setOnClickListener(v -> resetNativeGamePad());
     }
     
-    private void setupPresetSpinner() {
-        // Get console-specific presets
-        String[] presets = getPresetsForConsole(currentConsole);
-        
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(
-            this,
-            R.layout.spinner_item,
-            presets
-        );
-        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
-        presetSpinner.setAdapter(adapter);
-        
-        // Add listener to apply preset when selected
-        presetSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(android.widget.AdapterView<?> parent, android.view.View view, int position, long id) {
-                String selectedPreset = parent.getItemAtPosition(position).toString();
-                if (!selectedPreset.equals("Custom (edit HTML)")) {
-                    applyPresetValues(selectedPreset);
-                }
-            }
-            
-            @Override
-            public void onNothingSelected(android.widget.AdapterView<?> parent) {
-                // Do nothing
-            }
-        });
-    }
     
     private String getDefaultPresetForConsole(String console) {
         switch (console.toLowerCase()) {
@@ -191,97 +249,10 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         }
     }
     
-    private String[] getPresetsForConsole(String console) {
-        switch (console.toLowerCase()) {
-            case "nes":
-                return new String[]{
-                    "NES Native (Default)",
-                    "NES Compact",
-                    "NES Large Buttons",
-                    "Custom (edit HTML)"
-                };
-            case "snes":
-                return new String[]{
-                    "SNES Native (Default)",
-                    "SNES Compact",
-                    "SNES 4-Button Only",
-                    "Custom (edit HTML)"
-                };
-            case "n64":
-                return new String[]{
-                    "N64 Native (Default)",
-                    "N64 C-Buttons Right",
-                    "N64 C-Buttons Bottom",
-                    "Custom (edit HTML)"
-                };
-            case "megadrive":
-            case "genesis":
-                return new String[]{
-                    "Mega Drive 6-Button (Default)",
-                    "Genesis 3-Button",
-                    "Mega Drive Compact",
-                    "Custom (edit HTML)"
-                };
-            case "psx":
-            case "ps1":
-            case "playstation":
-                return new String[]{
-                    "PSX DualShock (Analog)",
-                    "PSX Digital (D-Pad Only)",
-                    "PSX Compact Layout",
-                    "Custom (edit HTML)"
-                };
-            case "gb":
-                return new String[]{
-                    "Game Boy Native (Default)",
-                    "Game Boy Compact",
-                    "Game Boy Large",
-                    "Custom (edit HTML)"
-                };
-            case "gbc":
-                return new String[]{
-                    "GBC Native (Default)",
-                    "GBC Compact",
-                    "GBC Large",
-                    "Custom (edit HTML)"
-                };
-            case "gba":
-                return new String[]{
-                    "GBA Native (Default)",
-                    "GBA Compact",
-                    "GBA Large Shoulders",
-                    "Custom (edit HTML)"
-                };
-            case "psp":
-                return new String[]{
-                    "PSP Analog (Default)",
-                    "PSP Digital (D-Pad Only)",
-                    "PSP Compact",
-                    "PSP Large Analog",
-                    "Custom (edit HTML)"
-                };
-            default:
-                return new String[]{
-                    "Default (Auto-detect)",
-                    "Compact",
-                    "Large Buttons",
-                    "Custom (edit HTML)"
-                };
-        }
-    }
-    
     @SuppressWarnings("unchecked")
     private void loadConfiguration() {
         String prefix = currentConsole + "_";
         
-        // Load preset selection (get default preset for this console)
-        String defaultPreset = getDefaultPresetForConsole(currentConsole);
-        String preset = prefs.getString(prefix + "preset", defaultPreset);
-        ArrayAdapter<String> presetAdapter = (ArrayAdapter<String>) presetSpinner.getAdapter();
-        int presetPosition = presetAdapter.getPosition(preset);
-        if (presetPosition >= 0) {
-            presetSpinner.setSelection(presetPosition);
-        }
         
         // Load performance settings (default threads for heavy consoles)
         boolean defaultThreads = currentConsole.equals("psp") || currentConsole.equals("n64");
@@ -297,6 +268,24 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         if (customTabsSwitch != null) {
             customTabsSwitch.setChecked(prefs.getBoolean(prefix + "use_custom_tabs", defaultCustomTabs));
         }
+
+        // Load N64 Pak settings (default: Controller Pak = 0)
+        if (n64PakSpinner1 != null) n64PakSpinner1.setSelection(prefs.getInt(prefix + "pak_port1", 0));
+        if (n64PakSpinner2 != null) n64PakSpinner2.setSelection(prefs.getInt(prefix + "pak_port2", 0));
+        if (n64PakSpinner3 != null) n64PakSpinner3.setSelection(prefs.getInt(prefix + "pak_port3", 0));
+        if (n64PakSpinner4 != null) n64PakSpinner4.setSelection(prefs.getInt(prefix + "pak_port4", 0));
+
+        // Load core specific settings
+        if (n64ResolutionSpinner != null) n64ResolutionSpinner.setSelection(prefs.getInt(prefix + "n64_resolution", 0));
+        if (n64AntiAliasingSpinner != null) n64AntiAliasingSpinner.setSelection(prefs.getInt(prefix + "n64_antialiasing", 0));
+        if (n64BilinearSwitch != null) n64BilinearSwitch.setChecked(prefs.getBoolean(prefix + "n64_bilinear", false));
+
+        if (psxResolutionSpinner != null) psxResolutionSpinner.setSelection(prefs.getInt(prefix + "psx_resolution", 0));
+        if (psxTextureFilteringSwitch != null) psxTextureFilteringSwitch.setChecked(prefs.getBoolean(prefix + "psx_texture_filtering", true));
+        if (psxDitheringSwitch != null) psxDitheringSwitch.setChecked(prefs.getBoolean(prefix + "psx_dithering", true));
+
+        if (snesBlendModeSpinner != null) snesBlendModeSpinner.setSelection(prefs.getInt(prefix + "snes_blend_mode", 0));
+        if (snesHiResSwitch != null) snesHiResSwitch.setChecked(prefs.getBoolean(prefix + "snes_hires", false));
         
         // Load control settings
         float touchScale = prefs.getFloat(prefix + "touch_scale", 1.0f);
@@ -313,18 +302,7 @@ public class ConsoleConfigActivity extends AppCompatActivity {
     private void saveConfiguration() {
         String prefix = currentConsole + "_";
         SharedPreferences.Editor editor = prefs.edit();
-        
-        // Save preset selection
-        String selectedPreset = presetSpinner.getSelectedItem().toString();
-        editor.putString(prefix + "preset", selectedPreset);
-        
-        // If "Custom" is selected, open HTML editor
-        if (selectedPreset.equals("Custom (edit HTML)")) {
-            editor.apply();
-            openHtmlEditor();
-            return;
-        }
-        
+
         // Note: Preset values are already applied when user selects preset from spinner
         // We just save the current UI values (which may have been modified manually)
         
@@ -343,6 +321,24 @@ public class ConsoleConfigActivity extends AppCompatActivity {
             boolean useCustomTabs = customTabsSwitch.isChecked();
             editor.putBoolean(prefix + "use_custom_tabs", useCustomTabs);
         }
+
+        // Save N64 Pak settings
+        if (n64PakSpinner1 != null) editor.putInt(prefix + "pak_port1", n64PakSpinner1.getSelectedItemPosition());
+        if (n64PakSpinner2 != null) editor.putInt(prefix + "pak_port2", n64PakSpinner2.getSelectedItemPosition());
+        if (n64PakSpinner3 != null) editor.putInt(prefix + "pak_port3", n64PakSpinner3.getSelectedItemPosition());
+        if (n64PakSpinner4 != null) editor.putInt(prefix + "pak_port4", n64PakSpinner4.getSelectedItemPosition());
+
+        // Save core specific settings
+        if (n64ResolutionSpinner != null) editor.putInt(prefix + "n64_resolution", n64ResolutionSpinner.getSelectedItemPosition());
+        if (n64AntiAliasingSpinner != null) editor.putInt(prefix + "n64_antialiasing", n64AntiAliasingSpinner.getSelectedItemPosition());
+        if (n64BilinearSwitch != null) editor.putBoolean(prefix + "n64_bilinear", n64BilinearSwitch.isChecked());
+
+        if (psxResolutionSpinner != null) editor.putInt(prefix + "psx_resolution", psxResolutionSpinner.getSelectedItemPosition());
+        if (psxTextureFilteringSwitch != null) editor.putBoolean(prefix + "psx_texture_filtering", psxTextureFilteringSwitch.isChecked());
+        if (psxDitheringSwitch != null) editor.putBoolean(prefix + "psx_dithering", psxDitheringSwitch.isChecked());
+
+        if (snesBlendModeSpinner != null) editor.putInt(prefix + "snes_blend_mode", snesBlendModeSpinner.getSelectedItemPosition());
+        if (snesHiResSwitch != null) editor.putBoolean(prefix + "snes_hires", snesHiResSwitch.isChecked());
         
         // Save control settings
         float touchScale = 0.5f + (touchScaleSeekBar.getProgress() / 20.0f) * 1.5f;
@@ -356,7 +352,6 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         // Log saved values
         System.out.println("===== Advanced Configuration Saved =====");
         System.out.println("Console: " + currentConsole);
-        System.out.println("Preset: " + selectedPreset);
         System.out.println("Threads: " + threads);
         System.out.println("Touch Scale: " + touchScale);
         System.out.println("Touch Alpha: " + touchAlpha);
@@ -562,147 +557,6 @@ public class ConsoleConfigActivity extends AppCompatActivity {
     /**
      * Ouvre emulator.html avec un éditeur de texte externe
      */
-    private void applyPresetValues(String presetName) {
-        // Apply preset values to UI controls based on preset name
-        switch (presetName) {
-            // NES Presets
-            case "NES Native (Default)":
-                touchScaleSeekBar.setProgress(10); // 1.0x
-                touchAlphaSeekBar.setProgress(8);  // 0.8
-                break;
-            case "NES Compact":
-                touchScaleSeekBar.setProgress(7);  // 0.8x
-                touchAlphaSeekBar.setProgress(9);  // 0.9
-                break;
-            case "NES Large Buttons":
-                touchScaleSeekBar.setProgress(15); // 1.5x
-                touchAlphaSeekBar.setProgress(7);  // 0.7
-                break;
-                
-            // SNES Presets
-            case "SNES Native (Default)":
-                touchScaleSeekBar.setProgress(10);
-                touchAlphaSeekBar.setProgress(8);
-                break;
-            case "SNES Compact":
-                touchScaleSeekBar.setProgress(7);
-                touchAlphaSeekBar.setProgress(9);
-                break;
-            case "SNES 4-Button Only":
-                touchScaleSeekBar.setProgress(12);
-                touchAlphaSeekBar.setProgress(8);
-                break;
-                
-            // N64 Presets
-            case "N64 Native (Default)":
-                touchScaleSeekBar.setProgress(10);
-                touchAlphaSeekBar.setProgress(8);
-                break;
-            case "N64 C-Buttons Right":
-            case "N64 C-Buttons Bottom":
-                touchScaleSeekBar.setProgress(11);
-                touchAlphaSeekBar.setProgress(8);
-                break;
-                
-            // Mega Drive Presets
-            case "Mega Drive 6-Button (Default)":
-                touchScaleSeekBar.setProgress(10);
-                touchAlphaSeekBar.setProgress(8);
-                break;
-            case "Genesis 3-Button":
-                touchScaleSeekBar.setProgress(12);
-                touchAlphaSeekBar.setProgress(8);
-                break;
-            case "Mega Drive Compact":
-                touchScaleSeekBar.setProgress(7);
-                touchAlphaSeekBar.setProgress(9);
-                break;
-                
-            // PSX Presets
-            case "PSX DualShock (Analog)":
-                touchScaleSeekBar.setProgress(10);
-                touchAlphaSeekBar.setProgress(8);
-                if (psxDpadSwitch != null) psxDpadSwitch.setChecked(false); // Analog sticks
-                break;
-            case "PSX Digital (D-Pad Only)":
-                touchScaleSeekBar.setProgress(10);
-                touchAlphaSeekBar.setProgress(8);
-                if (psxDpadSwitch != null) psxDpadSwitch.setChecked(true);  // D-Pad only
-                break;
-            case "PSX Compact Layout":
-                touchScaleSeekBar.setProgress(7);
-                touchAlphaSeekBar.setProgress(9);
-                break;
-                
-            // Game Boy Presets
-            case "Game Boy Native (Default)":
-            case "GBC Native (Default)":
-                touchScaleSeekBar.setProgress(10);
-                touchAlphaSeekBar.setProgress(8);
-                break;
-            case "Game Boy Compact":
-            case "GBC Compact":
-                touchScaleSeekBar.setProgress(6);
-                touchAlphaSeekBar.setProgress(9);
-                break;
-            case "Game Boy Large":
-            case "GBC Large":
-                touchScaleSeekBar.setProgress(14);
-                touchAlphaSeekBar.setProgress(7);
-                break;
-                
-            // GBA Presets
-            case "GBA Native (Default)":
-                touchScaleSeekBar.setProgress(10);
-                touchAlphaSeekBar.setProgress(8);
-                break;
-            case "GBA Compact":
-                touchScaleSeekBar.setProgress(7);
-                touchAlphaSeekBar.setProgress(9);
-                break;
-            case "GBA Large Shoulders":
-                touchScaleSeekBar.setProgress(13);
-                touchAlphaSeekBar.setProgress(7);
-                break;
-                
-            // PSP Presets
-            case "PSP Analog (Default)":
-                touchScaleSeekBar.setProgress(10);
-                touchAlphaSeekBar.setProgress(8);
-                if (psxDpadSwitch != null) psxDpadSwitch.setChecked(false); // Analog sticks
-                break;
-            case "PSP Digital (D-Pad Only)":
-                touchScaleSeekBar.setProgress(10);
-                touchAlphaSeekBar.setProgress(8);
-                if (psxDpadSwitch != null) psxDpadSwitch.setChecked(true);  // D-Pad only
-                break;
-            case "PSP Compact":
-                touchScaleSeekBar.setProgress(7);
-                touchAlphaSeekBar.setProgress(9);
-                if (psxDpadSwitch != null) psxDpadSwitch.setChecked(false); // Analog
-                break;
-            case "PSP Large Analog":
-                touchScaleSeekBar.setProgress(13);
-                touchAlphaSeekBar.setProgress(7);
-                if (psxDpadSwitch != null) psxDpadSwitch.setChecked(false); // Analog
-                break;
-                
-            // Default fallback
-            default:
-                touchScaleSeekBar.setProgress(10); // 1.0x
-                touchAlphaSeekBar.setProgress(8);  // 0.8
-                break;
-        }
-        
-        // Update value displays
-        float scale = 0.5f + (touchScaleSeekBar.getProgress() / 20.0f) * 1.5f;
-        touchScaleValue.setText(String.format("%.1fx", scale));
-        float alpha = touchAlphaSeekBar.getProgress() / 10.0f;
-        touchAlphaValue.setText(String.format("%.1f", alpha));
-        
-        android.util.Log.d("ConsoleConfig", "Applied preset: " + presetName + 
-                          " (scale=" + scale + ", alpha=" + alpha + ")");
-    }
     
     @Deprecated
     private void applyPresetToHtml(String presetName) {
@@ -931,7 +785,76 @@ public class ConsoleConfigActivity extends AppCompatActivity {
                 android.widget.Toast.LENGTH_LONG).show();
         }
     }
-    
+
+    private void setupCoreOptionsVisibility() {
+        // Hide all native options by default
+        if (n64PakContainer != null) n64PakContainer.setVisibility(android.view.View.GONE);
+        if (psxDpadContainer != null) psxDpadContainer.setVisibility(android.view.View.GONE);
+        if (n64CoreOptions != null) n64CoreOptions.setVisibility(android.view.View.GONE);
+        if (psxCoreOptions != null) psxCoreOptions.setVisibility(android.view.View.GONE);
+        if (snesCoreOptions != null) snesCoreOptions.setVisibility(android.view.View.GONE);
+        if (noCoreOptionsText != null) noCoreOptionsText.setVisibility(android.view.View.VISIBLE);
+
+        // Show specific options based on console
+        if (currentConsole.equals("n64")) {
+            if (n64PakContainer != null) n64PakContainer.setVisibility(android.view.View.VISIBLE);
+            if (n64CoreOptions != null) n64CoreOptions.setVisibility(android.view.View.VISIBLE);
+            if (noCoreOptionsText != null) noCoreOptionsText.setVisibility(android.view.View.GONE);
+
+            // Setup N64 options
+            String[] resolutionOptions = {"320x240 (Native)", "640x480 (2x)", "960x720 (3x)", "1280x960 (4x)"};
+            setupSpinner(n64ResolutionSpinner, resolutionOptions);
+
+            String[] aaOptions = {"Off", "2x MSAA", "4x MSAA", "8x MSAA"};
+            setupSpinner(n64AntiAliasingSpinner, aaOptions);
+
+        } else if (currentConsole.equals("psx") || currentConsole.equals("ps1") || currentConsole.equals("playstation")) {
+            if (psxDpadContainer != null) psxDpadContainer.setVisibility(android.view.View.VISIBLE);
+            if (psxCoreOptions != null) psxCoreOptions.setVisibility(android.view.View.VISIBLE);
+            if (noCoreOptionsText != null) noCoreOptionsText.setVisibility(android.view.View.GONE);
+
+            // Setup PSX options
+            String[] resolutionOptions = {"1x (240p)", "2x (480p)", "4x (960p)", "8x (1920p)"};
+            setupSpinner(psxResolutionSpinner, resolutionOptions);
+
+        } else if (currentConsole.equals("snes")) {
+            if (snesCoreOptions != null) snesCoreOptions.setVisibility(android.view.View.VISIBLE);
+            if (noCoreOptionsText != null) noCoreOptionsText.setVisibility(android.view.View.GONE);
+
+            // Setup SNES options
+            String[] blendOptions = {"None", "Merge", "Additive", "Subtractive"};
+            setupSpinner(snesBlendModeSpinner, blendOptions);
+        }
+    }
+
+    private void setupSpinner(android.widget.Spinner spinner, String[] options) {
+        if (spinner == null) return;
+
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, options) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                TextView view = (TextView) super.getView(position, convertView, parent);
+                view.setTextColor(getResources().getColor(R.color.kitt_red));
+                view.setTextSize(12);
+                view.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+                return view;
+            }
+
+            @Override
+            public View getDropDownView(int position, View convertView, ViewGroup parent) {
+                TextView view = (TextView) super.getDropDownView(position, convertView, parent);
+                view.setTextColor(android.graphics.Color.WHITE);
+                view.setBackgroundColor(getResources().getColor(R.color.kitt_dark_red));
+                view.setTextSize(12);
+                view.setTypeface(android.graphics.Typeface.MONOSPACE);
+                view.setPadding(16, 12, 16, 12);
+                return view;
+            }
+        };
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+    }
+
     /**
      * Console configuration data class
      */

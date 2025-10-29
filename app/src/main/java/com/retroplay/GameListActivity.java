@@ -131,8 +131,14 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         currentConsole = consolePrefs.getString("last_selected_console", "nes");
         Log.i(TAG, "Restored last selected console: " + currentConsole);
         
+        // Créer les répertoires nécessaires
+        createRequiredDirectories();
+        
         // Copier les HTML par défaut vers le stockage si nécessaire
         copyDefaultHtmlToStorage();
+        
+        // Copier EmulatorJS data si nécessaire
+        copyEmulatorJSData();
         
         // Charger les consoles depuis l'API en arrière-plan
         loadAvailableConsoles();
@@ -1475,40 +1481,136 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     }
     
     /**
-     * Copie les fichiers HTML par défaut depuis les assets vers le stockage interne
+     * Crée les répertoires nécessaires au premier lancement
+     */
+    private void createRequiredDirectories() {
+        String[] directories = {
+            "/storage/emulated/0/RetroPlay-Files/sites/gamelibrary",
+            "/storage/emulated/0/GameLibrary-Data",
+            "/storage/emulated/0/GameLibrary-Data/saves",
+            "/storage/emulated/0/GameLibrary-Data/states"
+        };
+        
+        // Créer aussi le répertoire cores dans le répertoire privé de l'app
+        File coresDir = new File(getFilesDir(), "cores");
+        if (!coresDir.exists()) {
+            if (coresDir.mkdirs()) {
+                Log.i(TAG, "Created cores directory: " + coresDir.getAbsolutePath());
+            }
+        }
+        
+        for (String dirPath : directories) {
+            try {
+                File dir = new File(dirPath);
+                if (!dir.exists()) {
+                    if (dir.mkdirs()) {
+                        Log.i(TAG, "Created directory: " + dirPath);
+                    } else {
+                        Log.w(TAG, "Failed to create directory: " + dirPath);
+                    }
+                } else {
+                    Log.d(TAG, "Directory already exists: " + dirPath);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error creating directory " + dirPath + ": " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Copie les fichiers par défaut depuis les assets vers le stockage interne
      * si ils n'existent pas déjà (permet la personnalisation)
      */
     private void copyDefaultHtmlToStorage() {
-        String basePath = "/storage/emulated/0/ChatAI-Files/sites/";
-        String[] htmlFiles = {"index.html", "emulator.html"};
-        
-        for (String fileName : htmlFiles) {
+        new Thread(() -> {
             try {
-                File targetFile = new File(basePath + fileName);
+                String basePath = "/storage/emulated/0/RetroPlay-Files/sites/gamelibrary/";
+                String assetsPath = "sites/gamelibrary";
                 
-                // Ne copier que si le fichier n'existe pas déjà
-                if (!targetFile.exists()) {
-                    Log.d(TAG, "Copying default " + fileName + " to storage");
-                    
-                    // Lire depuis les assets
-                    InputStream is = getAssets().open("gamelibrary/" + fileName);
-                    byte[] buffer = new byte[is.available()];
-                    is.read(buffer);
-                    is.close();
-                    
-                    // Écrire vers le stockage
-                    java.io.FileOutputStream fos = new java.io.FileOutputStream(targetFile);
-                    fos.write(buffer);
-                    fos.close();
-                    
-                    Log.d(TAG, "Copied " + fileName + " to storage successfully");
-                } else {
-                    Log.d(TAG, fileName + " already exists in storage, using custom version");
+                // Lister tous les fichiers dans assets/sites/gamelibrary/
+                String[] files = getAssets().list(assetsPath);
+                if (files == null || files.length == 0) {
+                    Log.w(TAG, "No files found in assets/" + assetsPath);
+                    return;
                 }
+                
+                // Vérifier si déjà copié
+                File siteDir = new File(basePath);
+                if (siteDir.exists() && siteDir.listFiles() != null && siteDir.listFiles().length >= files.length) {
+                    Log.i(TAG, "Site files already copied, skipping");
+                    return;
+                }
+                
+                final int totalFiles = files.length;
+                Log.i(TAG, "Found " + totalFiles + " files to copy from assets");
+                
+                runOnUiThread(() -> {
+                    android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
+                    progressDialog.setTitle("First Launch Setup");
+                    progressDialog.setMessage("Copying site files (0/" + totalFiles + ")...");
+                    progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+                    progressDialog.setMax(totalFiles);
+                    progressDialog.setCancelable(false);
+                    progressDialog.show();
+                    
+                    new Thread(() -> {
+                        int copiedCount = 0;
+                        
+                        for (int i = 0; i < files.length; i++) {
+                            String fileName = files[i];
+                            final int currentIndex = i + 1;
+                            
+                            try {
+                                File targetFile = new File(basePath + fileName);
+                                
+                                // Ne copier que si le fichier n'existe pas déjà
+                                if (!targetFile.exists()) {
+                                    Log.d(TAG, "Copying " + fileName + " to storage");
+                                    
+                                    // Lire depuis les assets
+                                    InputStream is = getAssets().open(assetsPath + "/" + fileName);
+                                    byte[] buffer = new byte[is.available()];
+                                    is.read(buffer);
+                                    is.close();
+                                    
+                                    // Écrire vers le stockage
+                                    java.io.FileOutputStream fos = new java.io.FileOutputStream(targetFile);
+                                    fos.write(buffer);
+                                    fos.close();
+                                    
+                                    copiedCount++;
+                                }
+                                
+                                final int finalCopied = copiedCount;
+                                runOnUiThread(() -> {
+                                    progressDialog.setProgress(currentIndex);
+                                    progressDialog.setMessage("Copying site files (" + currentIndex + "/" + totalFiles + ")...\n" + fileName);
+                                });
+                                
+                            } catch (Exception e) {
+                                Log.e(TAG, "Error copying " + fileName + ": " + e.getMessage());
+                            }
+                        }
+                        
+                        final int finalCopiedCount = copiedCount;
+                        runOnUiThread(() -> {
+                            progressDialog.dismiss();
+                            if (finalCopiedCount > 0) {
+                                Log.i(TAG, "Copied " + finalCopiedCount + " files to RetroPlay-Files/sites/");
+                                Toast.makeText(this, 
+                                    "Site files ready: " + finalCopiedCount + "/" + totalFiles, 
+                                    Toast.LENGTH_SHORT).show();
+                            } else {
+                                Log.d(TAG, "All site files already exist");
+                            }
+                        });
+                    }).start();
+                });
+                
             } catch (Exception e) {
-                Log.e(TAG, "Error copying " + fileName + ": " + e.getMessage());
+                Log.e(TAG, "Error copying files from assets: " + e.getMessage());
             }
-        }
+        }).start();
     }
 
     @Override
@@ -1563,22 +1665,217 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
      * Called at first launch only (async)
      */
     private void installRetroArchOverlays() {
+        // Check if already installed first (avoid showing dialog unnecessarily)
+        new Thread(() -> {
+            java.io.File overlayDir = new java.io.File("/storage/emulated/0/RetroPlay-Data/overlays");
+            if (overlayDir.exists() && overlayDir.listFiles() != null && overlayDir.listFiles().length > 0) {
+                Log.i(TAG, "Overlays already installed, skipping");
+                return;
+            }
+            
+            // Create progress dialog on UI thread
+            runOnUiThread(() -> {
+                android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
+                progressDialog.setTitle("First Launch Setup");
+                progressDialog.setMessage("Installing overlays (0/25)...");
+                progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+                progressDialog.setMax(25);
+                progressDialog.setCancelable(false);
+                progressDialog.show();
+                
+                new Thread(() -> {
+                    try {
+                        com.retroplay.overlay.assets.OverlayAssetManager assetManager = 
+                            new com.retroplay.overlay.assets.OverlayAssetManager(this);
+                        
+                        Log.i(TAG, "Installing RetroArch overlays...");
+                        boolean success = assetManager.installOverlaysIfNeeded(new com.retroplay.overlay.assets.OverlayAssetManager.ProgressCallback() {
+                            @Override
+                            public void onProgress(int current, int total, String packageName) {
+                                runOnUiThread(() -> {
+                                    progressDialog.setProgress(current);
+                                    progressDialog.setMessage("Installing overlays (" + current + "/" + total + ")...\n" + packageName);
+                                });
+                            }
+                            
+                            @Override
+                            public void onComplete(int successCount, int total) {
+                                runOnUiThread(() -> {
+                                    progressDialog.dismiss();
+                                    if (successCount > 0) {
+                                        Toast.makeText(GameListActivity.this, 
+                                            "Overlays installed: " + successCount + "/" + total, 
+                                            Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                            }
+                        });
+                        
+                        if (success) {
+                            Log.i(TAG, "RetroArch overlays installed successfully");
+                        } else {
+                            Log.w(TAG, "RetroArch overlays already installed or installation failed");
+                            runOnUiThread(() -> progressDialog.dismiss());
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error installing RetroArch overlays", e);
+                        runOnUiThread(() -> progressDialog.dismiss());
+                    }
+                }).start();
+            });
+        }).start();
+    }
+    
+    /**
+     * Copie les données EmulatorJS depuis les assets vers le stockage
+     * (cores, bios, compression, etc.)
+     */
+    private void copyEmulatorJSData() {
         new Thread(() -> {
             try {
-                com.retroplay.overlay.assets.OverlayAssetManager assetManager = 
-                    new com.retroplay.overlay.assets.OverlayAssetManager(this);
-                
-                Log.i(TAG, "Installing RetroArch overlays...");
-                boolean success = assetManager.installOverlaysIfNeeded();
-                if (success) {
-                    Log.i(TAG, "RetroArch overlays installed successfully");
-                } else {
-                    Log.w(TAG, "RetroArch overlays already installed or installation failed");
+                // Vérifier si déjà copié via fichier marqueur
+                File markerFile = new File("/storage/emulated/0/GameLibrary-Data/.emulatorjs_installed");
+                if (markerFile.exists()) {
+                    Log.i(TAG, "EmulatorJS data already installed (marker file found), skipping");
+                    return;
                 }
+                
+                final int[] currentProgress = {0};
+                
+                runOnUiThread(() -> {
+                    android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
+                    progressDialog.setTitle("First Launch Setup");
+                    progressDialog.setMessage("Copying EmulatorJS data...");
+                    progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+                    progressDialog.setMax(100); // Mode pourcentage
+                    progressDialog.setProgress(0);
+                    progressDialog.setCancelable(false);
+                    progressDialog.show();
+                    
+                    new Thread(() -> {
+                        try {
+                            Log.i(TAG, "Starting EmulatorJS data copy...");
+                            
+                            // Callback pour mettre à jour la progression
+                            ProgressCallback callback = new ProgressCallback() {
+                                @Override
+                                public void onFileProgress(String fileName) {
+                                    currentProgress[0]++;
+                                    if (currentProgress[0] % 50 == 0) {
+                                        runOnUiThread(() -> {
+                                            progressDialog.setMessage("Copying EmulatorJS...\n" + currentProgress[0] + " files copied\n" + fileName);
+                                            // Mise à jour approximative (on ne connaît pas le total)
+                                            int progress = Math.min(95, currentProgress[0] / 50);
+                                            progressDialog.setProgress(progress);
+                                        });
+                                    }
+                                }
+                            };
+                            
+                            int filesCopied = copyAssetFolderWithProgress("GameLibrary-Data/data", "/storage/emulated/0/GameLibrary-Data/data", callback);
+                            
+                            // NOTE: Cheats are NOT copied during first launch to speed up installation
+                            // Users can manually copy them later if needed from assets/GameLibrary-Data/cheats/
+                            Log.i(TAG, "Skipping cheats folder (not essential for first launch)");
+                            
+                            // Créer le fichier marqueur pour indiquer que l'installation est complète
+                            try {
+                                markerFile.createNewFile();
+                                Log.i(TAG, "Created installation marker file");
+                            } catch (Exception e) {
+                                Log.w(TAG, "Could not create marker file: " + e.getMessage());
+                            }
+                            
+                            final int totalCopied = filesCopied;
+                            runOnUiThread(() -> {
+                                progressDialog.setProgress(100);
+                                progressDialog.dismiss();
+                                if (totalCopied > 0) {
+                                    Log.i(TAG, "EmulatorJS data copied: " + totalCopied + " files");
+                                    Toast.makeText(this, 
+                                        "EmulatorJS ready: " + totalCopied + " files", 
+                                        Toast.LENGTH_SHORT).show();
+                                }
+                            });
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error copying EmulatorJS data", e);
+                            runOnUiThread(() -> {
+                                progressDialog.dismiss();
+                                Toast.makeText(this, "Error copying EmulatorJS data", Toast.LENGTH_LONG).show();
+                            });
+                        }
+                    }).start();
+                });
+                
             } catch (Exception e) {
-                Log.e(TAG, "Error installing RetroArch overlays", e);
+                Log.e(TAG, "Error in copyEmulatorJSData", e);
             }
         }).start();
+    }
+    
+    /**
+     * Interface de callback pour la progression de copie
+     */
+    private interface ProgressCallback {
+        void onFileProgress(String fileName);
+    }
+    
+    /**
+     * Copie récursivement un dossier depuis assets avec callback de progression
+     */
+    private int copyAssetFolderWithProgress(String assetPath, String destPath, ProgressCallback callback) throws Exception {
+        int filesCopied = 0;
+        
+        String[] files = getAssets().list(assetPath);
+        if (files == null || files.length == 0) {
+            return 0;
+        }
+        
+        // Créer le répertoire de destination
+        File destDir = new File(destPath);
+        if (!destDir.exists()) {
+            destDir.mkdirs();
+        }
+        
+        for (String fileName : files) {
+            String assetFilePath = assetPath + "/" + fileName;
+            String destFilePath = destPath + "/" + fileName;
+            
+            try {
+                // Vérifier si c'est un dossier ou un fichier
+                String[] subFiles = getAssets().list(assetFilePath);
+                if (subFiles != null && subFiles.length > 0) {
+                    // C'est un dossier, copie récursive
+                    filesCopied += copyAssetFolderWithProgress(assetFilePath, destFilePath, callback);
+                } else {
+                    // C'est un fichier
+                    File destFile = new File(destFilePath);
+                    if (!destFile.exists()) {
+                        InputStream is = getAssets().open(assetFilePath);
+                        java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
+                        
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        while ((bytesRead = is.read(buffer)) != -1) {
+                            fos.write(buffer, 0, bytesRead);
+                        }
+                        
+                        is.close();
+                        fos.close();
+                        filesCopied++;
+                        
+                        // Notifier la progression
+                        if (callback != null) {
+                            callback.onFileProgress(fileName);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Error copying " + assetFilePath + ": " + e.getMessage());
+            }
+        }
+        
+        return filesCopied;
     }
     
     /**

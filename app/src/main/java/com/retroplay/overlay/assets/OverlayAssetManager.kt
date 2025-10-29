@@ -57,10 +57,18 @@ class OverlayAssetManager(private val context: Context) {
     private val parser = RetroArchOverlayParser()
     
     /**
+     * Callback pour rapporter la progression de l'installation
+     */
+    interface ProgressCallback {
+        fun onProgress(current: Int, total: Int, packageName: String)
+        fun onComplete(successCount: Int, total: Int)
+    }
+    
+    /**
      * Installer les overlays depuis assets vers storage externe
      * Appelé au premier lancement ou si manquants
      */
-    fun installOverlaysIfNeeded(): Boolean {
+    fun installOverlaysIfNeeded(progressCallback: ProgressCallback? = null): Boolean {
         val overlayDir = File(OVERLAY_DIR)
         
         // Si déjà installé et contient des overlays, skip
@@ -79,12 +87,14 @@ class OverlayAssetManager(private val context: Context) {
         
         // Installer chaque package
         var successCount = 0
-        AVAILABLE_PACKAGES.forEach { packageName ->
+        AVAILABLE_PACKAGES.forEachIndexed { index, packageName ->
+            progressCallback?.onProgress(index + 1, AVAILABLE_PACKAGES.size, packageName)
             if (installOverlayPackage(packageName)) {
                 successCount++
             }
         }
         
+        progressCallback?.onComplete(successCount, AVAILABLE_PACKAGES.size)
         Log.i(TAG, "Installed $successCount/${AVAILABLE_PACKAGES.size} overlay packages")
         return successCount > 0
     }

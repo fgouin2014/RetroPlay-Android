@@ -1,6 +1,7 @@
 package com.retroplay
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
@@ -24,7 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.ConstraintSet
@@ -34,6 +37,7 @@ import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.platform.LocalConfiguration
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
+import com.swordfish.libretrodroid.Variable
 import com.swordfish.libretrodroid.ShaderConfig
 import com.swordfish.touchinput.radial.LemuroidPadTheme
 import com.swordfish.touchinput.radial.LocalLemuroidPadTheme
@@ -43,6 +47,9 @@ import gg.padkit.PadKit
 import gg.padkit.inputevents.InputEvent
 import gg.padkit.ids.Id
 import androidx.compose.ui.util.lerp
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import java.io.File
 
 /**
@@ -58,6 +65,36 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     
     companion object {
         private const val TAG = "NativeComposeEmulator"
+        private const val CRASH_PREFS = "core_crash_detection"
+        private const val KEY_LAST_GAME = "last_game_path"
+        private const val KEY_LAST_CORE = "last_core_attempted"
+        private const val KEY_TIMESTAMP = "crash_timestamp"
+        private const val CRASH_TIMEOUT_MS = 2000L // 2 secondes pour considérer un crash
+        
+        /**
+         * Convertit le nom technique du core en nom d'affichage lisible
+         */
+        private fun getCoreDisplayName(coreFileName: String): String {
+            val coreName = coreFileName.replace("_libretro_android.so", "")
+            return when (coreName.lowercase()) {
+                "fbneo" -> "FBNeo"
+                "mame2003_plus" -> "MAME 2003 Plus"
+                "mame2003" -> "MAME 2003"
+                "mame2010" -> "MAME 2010"
+                "fceumm" -> "FCEUmm"
+                "snes9x" -> "Snes9x"
+                "parallel_n64" -> "ParaLLEl N64"
+                "mupen64plus_next" -> "Mupen64Plus Next"
+                "gambatte" -> "Gambatte"
+                "libmgba", "mgba" -> "mGBA"
+                "pcsx_rearmed" -> "PCSX ReARMed"
+                "ppsspp" -> "PPSSPP"
+                "genesis_plus_gx" -> "Genesis Plus GX"
+                "picodrive" -> "PicoDrive"
+                else -> coreName.uppercase().replace("_", " ")
+            }
+        }
+        
     }
     
     private lateinit var retroView: GLRetroView
@@ -66,12 +103,118 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     private lateinit var gameName: String
     private lateinit var prefs: SharedPreferences
     private lateinit var cheatApplier: com.retroplay.cheat.CheatApplier
+    private var currentCoreFilePath: String? = null
     
     // États des menus
     private val showMainMenu = mutableStateOf(false)
     private val showGamePadSettings = mutableStateOf(false)
     private val showQuickMenu = mutableStateOf(false)
     private val overlaysVisible = mutableStateOf(true)
+    private val showCoreErrorDialog = mutableStateOf(false)
+    private val showCoreSelectorFromError = mutableStateOf(false)
+    private var failedCoreName = ""
+    private val showCoreChangeConfirmDialog = mutableStateOf(false)
+    private var coreChangeConfirmMessage = ""
+    
+    // États pour DIP Switches et Core Options
+    private val showDipSwitchDialog = mutableStateOf(false)
+    private val showCoreOptionsDialog = mutableStateOf(false)
+    private var allCoreVariables = mutableStateListOf<CoreVariable>()
+    private val dipSwitches = mutableStateListOf<CoreVariable>()
+    private val coreOptions = mutableStateListOf<CoreVariable>()
+    
+    /**
+     * Termine l'activité de manière sécurisée.
+     * MAME2010 a un bug dans son destructeur, on doit donc utiliser killProcess().
+     * @param delayMs Délai en millisecondes avant de terminer (pour laisser les dialogs s'afficher)
+     */
+    private fun safeFinishActivity(currentCore: String?, delayMs: Long = 0) {
+        val isMame2010 = currentCore?.contains("mame2010", ignoreCase = true) == true
+        
+        if (delayMs > 0) {
+            // Retarder la fermeture pour laisser le temps aux dialogs de s'afficher
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (isMame2010) {
+                    Log.w(TAG, "⚠️ MAME2010 detected - using process kill to avoid destructor crash")
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                } else {
+                    Log.i(TAG, "✓ Normal activity finish (returning to GameDetails)")
+                    finish() // Retourne à GameDetailsActivity
+                }
+            }, delayMs)
+        } else {
+            if (isMame2010) {
+                Log.w(TAG, "⚠️ MAME2010 detected - using process kill to avoid destructor crash")
+                android.os.Process.killProcess(android.os.Process.myPid())
+            } else {
+                Log.i(TAG, "✓ Normal activity finish (returning to GameDetails)")
+                finish() // Retourne à GameDetailsActivity
+            }
+        }
+    }
+    
+    /**
+     * Charge les variables de core (DIP switches et Core Options) et applique les valeurs sauvegardées
+     */
+    private fun loadCoreVariables() {
+        try {
+            // Extraire le coreId AVANT de récupérer les variables pour vérifier la cohérence
+            val expectedCoreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
+            Log.i(TAG, "Loading variables for core: $expectedCoreId")
+            
+            // Récupérer les variables depuis le core LibretroDroid
+            val variables = retroView.getVariables()
+            Log.i(TAG, "Retrieved ${variables.size} variables from core")
+            
+            // Vérifier que les variables correspondent au core attendu
+            if (variables.isNotEmpty()) {
+                val firstKey = variables.firstOrNull()?.key ?: ""
+                Log.i(TAG, "First variable key: $firstKey (expected prefix: $expectedCoreId)")
+            }
+            
+            // Parser les variables
+            val parsed = CoreVariableManager.parseVariables(variables)
+            
+            // Filtrer pour ne garder que les variables du core actuel
+            val filtered = CoreVariableManager.filterVariablesForCore(parsed, expectedCoreId)
+            
+            allCoreVariables.clear()
+            allCoreVariables.addAll(filtered)
+            
+            // Séparer DIP switches et Core Options
+            dipSwitches.clear()
+            dipSwitches.addAll(CoreVariableManager.getDipSwitches(filtered))
+            coreOptions.clear()
+            coreOptions.addAll(CoreVariableManager.getCoreOptions(filtered))
+            
+            Log.i(TAG, "Parsed: ${dipSwitches.size} DIP switches, ${coreOptions.size} core options")
+            
+            // Extraire le coreId depuis le chemin du fichier
+            val coreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
+            val gameId = File(romPath).nameWithoutExtension
+            
+            // Charger les valeurs sauvegardées
+            val savedValues = CoreVariableManager.loadVariables(this, gameId, coreId)
+            
+            if (savedValues.isNotEmpty()) {
+                // Appliquer les valeurs sauvegardées
+                val updatedVariables = CoreVariableManager.applyLoadedValues(filtered, savedValues)
+                allCoreVariables.clear()
+                allCoreVariables.addAll(updatedVariables)
+                dipSwitches.clear()
+                dipSwitches.addAll(CoreVariableManager.getDipSwitches(updatedVariables))
+                coreOptions.clear()
+                coreOptions.addAll(CoreVariableManager.getCoreOptions(updatedVariables))
+                
+                // Appliquer au core LibretroDroid
+                val libretroVars = CoreVariableManager.toLibretroVariables(updatedVariables)
+                retroView.updateVariables(*libretroVars)
+                Log.i(TAG, "Applied ${savedValues.size} saved variables to core")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading core variables", e)
+        }
+    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,6 +235,13 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         Log.i(TAG, "🟢 NativeComposeEmulator starting: $gameName ($console) from $romPath" + 
                 if (loadSlot > 0) " [LOAD SLOT $loadSlot]" else " [NEW GAME]")
         
+        // === DÉTECTION DE CRASH (SANS FALLBACK AUTOMATIQUE) ===
+        val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
+        val lastGamePath = crashPrefs.getString(KEY_LAST_GAME, null)
+        val lastCoreAttempted = crashPrefs.getString(KEY_LAST_CORE, null)
+        val lastTimestamp = crashPrefs.getLong(KEY_TIMESTAMP, 0)
+        val currentTime = System.currentTimeMillis()
+        
         // Charger les settings depuis SharedPreferences
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
         val savedSettings = loadSettings(prefs, console)
@@ -99,8 +249,44 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
         // Créer GLRetroView avec GLRetroViewData
         val data = com.swordfish.libretrodroid.GLRetroViewData(this).apply {
-            coreFilePath = getCorePath(console)
+            // Utiliser le core normal (avec override si défini)
+            val selectedCore = getCorePath(console)
+            
+            // Vérifier si le dernier lancement a crashé (même jeu, moins de 5s)
+            val wasCrash = lastGamePath == romPath && 
+                           lastCoreAttempted != null && 
+                           (currentTime - lastTimestamp) < CRASH_TIMEOUT_MS
+            
+            // N'afficher le dialog QUE si le core est IDENTIQUE au core qui a crashé
+            // Si l'utilisateur a changé le core manuellement, ne pas afficher le dialog
+            if (wasCrash && lastCoreAttempted == selectedCore) {
+                Log.w(TAG, "⚠️ CRASH DETECTED on previous attempt with core: $lastCoreAttempted")
+                // Extraire le nom du core pour l'affichage (nom lisible)
+                failedCoreName = getCoreDisplayName(lastCoreAttempted)
+                // Nettoyer les prefs pour ne pas re-afficher le dialog
+                crashPrefs.edit().clear().apply()
+                // Afficher le dialog d'erreur
+                showCoreErrorDialog.value = true
+            } else if (wasCrash && lastCoreAttempted != selectedCore) {
+                // L'utilisateur a déjà changé le core manuellement, juste nettoyer les prefs
+                Log.i(TAG, "✓ User manually changed core from $lastCoreAttempted to $selectedCore")
+                crashPrefs.edit().clear().apply()
+            }
+            
+            coreFilePath = selectedCore
             gameFilePath = romPath
+            
+            // Sauvegarder le core actuel pour le cleanup
+            this@NativeComposeEmulatorActivity.currentCoreFilePath = selectedCore
+            
+            // Sauvegarder la tentative actuelle pour détecter un crash futur
+            crashPrefs.edit().apply {
+                putString(KEY_LAST_GAME, romPath)
+                putString(KEY_LAST_CORE, selectedCore)
+                putLong(KEY_TIMESTAMP, currentTime)
+                apply()
+            }
+            Log.i(TAG, "📝 Core logged: $selectedCore for $gameName")
             
             // System directory (BIOS)
             systemDirectory = "/storage/emulated/0/GameLibrary-Data/data/bios"
@@ -116,10 +302,212 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             // Options
             rumbleEventsEnabled = true
             preferLowLatencyAudio = true
+
+            // Configuration des variables de core via l'API officielle LibretroDroid
+            val corePrefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this@NativeComposeEmulatorActivity)
+            val prefix = "${console}_"
+
+            // Détecter le core N64 réellement utilisé
+            val actualCoreFile = coreFilePath ?: ""
+            val isParallelN64 = actualCoreFile.contains("parallel_n64")
+            val isMupen64Plus = actualCoreFile.contains("mupen64plus")
+
+            // Configuration des variables selon la console
+            when (console) {
+                "n64" -> {
+                    val resolution = corePrefs.getInt("${prefix}n64_resolution", 0)
+                    val antialiasing = corePrefs.getInt("${prefix}n64_antialiasing", 0)
+                    val bilinear = corePrefs.getBoolean("${prefix}n64_bilinear", false)
+                    Log.i(TAG, "[N64] Core options loaded - Resolution: $resolution, AA: $antialiasing, Bilinear: $bilinear")
+                    Log.i(TAG, "[N64] Detected core file: $actualCoreFile (Parallel: $isParallelN64, Mupen64Plus: $isMupen64Plus)")
+
+                    // Appliquer les variables selon le core détecté
+                    val n64Variables = if (isParallelN64) {
+                        // ParaLLEl N64 variables
+                        arrayOf(
+                            Variable("parallel-n64-screensize", when (resolution) {
+                                0 -> "320x240"
+                                1 -> "640x480"
+                                2 -> "960x720"
+                                3 -> "1280x960"
+                                else -> "320x240"
+                            }),
+                            Variable("parallel-n64-antialiasmode", antialiasing.toString()),
+                            Variable("parallel-n64-bilinear_mode", if (bilinear) "1" else "0")
+                        )
+                    } else if (isMupen64Plus) {
+                        // Mupen64Plus Next variables (plus limitées que ParaLLEl N64)
+                        // Mupen64Plus a moins d'options configurables via variables
+                        Log.i(TAG, "[N64] Mupen64Plus Next detected - limited core options available")
+                        // Pour l'instant, pas de variables spécifiques connues pour Mupen64Plus
+                        // On pourrait ajouter des variables si elles sont découvertes
+                        emptyArray<Variable>()
+                    } else {
+                        // Core inconnu - utiliser les variables ParaLLEl N64 par défaut
+                        Log.w(TAG, "[N64] Unknown N64 core, using ParaLLEl N64 variables as fallback")
+                        arrayOf(
+                            Variable("parallel-n64-screensize", when (resolution) {
+                                0 -> "320x240"
+                                1 -> "640x480"
+                                2 -> "960x720"
+                                3 -> "1280x960"
+                                else -> "320x240"
+                            }),
+                            Variable("parallel-n64-antialiasmode", antialiasing.toString()),
+                            Variable("parallel-n64-bilinear_mode", if (bilinear) "1" else "0")
+                        )
+                    }
+
+                    try {
+                        variables = n64Variables
+                        val coreName = when {
+                            isParallelN64 -> "ParaLLEl N64"
+                            isMupen64Plus -> "Mupen64Plus Next"
+                            else -> "Unknown N64 core"
+                        }
+                        Log.i(TAG, "[N64] Core variables set for $coreName via GLRetroViewData.variables API")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[N64] Failed to set variables via GLRetroViewData API: ${e.message}")
+                    }
+                }
+                "psx", "ps1", "playstation" -> {
+                    val resolution = corePrefs.getInt("${prefix}psx_resolution", 0)
+                    val textureFiltering = corePrefs.getBoolean("${prefix}psx_texture_filtering", true)
+                    val dithering = corePrefs.getBoolean("${prefix}psx_dithering", true)
+                    Log.i(TAG, "[PSX] Core options loaded - Resolution: $resolution, Filter: $textureFiltering, Dither: $dithering")
+
+                    // Créer les variables PSX (Array<Variable>)
+                    val psxVariables = arrayOf(
+                        Variable("beetle_psx_hw_internal_resolution", when (resolution) {
+                            0 -> "1"
+                            1 -> "2"
+                            2 -> "4"
+                            3 -> "8"
+                            else -> "1"
+                        }),
+                        Variable("beetle_psx_hw_filter", if (textureFiltering) "1" else "0"),
+                        Variable("beetle_psx_hw_dithering", if (dithering) "enabled" else "disabled")
+                    )
+
+                    try {
+                        variables = psxVariables
+                        Log.i(TAG, "[PSX] Core variables set via GLRetroViewData.variables API")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[PSX] Failed to set variables via GLRetroViewData API: ${e.message}")
+                    }
+                }
+                "snes" -> {
+                    val blendMode = corePrefs.getInt("${prefix}snes_blend_mode", 0)
+                    val hires = corePrefs.getBoolean("${prefix}snes_hires", false)
+                    Log.i(TAG, "[SNES] Core options loaded - Blend: $blendMode, HiRes: $hires")
+
+                    // Créer les variables SNES (Array<Variable>)
+                    val snesVariables = arrayOf(
+                        Variable("snes9x_blend_layers", when (blendMode) {
+                            0 -> "disabled"
+                            1 -> "merge"
+                            2 -> "additive"
+                            3 -> "subtractive"
+                            else -> "disabled"
+                        }),
+                        Variable("snes9x_hires_blend", if (hires) "enabled" else "disabled")
+                    )
+
+                    try {
+                        variables = snesVariables
+                        Log.i(TAG, "[SNES] Core variables set via GLRetroViewData.variables API")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[SNES] Failed to set variables via GLRetroViewData API: ${e.message}")
+                    }
+                }
+                "arcade", "mame" -> {
+                    // MAME cores have issues with variable initialization in LibretroDroid
+                    // Using empty array to avoid segfaults during core initialization/destruction
+                    Log.i(TAG, "[ARCADE] Initializing MAME core with empty variables array (console=$console)")
+
+                    try {
+                        variables = emptyArray()
+                        Log.i(TAG, "[ARCADE] MAME core variables initialized (empty array)")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[ARCADE] Failed to initialize MAME variables: ${e.message}")
+                    }
+                }
+                "fbneo", "neogeo", "cps1", "cps2" -> {
+                    // FBNeo core options
+                    Log.i(TAG, "[ARCADE] Setting up FBNeo core options (console=$console)")
+
+                    try {
+                        variables = emptyArray()
+                        Log.i(TAG, "[ARCADE] FBNeo core variables initialized (empty array)")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[ARCADE] Failed to set FBNeo variables: ${e.message}")
+                    }
+                }
+                else -> {
+                    // Pour toutes les autres consoles sans configuration spécifique,
+                    // initialiser un tableau vide pour éviter les crashes de segfault
+                    Log.i(TAG, "[$console] Initializing default core variables (empty array)")
+                    
+                    try {
+                        variables = emptyArray()
+                        Log.i(TAG, "[$console] Default core variables initialized")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[$console] Failed to set default variables: ${e.message}")
+                    }
+                }
+            }
         }
         
         retroView = GLRetroView(this, data)
         lifecycle.addObserver(retroView)
+        
+        // === ÉCOUTE DES ERREURS LIBRETRODROID (CHARGEMENT ÉCHOUÉ) ===
+        lifecycleScope.launch {
+            try {
+                retroView.getGLRetroErrors().collect { errorCode ->
+                    Log.e(TAG, "❌ GLRetroView ERROR detected: $errorCode")
+                    
+                    // Erreurs qui nécessitent l'affichage du dialog
+                    val needsUserAction = errorCode == GLRetroView.ERROR_LOAD_GAME || 
+                                         errorCode == GLRetroView.ERROR_LOAD_LIBRARY
+                    
+                    if (needsUserAction) {
+                        val selectedCore = data.coreFilePath ?: "unknown"
+                        Log.w(TAG, "⚠️ Core $selectedCore failed to load game")
+                        
+                        // Extraire le nom du core pour l'affichage (nom lisible)
+                        failedCoreName = getCoreDisplayName(selectedCore)
+                        
+                        // Afficher le dialog d'erreur
+                        runOnUiThread {
+                            showCoreErrorDialog.value = true
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error collecting GLRetroErrors: ${e.message}")
+            }
+        }
+        
+        // === DÉTECTION DE SUCCÈS (NETTOYER LES PREFS DE CRASH) ===
+        // Si le jeu tourne pendant 5 secondes sans crash, nettoyer les prefs
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            try {
+                // Vérifier si le dialog d'erreur est affiché
+                // Si oui, le jeu n'est PAS chargé correctement, ne pas déclarer le succès
+                if (!showCoreErrorDialog.value) {
+                    // Succès ! Le jeu ne crashe pas avec ce core
+                    Log.i(TAG, "✅ SUCCESS: Game running successfully with core: ${data.coreFilePath}")
+                    
+                    // Nettoyer les infos de crash
+                    crashPrefs.edit().clear().apply()
+                } else {
+                    Log.w(TAG, "⚠️ Error dialog is showing, not declaring success")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in success detection: ${e.message}")
+            }
+        }, CRASH_TIMEOUT_MS)
         
         // Configurer le type de contrôleur pour PSX (DualShock pour analog sticks)
         if (console.equals("psx", ignoreCase = true)) {
@@ -148,9 +536,63 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 }
             }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
         }
-        
+
+        // Configurer les extensions contrôleur pour N64
+        if (console.equals("n64", ignoreCase = true)) {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    Log.i(TAG, "[N64] Configuring controller extensions...")
+
+                    // Charger les paramètres depuis SharedPreferences
+                    val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this@NativeComposeEmulatorActivity)
+                    val prefix = "n64_"
+
+                    // Mapping des positions spinner vers les valeurs Libretro :
+                    // 0 = Controller Pak (1), 1 = Rumble Pak (2), 2 = Transfer Pak (5)
+                    val pakValues = intArrayOf(1, 2, 5)
+
+                    // TODO: Configurer les extensions contrôleur N64
+                    // Les valeurs sont sauvegardées dans les préférences mais l'application dans LibretroDroid
+                    // nécessite une investigation supplémentaire pour la méthode correcte
+                    for (port in 0..3) {  // 4 ports maximum pour N64
+                        try {
+                            val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: Controller Pak
+                            val pakValue = pakValues.getOrElse(pakPosition) { 1 } // Fallback to Controller Pak
+
+                            val pakName = when (pakPosition) {
+                                0 -> "Controller Pak"
+                                1 -> "Rumble Pak"
+                                2 -> "Transfer Pak"
+                                else -> "Unknown"
+                            }
+                            Log.i(TAG, "[N64] Extension configured for port ${port + 1}: $pakName (value=$pakValue)")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "[N64] Could not configure extension for port ${port + 1}: ${e.message}")
+                        }
+                    }
+
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "[N64] Error configuring controller extensions", e)
+                }
+            }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
+        }
+
         // Initialiser le CheatApplier
         cheatApplier = com.retroplay.cheat.CheatApplier(retroView)
+        
+        // === CHARGER LES DIP SWITCHES ET CORE OPTIONS ===
+        // Attendre que le core expose ses variables (certains cores comme MAME prennent du temps)
+        // Délai réduit à 2 secondes pour s'assurer que le core est complètement initialisé
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            lifecycleScope.launch {
+                try {
+                    loadCoreVariables()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to load core variables: ${e.message}")
+                }
+            }
+        }, 2000)
         
         // Charger la save depuis le slot demandé (si loadSlot > 0)
         // IMPORTANT : Différer le chargement pour laisser le core s'initialiser
@@ -200,15 +642,206 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     GamePadLayoutManager.saveVariant(prefs, console, newVariant)
                 },
                 onFinishActivity = {
-                    finish()
+                    // Fermer le jeu avec délai pour une transition fluide
+                    safeFinishActivity(currentCoreFilePath, delayMs = 1200)
                 },
                 onSaveState = { slot ->
                     saveGameState(slot)
                 },
                 onLoadState = { slot ->
                     loadGameState(slot)
-                }
+                },
+                showDipSwitchDialog = showDipSwitchDialog,
+                showCoreOptionsDialog = showCoreOptionsDialog,
+                dipSwitches = dipSwitches,
+                coreOptions = coreOptions
             )
+            
+            // Dialog d'erreur de chargement du core
+            if (showCoreErrorDialog.value) {
+                CoreErrorDialog(
+                    coreName = failedCoreName,
+                    gameName = gameName,
+                    onChangeCore = {
+                        showCoreErrorDialog.value = false
+                        // Attendre un peu que le dialog se ferme avant d'ouvrir le suivant
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            showCoreSelectorFromError.value = true
+                        }, 100)
+                    },
+                    onRetry = {
+                        showCoreErrorDialog.value = false
+                        // Nettoyer les prefs de crash avant de réessayer
+                        val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
+                        crashPrefs.edit().clear().apply()
+                        // Fermer le jeu - l'utilisateur relancera depuis GameDetailsActivity
+                        safeFinishActivity(currentCoreFilePath, delayMs = 0)
+                    },
+                    onCancel = {
+                        showCoreErrorDialog.value = false
+                        // Retourner à GameDetailsActivity
+                        safeFinishActivity(currentCoreFilePath, delayMs = 0)
+                    }
+                )
+            }
+            
+            // Dialog de sélection de core (après erreur)
+            if (showCoreSelectorFromError.value) {
+                CoreSelectorDialog(
+                    console = console,
+                    currentGamePath = romPath,
+                    onCoreSelected = { coreInfo ->
+                        showCoreSelectorFromError.value = false
+                        
+                        // Nettoyer les prefs de crash
+                        val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
+                        crashPrefs.edit().clear().apply()
+                        
+                        // Sauvegarder le nouveau core comme override
+                        val relativePath = if (romPath.contains("/GameLibrary-Data/")) {
+                            romPath.substringAfter("/GameLibrary-Data/")
+                        } else {
+                            ""
+                        }
+                        if (relativePath.isNotEmpty()) {
+                            val overrideManager = CoreOverrideManager.getInstance()
+                            overrideManager.setOverride(relativePath, coreInfo.coreId, "User selected after core error")
+                            Log.i(TAG, "Core override saved: $relativePath → ${coreInfo.coreId}")
+                        }
+                        // Afficher un message de confirmation avant de fermer
+                        coreChangeConfirmMessage = "Core changed to ${coreInfo.displayName}.\n\nRelaunch the game from the menu to apply."
+                        showCoreChangeConfirmDialog.value = true
+                    },
+                    onResetToDefault = {
+                        showCoreSelectorFromError.value = false
+                        
+                        // Nettoyer les prefs de crash
+                        val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
+                        crashPrefs.edit().clear().apply()
+                        
+                        // Supprimer l'override
+                        val relativePath = if (romPath.contains("/GameLibrary-Data/")) {
+                            romPath.substringAfter("/GameLibrary-Data/")
+                        } else {
+                            ""
+                        }
+                        if (relativePath.isNotEmpty()) {
+                            val overrideManager = CoreOverrideManager.getInstance()
+                            overrideManager.removeOverride(relativePath)
+                            Log.i(TAG, "Core override removed: $relativePath")
+                        }
+                        // Afficher un message de confirmation avant de fermer
+                        coreChangeConfirmMessage = "Core reset to default.\n\nRelaunch the game from the menu to apply."
+                        showCoreChangeConfirmDialog.value = true
+                    },
+                    onDismiss = {
+                        showCoreSelectorFromError.value = false
+                    }
+                )
+            }
+            
+            // Dialog de confirmation du changement de core
+            if (showCoreChangeConfirmDialog.value) {
+                AlertDialog(
+                    onDismissRequest = { showCoreChangeConfirmDialog.value = false },
+                    title = {
+                        Text(
+                            text = "Core Changed",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = coreChangeConfirmMessage,
+                            fontSize = 16.sp,
+                            color = Color.White
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showCoreChangeConfirmDialog.value = false
+                                // Fermer le jeu avec délai pour une transition fluide
+                                safeFinishActivity(currentCoreFilePath, delayMs = 1200)
+                            }
+                        ) {
+                            Text("OK", color = Color(0xFF4CAF50), fontSize = 16.sp)
+                        }
+                    },
+                    containerColor = Color(0xFF2C2C2C),
+                    tonalElevation = 8.dp
+                )
+            }
+            
+            // === DIP SWITCHES DIALOG ===
+            if (showDipSwitchDialog.value) {
+                DipSwitchDialog(
+                    gameName = gameName,
+                    dipSwitches = dipSwitches,
+                    onApply = { modifiedValues ->
+                        // Extraire le coreId
+                        val coreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
+                        val gameId = File(romPath).nameWithoutExtension
+                        
+                        // Sauvegarder les modifications
+                        CoreVariableManager.saveVariables(this@NativeComposeEmulatorActivity, gameId, coreId, modifiedValues)
+                        
+                        // Appliquer au core
+                        val updatedVars = dipSwitches.map { dip ->
+                            if (modifiedValues.containsKey(dip.key)) {
+                                dip.copy(currentValue = modifiedValues[dip.key]!!)
+                            } else {
+                                dip
+                            }
+                        }
+                        val libretroVars = CoreVariableManager.toLibretroVariables(updatedVars)
+                        retroView.updateVariables(*libretroVars)
+                        
+                        // Mettre à jour la liste locale
+                        dipSwitches.clear()
+                        dipSwitches.addAll(updatedVars)
+                        
+                        Log.i(TAG, "Applied ${modifiedValues.size} DIP switch changes")
+                    },
+                    onDismiss = { showDipSwitchDialog.value = false }
+                )
+            }
+            
+            // === CORE OPTIONS DIALOG ===
+            if (showCoreOptionsDialog.value) {
+                CoreOptionsDialog(
+                    gameName = gameName,
+                    coreOptions = coreOptions,
+                    onApply = { modifiedValues ->
+                        // Extraire le coreId
+                        val coreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
+                        val gameId = File(romPath).nameWithoutExtension
+                        
+                        // Sauvegarder les modifications
+                        CoreVariableManager.saveVariables(this@NativeComposeEmulatorActivity, gameId, coreId, modifiedValues)
+                        
+                        // Appliquer au core
+                        val updatedVars = coreOptions.map { opt ->
+                            if (modifiedValues.containsKey(opt.key)) {
+                                opt.copy(currentValue = modifiedValues[opt.key]!!)
+                            } else {
+                                opt
+                            }
+                        }
+                        val libretroVars = CoreVariableManager.toLibretroVariables(updatedVars)
+                        retroView.updateVariables(*libretroVars)
+                        
+                        // Mettre à jour la liste locale
+                        coreOptions.clear()
+                        coreOptions.addAll(updatedVars)
+                        
+                        Log.i(TAG, "Applied ${modifiedValues.size} core option changes")
+                    },
+                    onDismiss = { showCoreOptionsDialog.value = false }
+                )
+            }
         }
     }
     
@@ -227,9 +860,6 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     }
     
     private fun getCorePath(console: String): String {
-        // Core names (in APK native libs, not on storage)
-        // 18+ consoles natives supportees
-        
         // Vérifier s'il y a un override de core pour ce jeu spécifique
         val gameName = intent.getStringExtra("gameName") ?: ""
         val romPath = intent.getStringExtra("romPath") ?: ""
@@ -242,6 +872,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         }
         
         // Vérifier l'override
+        var coreFileName: String? = null
         if (relativePath.isNotEmpty()) {
             val overrideManager = CoreOverrideManager.getInstance()
             val overrideCoreId = overrideManager.getCoreOverride(relativePath)
@@ -249,9 +880,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             if (overrideCoreId != null) {
                 Log.i(TAG, "Using core override for $gameName: $overrideCoreId")
                 // Mapper le coreId vers le fichier .so
-                val overrideCorePath = when (overrideCoreId.lowercase()) {
+                coreFileName = when (overrideCoreId.lowercase()) {
                     "mame2010" -> "mame2010_libretro_android.so"
                     "mame2003_plus" -> "mame2003_plus_libretro_android.so"
+                    "mame2003" -> "mame2003_libretro_android.so"
                     "fbneo" -> "fbneo_libretro_android.so"
                     "fceumm" -> "fceumm_libretro_android.so"
                     "snes9x" -> "snes9x_libretro_android.so"
@@ -267,16 +899,75 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     "picodrive" -> "picodrive_libretro_android.so"
                     else -> null
                 }
+            }
+        }
+        
+        // Si pas d'override, utiliser la logique par défaut basée sur la console
+        if (coreFileName == null) {
+            // Pour les sous-consoles (ex: fbneo/sega), utiliser le parent (fbneo)
+            val consoleKey = if (console.contains("/")) {
+                console.substringBefore("/").lowercase()
+            } else {
+                console.lowercase()
+            }
+            
+            coreFileName = when (consoleKey) {
+                // Nintendo
+                "nes" -> "fceumm_libretro_android.so"
+                "snes" -> "snes9x_libretro_android.so"
+                "n64" -> "parallel_n64_libretro_android.so"
+                "gb", "gbc" -> "gambatte_libretro_android.so"
+                "gba" -> "libmgba_libretro_android.so"
                 
-                if (overrideCorePath != null) {
-                    Log.i(TAG, "Core override resolved to: $overrideCorePath")
-                    return overrideCorePath
+                // Sony
+                "psx", "ps1", "playstation" -> "pcsx_rearmed_libretro_android.so"
+                "psp" -> "ppsspp_libretro_android.so"
+                
+                // Sega
+                "genesis", "megadrive", "md" -> "genesis_plus_gx_libretro_android.so"
+                "scd", "segacd" -> "genesis_plus_gx_libretro_android.so"
+                "mastersystem", "sms", "segasms" -> "genesis_plus_gx_libretro_android.so"
+                "gamegear", "gg", "segagg" -> "genesis_plus_gx_libretro_android.so"
+                "32x", "sega32x" -> "picodrive_libretro_android.so"
+                
+                // Atari
+                "atari2600", "atari", "a2600" -> "stella2014_libretro_android.so"
+                "atari5200", "a5200" -> "a5200_libretro_android.so"
+                "atari7800", "a7800" -> "prosystem_libretro_android.so"
+                "lynx", "atarilynx" -> "mednafen_lynx_libretro_android.so"
+                
+                // Other
+                "ngp", "ngc", "neogeopocket" -> "mednafen_ngp_libretro_android.so"
+                "ws", "wsc", "wonderswan" -> "mednafen_wswan_libretro_android.so"
+                "pce", "turbografx", "pcengine" -> "mednafen_pce_libretro_android.so"
+                "arcade" -> "mame2003_plus_libretro_android.so"
+                "mame" -> "mame2010_libretro_android.so"
+                "fbneo", "neogeo", "cps1", "cps2" -> "fbneo_libretro_android.so"
+                
+                else -> {
+                    Log.w(TAG, "No native core for console: $console, using fceumm fallback")
+                    "fceumm_libretro_android.so"
                 }
             }
         }
         
-        // Pas d'override, utiliser la logique par défaut basée sur la console
-        // Pour les sous-consoles (ex: fbneo/sega), utiliser le parent (fbneo)
+        // Vérifier si le core est téléchargé dans RetroPlay-Data/cores/
+        val downloadedCorePath = CoreDownloader.getCorePathByFileName(this, coreFileName)
+        if (downloadedCorePath != null) {
+            Log.i(TAG, "Using downloaded core: $downloadedCorePath")
+            return downloadedCorePath
+        }
+        
+        // Sinon, utiliser le core embarqué (juste le nom du fichier)
+        Log.i(TAG, "Using embedded core: $coreFileName")
+        return coreFileName
+    }
+    
+    /**
+     * Retourne la liste des cores à essayer dans l'ordre (fallback automatique)
+     * Si le premier core crash, on essaie le suivant automatiquement
+     */
+    private fun getCoreFallbacks(console: String): List<String> {
         val consoleKey = if (console.contains("/")) {
             console.substringBefore("/").lowercase()
         } else {
@@ -284,43 +975,32 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         }
         
         return when (consoleKey) {
-            // Nintendo
-            "nes" -> "fceumm_libretro_android.so"
-            "snes" -> "snes9x_libretro_android.so"
-            "n64" -> "parallel_n64_libretro_android.so"
-            "gb", "gbc" -> "gambatte_libretro_android.so"
-            "gba" -> "libmgba_libretro_android.so"
+            // Arcade: FBNeo (plus compatible) → MAME2003+ → MAME2003 → MAME2010
+            "arcade" -> listOf(
+                "fbneo_libretro_android.so",
+                "mame2003_plus_libretro_android.so",
+                "mame2003_libretro_android.so",
+                "mame2010_libretro_android.so"
+            )
+            "mame" -> listOf(
+                "mame2003_plus_libretro_android.so",
+                "mame2003_libretro_android.so",
+                "mame2010_libretro_android.so",
+                "fbneo_libretro_android.so"
+            )
+            "fbneo", "neogeo", "cps1", "cps2" -> listOf(
+                "fbneo_libretro_android.so",
+                "mame2003_plus_libretro_android.so"
+            )
             
-            // Sony
-            "psx", "ps1", "playstation" -> "pcsx_rearmed_libretro_android.so"
-            "psp" -> "ppsspp_libretro_android.so"
+            // N64: ParaLLEl (performant) → Mupen64Plus (compatible)
+            "n64" -> listOf(
+                "parallel_n64_libretro_android.so",
+                "mupen64plus_next_libretro_android.so"
+            )
             
-            // Sega
-            "genesis", "megadrive", "md" -> "genesis_plus_gx_libretro_android.so"
-            "scd", "segacd" -> "genesis_plus_gx_libretro_android.so"
-            "mastersystem", "sms", "segasms" -> "genesis_plus_gx_libretro_android.so"
-            "gamegear", "gg", "segagg" -> "genesis_plus_gx_libretro_android.so"
-            "32x", "sega32x" -> "picodrive_libretro_android.so"
-            
-            // Atari
-            "atari2600", "atari", "a2600" -> "stella2014_libretro_android.so"
-            "atari5200", "a5200" -> "a5200_libretro_android.so"
-            "atari7800", "a7800" -> "prosystem_libretro_android.so"
-            "lynx", "atarilynx" -> "mednafen_lynx_libretro_android.so"  // Beetle Lynx (plus stable que Handy)
-            
-            // Other
-            "ngp", "ngc", "neogeopocket" -> "mednafen_ngp_libretro_android.so"
-            "ws", "wsc", "wonderswan" -> "mednafen_wswan_libretro_android.so"
-            "pce", "turbografx", "pcengine" -> "mednafen_pce_libretro_android.so"
-            "arcade" -> "mame2003_plus_libretro_android.so"
-            "mame" -> "mame2010_libretro_android.so"
-            "fbneo", "neogeo", "cps1", "cps2" -> "fbneo_libretro_android.so"
-            
-            else -> {
-                // Fallback: essayer quand meme avec fceumm, mais afficher un warning
-                android.util.Log.w("NativeComposeEmulator", "No native core for console: $console, using fceumm fallback (may not work)")
-                "fceumm_libretro_android.so"
-            }
+            // Pour les autres consoles, un seul core disponible
+            else -> listOf(getCorePath(console))
         }
     }
     
@@ -423,6 +1103,17 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     }
     
     // Lifecycle managed by lifecycle.addObserver(retroView)
+    
+    override fun onDestroy() {
+        try {
+            Log.i(TAG, "🔴 onDestroy called - cleaning up core")
+            // Ne pas appeler retroView.onDestroy() manuellement car lifecycle.addObserver le fait déjà
+            // Juste logger pour le debug
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onDestroy", e)
+        }
+        super.onDestroy()
+    }
 }
 
 // Handle PadKit events (List of events from gamepads)
@@ -495,7 +1186,11 @@ fun ComposeEmulatorScreen(
     onVariantChanged: (GamePadLayoutManager.LayoutVariant) -> Unit,
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
-    onFinishActivity: () -> Unit
+    onFinishActivity: () -> Unit,
+    showDipSwitchDialog: MutableState<Boolean>,
+    showCoreOptionsDialog: MutableState<Boolean>,
+    dipSwitches: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
+    coreOptions: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>
 ) {
     // Settings manager pour les gamepads (state mutable)
     var settings by remember {
@@ -886,6 +1581,13 @@ fun ComposeEmulatorScreen(
                 var showSaveSlots by remember { mutableStateOf(false) }
                 var showLoadSlots by remember { mutableStateOf(false) }
                 var showCheatCodes by remember { mutableStateOf(false) }
+                var showCoreSelector by remember { mutableStateOf(false) }
+                var showRestartDialog by remember { mutableStateOf(false) }
+                var selectedCoreForRestart by remember { mutableStateOf<String?>(null) }
+                
+                // Capturer le context Activity pour l'utiliser dans les lambdas
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val activity = context as? android.app.Activity
                 
                 // Quick Menu (Menu Rapide - Back button)
                 if (showQuickMenu.value) {
@@ -940,7 +1642,21 @@ fun ComposeEmulatorScreen(
                         onCheatCodes = {
                             showMainMenu.value = false
                             showCheatCodes = true
-                        }
+                        },
+                        onChangeCore = {
+                            showMainMenu.value = false
+                            showCoreSelector = true
+                        },
+                        onDipSwitches = {
+                            showMainMenu.value = false
+                            showDipSwitchDialog.value = true
+                        },
+                        onCoreOptions = {
+                            showMainMenu.value = false
+                            showCoreOptionsDialog.value = true
+                        },
+                        hasDipSwitches = dipSwitches.isNotEmpty(),
+                        hasCoreOptions = coreOptions.isNotEmpty()
                     )
                 }
                 
@@ -1052,6 +1768,74 @@ fun ComposeEmulatorScreen(
                         )
                     }
                 }
+                
+                // Core Selector Dialog
+                if (showCoreSelector) {
+                    CoreSelectorDialog(
+                        console = console,
+                        currentGamePath = romPath,
+                        onCoreSelected = { selectedCore ->
+                            showCoreSelector = false
+                            // Save override and show restart dialog
+                            CoreSelector.setCoreOverride(
+                                romPath,
+                                selectedCore.coreId,
+                                "User selected from Main Menu: ${selectedCore.displayName}"
+                            )
+                            selectedCoreForRestart = selectedCore.displayName
+                            showRestartDialog = true
+                        },
+                        onResetToDefault = {
+                            showCoreSelector = false
+                            // Remove override and show restart dialog
+                            CoreSelector.removeCoreOverride(romPath)
+                            selectedCoreForRestart = null
+                            showRestartDialog = true
+                        },
+                        onDismiss = {
+                            showCoreSelector = false
+                        }
+                    )
+                }
+                
+                // Restart Confirmation Dialog
+                if (showRestartDialog) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showRestartDialog = false },
+                        title = {
+                            Text(
+                                text = "Core Changed",
+                                color = Color.White,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = if (selectedCoreForRestart != null) {
+                                    "Core changed to $selectedCoreForRestart.\n\nRelaunch the game from the menu to apply."
+                                } else {
+                                    "Core reset to default.\n\nRelaunch the game from the menu to apply."
+                                },
+                                color = Color.White,
+                                fontSize = 16.sp
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showRestartDialog = false
+                                    // Fermer le jeu - l'utilisateur relancera depuis GameDetailsActivity
+                                    onFinishActivity()
+                                }
+                            ) {
+                                Text("OK", color = Color(0xFF4CAF50))
+                            }
+                        },
+                        containerColor = Color(0xFF2C2C2C),
+                        tonalElevation = 8.dp
+                    )
+                }
             }
         }
     }
@@ -1139,7 +1923,12 @@ fun MainMenuDialog(
     onSaveGame: () -> Unit,
     onLoadGame: () -> Unit,
     onGamePadSettings: () -> Unit,
-    onCheatCodes: () -> Unit
+    onCheatCodes: () -> Unit,
+    onChangeCore: () -> Unit,
+    onDipSwitches: () -> Unit,
+    onCoreOptions: () -> Unit,
+    hasDipSwitches: Boolean,
+    hasCoreOptions: Boolean
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var cacheState by remember { mutableStateOf(prefs.getBoolean("cache_enabled_$console", false)) }
@@ -1200,6 +1989,34 @@ fun MainMenuDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("GamePad Settings", color = Color.White)
+                    }
+                    
+                    // DIP Switches (arcade only, if available)
+                    if (hasDipSwitches) {
+                        TextButton(
+                            onClick = onDipSwitches,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("DIP Switches", color = Color(0xFFFFA726))
+                        }
+                    }
+                    
+                    // Core Options (if available)
+                    if (hasCoreOptions) {
+                        TextButton(
+                            onClick = onCoreOptions,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Core Options", color = Color(0xFF64B5F6))
+                        }
+                    }
+                    
+                    // Change Core
+                    TextButton(
+                        onClick = onChangeCore,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Change Core & Restart", color = Color(0xFFE91E63))
                     }
                     
                     androidx.compose.material3.HorizontalDivider(color = Color.Gray)
@@ -1956,4 +2773,73 @@ private fun findFallbackLayout(orientation: String, availableLayouts: Set<String
     return availableLayouts.firstOrNull { it.contains(orientation, ignoreCase = true) }
         ?: availableLayouts.firstOrNull() // Dernier recours : premier layout disponible
         ?: "landscape" // Ultra-fallback
+}
+
+@Composable
+fun CoreErrorDialog(
+    coreName: String,
+    gameName: String,
+    onChangeCore: () -> Unit,
+    onRetry: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { /* Pas de dismiss en cliquant à l'extérieur */ },
+        title = {
+            Text(
+                text = "Core Loading Failed",
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = "$coreName could not load:",
+                    fontSize = 16.sp,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = gameName,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4CAF50)
+                )
+            }
+        },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Bouton "Change Core"
+                TextButton(
+                    onClick = onChangeCore,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Change Core", color = Color(0xFFE91E63), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+                
+                // Bouton "Retry"
+                TextButton(
+                    onClick = onRetry,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Retry", color = Color(0xFF4CAF50), fontSize = 16.sp)
+                }
+                
+                // Bouton "Cancel"
+                TextButton(
+                    onClick = onCancel,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cancel", color = Color(0xFF9E9E9E), fontSize = 16.sp)
+                }
+            }
+        },
+        containerColor = Color(0xFF1E1E1E),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
 }

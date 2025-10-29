@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/kitt_black">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:background="@color/kitt_dark_red"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/backButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="←"
+            android:textSize="20sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:padding="8dp"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="CORE MANAGER"
+            android:textSize="16sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:layout_marginStart="12dp" />
+    </LinearLayout>
+
+    <!-- Device Info -->
+    <TextView
+        android:id="@+id/deviceInfoText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Device: detecting..."
+        android:textSize="12sp"
+        android:textColor="@color/kitt_red"
+        android:fontFamily="monospace"
+        android:padding="12dp"
+        android:background="#1A000000" />
+
+    <!-- Liste des cores -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/coresRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="16dp" />
+
+    <!-- Boutons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/downloadAllButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:text="DOWNLOAD ALL"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            app:icon="@android:drawable/stat_sys_download"
+            app:iconGravity="textStart"
+            app:backgroundTint="#4CAF50"
+            android:textColor="@android:color/white"
+            app:cornerRadius="0dp"
+            android:layout_marginEnd="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/deleteAllButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:text="DELETE ALL"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            app:icon="@android:drawable/ic_menu_delete"
+            app:iconGravity="textStart"
+            app:backgroundTint="#F44336"
+            android:textColor="@android:color/white"
+            app:cornerRadius="0dp"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
+</LinearLayout>
+

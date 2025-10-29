@@ -5,13 +5,17 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.ArrayAdapter;
 import android.widget.ImageView;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.content.Intent;
 import android.util.Log;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.widget.Toast;
 import com.bumptech.glide.Glide;
@@ -186,6 +190,14 @@ public class GameDetailsActivity extends AppCompatActivity {
         favoriteButton.setOnClickListener(v -> toggleFavorite());
     }
     
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Rafraîchir le bouton de core override au cas où il aurait été changé
+        // depuis NativeComposeEmulatorActivity (via le dialog d'erreur)
+        updateCoreOverrideButton();
+    }
+    
     private void launchGame() {
         Log.i(TAG, "Lancement du jeu (WASM): " + game.getName());
         
@@ -347,7 +359,29 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
     }
     
+    private long lastNativeLaunchTime = 0;
+    private static final long MIN_NATIVE_LAUNCH_INTERVAL_MS = 1000; // Minimum 1 seconde entre deux lancements natifs
+    
     private void launchGameNative(int slot) {
+        // Vérifier le délai minimum entre deux lancements natifs
+        // Nécessaire car LibretroDroid ne peut pas charger le même core si l'ancien n'est pas libéré
+        long currentTime = System.currentTimeMillis();
+        long timeSinceLastLaunch = currentTime - lastNativeLaunchTime;
+        
+        if (timeSinceLastLaunch < MIN_NATIVE_LAUNCH_INTERVAL_MS) {
+            long remainingDelay = MIN_NATIVE_LAUNCH_INTERVAL_MS - timeSinceLastLaunch;
+            Log.w(TAG, "⏳ Too fast! Waiting " + remainingDelay + "ms before launching (core cleanup)");
+            
+            Toast.makeText(this, "Please wait...", Toast.LENGTH_SHORT).show();
+            
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                launchGameNative(slot);
+            }, remainingDelay);
+            return;
+        }
+        
+        lastNativeLaunchTime = currentTime;
+        
         String slotInfo = (slot == 0) ? "[NEW GAME]" : "[LOAD SLOT " + slot + "]";
         Log.i(TAG, "Lancement du jeu (NATIVE COMPOSE): " + game.getName() + " " + slotInfo);
         
@@ -1020,33 +1054,94 @@ public class GameDetailsActivity extends AppCompatActivity {
         };
         
         CoreOverrideManager manager = CoreOverrideManager.getInstance();
-        
-        new AlertDialog.Builder(this)
+
+        // Déterminer quel item est actuellement sélectionné
+        int tempSelectedPosition = -1;
+        if (manager.hasOverride(relativePath)) {
+            CoreOverride override = manager.getOverride(relativePath);
+            String currentCoreId = override.getCoreId();
+            for (int i = 0; i < coreIds.length; i++) {
+                if (currentCoreId.equals(coreIds[i])) {
+                    tempSelectedPosition = i;
+                    break;
+                }
+            }
+        } else {
+            // Si pas d'override, c'est le "Default" qui est sélectionné (position 0)
+            tempSelectedPosition = 0;
+        }
+        final int selectedPosition = tempSelectedPosition;
+
+        // Créer un ListView personnalisé avec scrolling et checkmarks
+        ListView listView = new ListView(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, cores) {
+            @Override
+            public boolean isEnabled(int position) {
+                // Désactiver les headers (indices 1 et 9)
+                return position != 1 && position != 9;
+            }
+
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                TextView textView = (TextView) view.findViewById(android.R.id.text1);
+
+                // Ajouter un checkmark si c'est l'item sélectionné
+                String text = cores[position];
+                if (position == selectedPosition) {
+                    text = "✓ " + text;
+                    textView.setTextColor(Color.parseColor("#4CAF50")); // Vert pour l'item sélectionné
+                } else if (position == 1 || position == 9) {
+                    // Style pour les headers
+                    textView.setTextColor(Color.GRAY);
+                    textView.setTextSize(12);
+                    textView.setTypeface(null, Typeface.BOLD);
+                    textView.setPadding(16, 16, 16, 8);
+                } else {
+                    textView.setTextColor(Color.BLACK);
+                    textView.setTextSize(14);
+                    textView.setTypeface(null, Typeface.NORMAL);
+                    textView.setPadding(32, 8, 16, 8); // Padding gauche plus grand pour compenser le checkmark
+                }
+                textView.setText(text);
+
+                return view;
+            }
+        };
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Select Core for " + game.getName())
-                .setItems(cores, (dialog, which) -> {
-                    // Vérifier si c'est un header (indices 1 et 5)
-                    if (which == 1 || which == 5) {
-                        // Headers non cliquables, ne rien faire
-                        return;
-                    }
-                    
-                    if (which == 0) {
-                        // Default - supprimer l'override
-                        manager.removeOverride(relativePath);
-                        Toast.makeText(this, "Using default core: " + defaultCoreName, Toast.LENGTH_SHORT).show();
-                    } else {
-                        // Définir un override
-                        String coreId = coreIds[which];
-                        if (coreId != null) {
-                            String reason = "User selected: " + cores[which];
-                            manager.setOverride(relativePath, coreId, reason);
-                            Toast.makeText(this, "Core set to: " + coreId.toUpperCase(), Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                    updateCoreOverrideButton();
-                })
+                .setView(listView)
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+
+        listView.setAdapter(adapter);
+
+        listView.setOnItemClickListener((parent, view, position, id) -> {
+            // Vérifier si c'est un header (indices 1 et 9)
+            if (position == 1 || position == 9) {
+                // Headers non cliquables, ne rien faire
+                return;
+            }
+
+            if (position == 0) {
+                // Default - supprimer l'override
+                manager.removeOverride(relativePath);
+                Toast.makeText(this, "Using default core: " + defaultCoreName, Toast.LENGTH_SHORT).show();
+            } else {
+                // Définir un override
+                String coreId = coreIds[position];
+                if (coreId != null) {
+                    String reason = "User selected: " + cores[position];
+                    manager.setOverride(relativePath, coreId, reason);
+                    Toast.makeText(this, "Core set to: " + coreId.toUpperCase(), Toast.LENGTH_SHORT).show();
+                }
+            }
+            updateCoreOverrideButton();
+            dialog.dismiss();
+        });
+
+        dialog.show();
     }
     
     private String formatReleaseDate(String releaseDate) {

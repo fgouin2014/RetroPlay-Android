@@ -1,0 +1,84 @@
+{
+  "overrides": [
+    {
+      "gamePath": "n64\/Castlevania (U).zip",
+      "coreId": "mupen64plus_next_gles3",
+      "reason": "User selected: Mupen64Plus Next GLES3 (N64)"
+    },
+    {
+      "gamePath": "n64\/Bomberman 64 (U).zip",
+      "coreId": "mupen64plus_next_gles2",
+      "reason": "User selected: Mupen64Plus Next GLES2 (N64)"
+    },
+    {
+      "gamePath": "fbneo\/taito\/asuka.zip",
+      "coreId": "mame2003_plus",
+      "reason": "User selected: MAME 2003 Plus (Arcade)"
+    },
+    {
+      "gamePath": "fbneo\/cpiii\/jojo.zip",
+      "coreId": "mame2003_plus",
+      "reason": "User selected: MAME 2003 Plus (Arcade)"
+    },
+    {
+      "gamePath": "nes\/Dash Galaxy in the Alien Asylum (USA).zip",
+      "coreId": "fceumm",
+      "reason": "User selected: FCEUmm (NES)"
+    },
+    {
+      "gamePath": "arcade\/jchan.zip",
+      "coreId": "mame2010",
+      "reason": "User selected: MAME 2010 (Arcade)"
+    },
+    {
+      "gamePath": "fbneo\/alien3.zip",
+      "coreId": "fbneo",
+      "reason": "User selected: FBNeo (Arcade\/Neo Geo)"
+    },
+    {
+      "gamePath": "fbneo\/cpiii\/jojoba.zip",
+      "coreId": "mame2003_plus",
+      "reason": "User selected: MAME 2003 Plus (Arcade)"
+    },
+    {
+      "gamePath": "arcade\/jchan2.zip",
+      "coreId": "fbneo",
+      "reason": "User selected: FBNeo (Arcade\/Neo Geo)"
+    },
+    {
+      "gamePath": "mame\/alien3.zip",
+      "coreId": "mame2003_plus",
+      "reason": "User selected: MAME 2003 Plus (Arcade)"
+    },
+    {
+      "gamePath": "fbneo\/sega\/4dwarrio.zip",
+      "coreId": "mame2010",
+      "reason": "User selected: MAME 2010 (Arcade)"
+    },
+    {
+      "gamePath": "n64\/Nuclear Strike 64 (U).zip",
+      "coreId": "mupen64plus_next_gles3",
+      "reason": "User selected: Mupen64Plus Next GLES3 (N64)"
+    },
+    {
+      "gamePath": "arcade\/jockeygp.zip",
+      "coreId": "fbneo",
+      "reason": "User selected: FBNeo (Arcade\/Neo Geo)"
+    },
+    {
+      "gamePath": "fbneo\/sega\/afighter.zip",
+      "coreId": "mame2010",
+      "reason": "User selected: MAME 2010 (Arcade)"
+    },
+    {
+      "gamePath": "nes\/10-Yard Fight (USA, Europe).zip",
+      "coreId": "pcsx_rearmed",
+      "reason": "User selected: PCSX ReARMed (PSX)"
+    },
+    {
+      "gamePath": "fbneo\/cps3\/jojo.zip",
+      "coreId": "mame2003_plus",
+      "reason": "User selected: MAME 2003 Plus (Arcade)"
+    }
+  ]
+}

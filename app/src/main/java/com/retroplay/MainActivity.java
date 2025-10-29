@@ -73,16 +73,8 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
         if (!hasLaunchedGameList) {
             hasLaunchedGameList = true;
             // Install RetroArch overlays if needed (first launch)
+            // The callback will launch GameListActivity after installation
             installRetroArchOverlays();
-            
-            // DON'T start WebServer - we're closing this activity immediately
-            // GameListActivity will start WebServerService instead
-            
-            // Launch GameListActivity directly
-            Log.i(TAG, "Permissions granted, launching GameListActivity");
-            Intent intent = new Intent(this, GameListActivity.class);
-            startActivity(intent);
-            finish(); // Close MainActivity
         }
         
         Log.i(TAG, "MainActivity onCreate finished");
@@ -91,19 +83,88 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
     /**
      * Install RetroArch overlays from assets to external storage
      * Called at first launch only
+     * Runs in background thread to avoid blocking UI (ANR)
+     * Launches GameListActivity after completion
      */
     private void installRetroArchOverlays() {
-        try {
-            com.retroplay.overlay.assets.OverlayAssetManager assetManager = 
-                new com.retroplay.overlay.assets.OverlayAssetManager(this);
-            
-            boolean success = assetManager.installOverlaysIfNeeded();
-            if (success) {
-                Log.i(TAG, "RetroArch overlays installed successfully");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error installing RetroArch overlays", e);
+        // Check if already installed
+        java.io.File overlayDir = new java.io.File("/storage/emulated/0/RetroPlay-Data/overlays");
+        if (overlayDir.exists() && overlayDir.listFiles() != null && overlayDir.listFiles().length > 0) {
+            Log.i(TAG, "Overlays already installed, launching GameListActivity");
+            launchGameListActivity();
+            return;
         }
+        
+        // Create progress dialog on UI thread
+        runOnUiThread(() -> {
+            android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
+            progressDialog.setTitle("First Launch Setup");
+            progressDialog.setMessage("Installing overlays (0/25)...");
+            progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+            progressDialog.setMax(25);
+            progressDialog.setCancelable(false);
+            progressDialog.show();
+            
+            new Thread(() -> {
+                try {
+                    com.retroplay.overlay.assets.OverlayAssetManager assetManager = 
+                        new com.retroplay.overlay.assets.OverlayAssetManager(this);
+                    
+                    Log.i(TAG, "Installing RetroArch overlays in background...");
+                    boolean success = assetManager.installOverlaysIfNeeded(new com.retroplay.overlay.assets.OverlayAssetManager.ProgressCallback() {
+                        @Override
+                        public void onProgress(int current, int total, String packageName) {
+                            runOnUiThread(() -> {
+                                progressDialog.setProgress(current);
+                                progressDialog.setMessage("Installing overlays (" + current + "/" + total + ")...\n" + packageName);
+                            });
+                        }
+                        
+                        @Override
+                        public void onComplete(int successCount, int total) {
+                            runOnUiThread(() -> {
+                                progressDialog.dismiss();
+                                if (successCount > 0) {
+                                    android.widget.Toast.makeText(MainActivity.this, 
+                                        "Overlays installed: " + successCount + "/" + total, 
+                                        android.widget.Toast.LENGTH_SHORT).show();
+                                }
+                                // Launch GameListActivity after installation
+                                launchGameListActivity();
+                            });
+                        }
+                    });
+                    
+                    if (success) {
+                        Log.i(TAG, "RetroArch overlays installed successfully");
+                    } else {
+                        Log.w(TAG, "RetroArch overlays installation failed");
+                        runOnUiThread(() -> {
+                            progressDialog.dismiss();
+                            // Still launch GameListActivity even if installation failed
+                            launchGameListActivity();
+                        });
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error installing RetroArch overlays", e);
+                    runOnUiThread(() -> {
+                        progressDialog.dismiss();
+                        // Still launch GameListActivity even if error occurred
+                        launchGameListActivity();
+                    });
+                }
+            }).start();
+        });
+    }
+    
+    /**
+     * Launch GameListActivity and close MainActivity
+     */
+    private void launchGameListActivity() {
+        Log.i(TAG, "Launching GameListActivity");
+        Intent intent = new Intent(this, GameListActivity.class);
+        startActivity(intent);
+        finish(); // Close MainActivity
     }
 
     private void setupWebView() {
@@ -377,20 +438,10 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
         // Check permissions again when returning from settings
         if (!hasLaunchedGameList && checkPermissions()) {
             hasLaunchedGameList = true;
-            Log.i(TAG, "All permissions granted in onResume, launching GameListActivity");
+            Log.i(TAG, "All permissions granted in onResume");
             // Install overlays if not already done
+            // This will automatically launch GameListActivity after completion
             installRetroArchOverlays();
-            
-            // DON'T start WebServer - we're closing this activity immediately
-            // GameListActivity will start WebServerService instead
-            
-            // Launch GameListActivity with a small delay to ensure we're fully resumed
-            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                Log.i(TAG, "Launching GameListActivity now");
-                Intent intent = new Intent(this, GameListActivity.class);
-                startActivity(intent);
-                finish();
-            }, 500);
         }
     }
     

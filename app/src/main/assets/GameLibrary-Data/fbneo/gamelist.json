@@ -1,0 +1,38 @@
+{
+  "games": [
+    {
+      "title": "Example FBNeo Arcade Game",
+      "file": "example_arcade.zip",
+      "description": "Example arcade game for FBNeo core. FBNeo supports multiple arcade systems including Neo Geo, CPS1, CPS2, and more.",
+      "developer": "Example Arcade Dev",
+      "publisher": "Example Arcade Publisher",
+      "releaseYear": "1995",
+      "genre": "Fighting",
+      "players": "1-2",
+      "rating": "4.8",
+      "favorite": false,
+      "image": "media/box2d/example_arcade.png",
+      "screenshot": "media/screenshot/example_arcade.png",
+      "arcade": {
+        "system": "Neo Geo",
+        "romset": "0.2.97.44",
+        "hasDipSwitches": true,
+        "orientation": "horizontal",
+        "screenResolution": "320x224"
+      }
+    }
+  ],
+  "metadata": {
+    "console": "fbneo",
+    "totalGames": 1,
+    "lastUpdated": "2024-01-01",
+    "version": "1.0",
+    "coreInfo": {
+      "name": "FBNeo",
+      "description": "Multi-arcade system emulator (Neo Geo, CPS1/2/3, etc.)",
+      "supportedRomsets": ["0.2.97.44", "latest"],
+      "requiresBios": ["neogeo.zip"]
+    }
+  }
+}
+

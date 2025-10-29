@@ -67,8 +67,55 @@ Thumbs.db
 *~
 
 # Large assets (cheats, data)
-app/src/main/assets/GameLibrary-Data/cheats/
-app/src/main/assets/GameLibrary-Data/data/
 app/src/main/assets/cheats.zip
 app/build/
+
+# GameLibrary-Data: Exclure tout sauf structure exemple
+app/src/main/assets/GameLibrary-Data/*
+!app/src/main/assets/GameLibrary-Data/data/
+app/src/main/assets/GameLibrary-Data/data/*
+!app/src/main/assets/GameLibrary-Data/data/INSTALLATION_INSTRUCTIONS.txt
+
+# Garder structure exemple pour 3 consoles
+!app/src/main/assets/GameLibrary-Data/nes/
+!app/src/main/assets/GameLibrary-Data/fbneo/
+!app/src/main/assets/GameLibrary-Data/arcade/
+
+# Dans les consoles exemple, exclure tout sauf structure de base
+app/src/main/assets/GameLibrary-Data/nes/*
+!app/src/main/assets/GameLibrary-Data/nes/gamelist.json
+!app/src/main/assets/GameLibrary-Data/nes/media/
+app/src/main/assets/GameLibrary-Data/nes/media/*
+!app/src/main/assets/GameLibrary-Data/nes/media/fallback.png
+!app/src/main/assets/GameLibrary-Data/nes/media/box2d/
+app/src/main/assets/GameLibrary-Data/nes/media/box2d/*
+!app/src/main/assets/GameLibrary-Data/nes/media/box2d/fallback.png
+!app/src/main/assets/GameLibrary-Data/nes/media/screenshot/
+app/src/main/assets/GameLibrary-Data/nes/media/screenshot/*
+!app/src/main/assets/GameLibrary-Data/nes/media/screenshot/fallback.png
+!app/src/main/assets/GameLibrary-Data/nes/*.nes
+
+app/src/main/assets/GameLibrary-Data/fbneo/*
+!app/src/main/assets/GameLibrary-Data/fbneo/gamelist.json
+!app/src/main/assets/GameLibrary-Data/fbneo/media/
+app/src/main/assets/GameLibrary-Data/fbneo/media/*
+!app/src/main/assets/GameLibrary-Data/fbneo/media/fallback.png
+!app/src/main/assets/GameLibrary-Data/fbneo/media/box2d/
+app/src/main/assets/GameLibrary-Data/fbneo/media/box2d/*
+!app/src/main/assets/GameLibrary-Data/fbneo/media/box2d/fallback.png
+!app/src/main/assets/GameLibrary-Data/fbneo/media/screenshot/
+app/src/main/assets/GameLibrary-Data/fbneo/media/screenshot/*
+!app/src/main/assets/GameLibrary-Data/fbneo/media/screenshot/fallback.png
+
+app/src/main/assets/GameLibrary-Data/arcade/*
+!app/src/main/assets/GameLibrary-Data/arcade/gamelist.json
+!app/src/main/assets/GameLibrary-Data/arcade/media/
+app/src/main/assets/GameLibrary-Data/arcade/media/*
+!app/src/main/assets/GameLibrary-Data/arcade/media/fallback.png
+!app/src/main/assets/GameLibrary-Data/arcade/media/box2d/
+app/src/main/assets/GameLibrary-Data/arcade/media/box2d/*
+!app/src/main/assets/GameLibrary-Data/arcade/media/box2d/fallback.png
+!app/src/main/assets/GameLibrary-Data/arcade/media/screenshot/
+app/src/main/assets/GameLibrary-Data/arcade/media/screenshot/*
+!app/src/main/assets/GameLibrary-Data/arcade/media/screenshot/fallback.png
 

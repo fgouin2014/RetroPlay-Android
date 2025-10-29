@@ -1,0 +1,46 @@
+========================================
+EmulatorJS Installation Instructions
+========================================
+
+This directory should contain the complete EmulatorJS installation.
+
+Required Structure:
+-------------------
+data/
+  ├── bios/              (BIOS files for various consoles)
+  │   ├── scph5501.bin   (PSX BIOS - US)
+  │   ├── neogeo.zip     (Neo Geo BIOS)
+  │   └── ...
+  ├── cores/             (Emulator cores - .wasm, .js, .data files)
+  ├── compression/       (7z/zip extraction libraries)
+  ├── localization/      (UI translations)
+  ├── src/               (EmulatorJS source files)
+  ├── emulator.js        (Main EmulatorJS script)
+  ├── emulator.css       (EmulatorJS styles)
+  ├── loader.js          (Core loader)
+  └── version.json       (Version info)
+
+Installation:
+-------------
+1. Download official EmulatorJS from: https://github.com/EmulatorJS/EmulatorJS
+2. Extract the complete 'data' folder contents here
+3. Ensure all BIOS files are in data/bios/
+4. Ensure all cores are in data/cores/
+
+Important Notes:
+----------------
+- EmulatorJS files are NOT included in this repository due to size constraints
+- Total size: ~200-300 MB
+- Required for web-based emulation features
+- Without these files, only native LibretroDroid cores will work
+
+Alternative:
+------------
+You can also download a pre-packaged EmulatorJS data folder from:
+https://github.com/EmulatorJS/EmulatorJS/releases
+
+For RetroPlay-specific setup, place the complete 'data' folder at:
+/storage/emulated/0/GameLibrary-Data/data/
+
+========================================
+

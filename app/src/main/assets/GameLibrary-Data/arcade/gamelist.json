@@ -1,0 +1,59 @@
+{
+  "games": [
+    {
+      "title": "Example MAME Arcade Game",
+      "file": "example_mame.zip",
+      "description": "Example arcade game for MAME cores (MAME2003, MAME2003-Plus, MAME2010). MAME emulates thousands of classic arcade machines.",
+      "developer": "Example MAME Dev",
+      "publisher": "Example MAME Publisher",
+      "releaseYear": "1985",
+      "genre": "Shoot 'em Up",
+      "players": "1-2",
+      "rating": "4.3",
+      "favorite": false,
+      "image": "media/box2d/example_mame.png",
+      "screenshot": "media/screenshot/example_mame.png",
+      "arcade": {
+        "system": "MAME",
+        "romset": "0.78",
+        "hasDipSwitches": true,
+        "hasLightgun": false,
+        "orientation": "vertical",
+        "screenResolution": "224x256",
+        "recommendedCore": "mame2003_plus"
+      }
+    }
+  ],
+  "metadata": {
+    "console": "arcade",
+    "totalGames": 1,
+    "lastUpdated": "2024-01-01",
+    "version": "1.0",
+    "coreInfo": {
+      "availableCores": [
+        {
+          "name": "MAME 2003",
+          "romset": "0.78",
+          "file": "mame2003_libretro_android.so"
+        },
+        {
+          "name": "MAME 2003-Plus",
+          "romset": "0.78+",
+          "file": "mame2003_plus_libretro_android.so"
+        },
+        {
+          "name": "MAME 2010",
+          "romset": "0.139",
+          "file": "mame2010_libretro_android.so"
+        },
+        {
+          "name": "FBNeo",
+          "romset": "latest",
+          "file": "fbneo_libretro_android.so"
+        }
+      ],
+      "notes": "Different cores support different ROM sets. Check compatibility before using."
+    }
+  }
+}
+

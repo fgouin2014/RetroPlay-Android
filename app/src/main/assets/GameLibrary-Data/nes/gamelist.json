@@ -1,0 +1,25 @@
+{
+  "games": [
+    {
+      "title": "Example NES Game",
+      "file": "example_game.nes",
+      "description": "This is an example NES game entry for testing RetroPlay.",
+      "developer": "Example Developer",
+      "publisher": "Example Publisher",
+      "releaseYear": "1990",
+      "genre": "Action",
+      "players": "1-2",
+      "rating": "4.5",
+      "favorite": false,
+      "image": "media/box2d/example_game.png",
+      "screenshot": "media/screenshot/example_game.png"
+    }
+  ],
+  "metadata": {
+    "console": "nes",
+    "totalGames": 1,
+    "lastUpdated": "2024-01-01",
+    "version": "1.0"
+  }
+}
+

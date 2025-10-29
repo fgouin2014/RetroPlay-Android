@@ -97,6 +97,7 @@ app/src/main/assets/GameLibrary-Data/nes/media/screenshot/*
 
 app/src/main/assets/GameLibrary-Data/fbneo/*
 !app/src/main/assets/GameLibrary-Data/fbneo/gamelist.json
+!app/src/main/assets/GameLibrary-Data/fbneo/README_*.txt
 !app/src/main/assets/GameLibrary-Data/fbneo/media/
 app/src/main/assets/GameLibrary-Data/fbneo/media/*
 !app/src/main/assets/GameLibrary-Data/fbneo/media/fallback.png
@@ -109,6 +110,7 @@ app/src/main/assets/GameLibrary-Data/fbneo/media/screenshot/*
 
 app/src/main/assets/GameLibrary-Data/arcade/*
 !app/src/main/assets/GameLibrary-Data/arcade/gamelist.json
+!app/src/main/assets/GameLibrary-Data/arcade/README_*.txt
 !app/src/main/assets/GameLibrary-Data/arcade/media/
 app/src/main/assets/GameLibrary-Data/arcade/media/*
 !app/src/main/assets/GameLibrary-Data/arcade/media/fallback.png

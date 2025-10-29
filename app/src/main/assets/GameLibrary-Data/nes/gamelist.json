@@ -1,24 +1,24 @@
 {
   "games": [
     {
-      "title": "Example NES Game",
-      "file": "example_game.nes",
-      "description": "This is an example NES game entry for testing RetroPlay.",
-      "developer": "Example Developer",
-      "publisher": "Example Publisher",
-      "releaseYear": "1990",
-      "genre": "Action",
-      "players": "1-2",
-      "rating": "4.5",
+      "title": "NES Test ROM",
+      "file": "nestest.nes",
+      "description": "Official NES CPU and instruction test ROM. Tests all CPU opcodes, addressing modes, and timing. Essential for emulator validation.",
+      "developer": "christopherpow",
+      "publisher": "Open Source",
+      "releaseYear": "2010",
+      "genre": "Test",
+      "players": "1",
+      "rating": "5.0",
       "favorite": false,
-      "image": "media/box2d/example_game.png",
-      "screenshot": "media/screenshot/example_game.png"
+      "image": "media/box2d/fallback.png",
+      "screenshot": "media/screenshot/fallback.png"
     }
   ],
   "metadata": {
     "console": "nes",
     "totalGames": 1,
-    "lastUpdated": "2024-01-01",
+    "lastUpdated": "2024-10-29",
     "version": "1.0"
   }
 }

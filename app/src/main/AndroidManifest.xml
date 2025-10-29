@@ -113,6 +113,13 @@
                 android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
                 android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
 
+            <activity
+                android:name=".RetroArchEmulatorActivity"
+                android:exported="false"
+                android:screenOrientation="sensor"
+                android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+                android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
+
             <!-- Cheat Activity (Codes de triche) -->
             <activity
                 android:name=".cheat.CheatActivity"

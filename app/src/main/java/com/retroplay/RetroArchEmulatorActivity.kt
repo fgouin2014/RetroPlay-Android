@@ -40,10 +40,6 @@ import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.Variable
 import com.swordfish.libretrodroid.ShaderConfig
-import com.swordfish.touchinput.radial.LemuroidPadTheme
-import com.swordfish.touchinput.radial.LocalLemuroidPadTheme
-import com.swordfish.touchinput.radial.layouts.*
-import com.swordfish.touchinput.radial.settings.TouchControllerSettingsManager
 import gg.padkit.PadKit
 import gg.padkit.inputevents.InputEvent
 import gg.padkit.ids.Id
@@ -306,10 +302,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         val lastTimestamp = crashPrefs.getLong(KEY_TIMESTAMP, 0)
         val currentTime = System.currentTimeMillis()
         
-        // Charger les settings depuis SharedPreferences
+        // SharedPreferences for overlay configuration
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
-        val savedSettings = loadSettings(prefs, console)
-        val savedVariant = GamePadLayoutManager.loadVariant(prefs, console)
         
         // Créer GLRetroView avec GLRetroViewData
         val data = com.swordfish.libretrodroid.GLRetroViewData(this).apply {
@@ -718,15 +712,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 showGamePadSettings = showGamePadSettings,
                 showQuickMenu = showQuickMenu,
                 overlaysVisible = overlaysVisible,
-                initialSettings = savedSettings,
-                initialVariant = savedVariant,
                 cheatApplier = cheatApplier,
-                onSettingsChanged = { newSettings ->
-                    saveSettings(prefs, console, newSettings)
-                },
-                onVariantChanged = { newVariant ->
-                    GamePadLayoutManager.saveVariant(prefs, console, newVariant)
-                },
                 onFinishActivity = {
                     // Fermer le jeu avec délai pour une transition fluide
                     safeFinishActivity(currentCoreFilePath, delayMs = 1200)
@@ -1094,30 +1080,6 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
     }
     
-    // Charger les settings depuis SharedPreferences
-    private fun loadSettings(prefs: android.content.SharedPreferences, console: String): TouchControllerSettingsManager.Settings {
-        val key = "gamepad_${console}_settings"
-        return TouchControllerSettingsManager.Settings(
-            scale = prefs.getFloat("${key}_scale", 0.5f),
-            rotation = prefs.getFloat("${key}_rotation", 0.0f),
-            marginX = prefs.getFloat("${key}_marginX", 0.0f),
-            marginY = prefs.getFloat("${key}_marginY", 0.0f)
-        )
-    }
-    
-    // Sauvegarder les settings dans SharedPreferences
-    private fun saveSettings(prefs: android.content.SharedPreferences, console: String, settings: TouchControllerSettingsManager.Settings) {
-        val key = "gamepad_${console}_settings"
-        prefs.edit().apply {
-            putFloat("${key}_scale", settings.scale)
-            putFloat("${key}_rotation", settings.rotation)
-            putFloat("${key}_marginX", settings.marginX)
-            putFloat("${key}_marginY", settings.marginY)
-            apply()
-        }
-        Log.i(TAG, "Settings saved for $console: scale=${settings.scale}, rotation=${settings.rotation}")
-    }
-    
     // Charger et appliquer les codes de triche au démarrage
     private fun loadAndApplyCheats() {
         try {
@@ -1269,11 +1231,7 @@ fun ComposeEmulatorScreen(
     showGamePadSettings: MutableState<Boolean>,
     showQuickMenu: MutableState<Boolean>,
     overlaysVisible: MutableState<Boolean>,
-    initialSettings: TouchControllerSettingsManager.Settings,
-    initialVariant: GamePadLayoutManager.LayoutVariant,
     cheatApplier: com.retroplay.cheat.CheatApplier,
-    onSettingsChanged: (TouchControllerSettingsManager.Settings) -> Unit,
-    onVariantChanged: (GamePadLayoutManager.LayoutVariant) -> Unit,
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
     onFinishActivity: () -> Unit,
@@ -1284,16 +1242,6 @@ fun ComposeEmulatorScreen(
     isZapperGame: Boolean = false,
     onZapperTouch: (android.view.MotionEvent) -> Boolean = { false }
 ) {
-    // Settings manager pour les gamepads (state mutable)
-    var settings by remember {
-        mutableStateOf(initialSettings)
-    }
-    
-    // Variante de layout (state mutable)
-    var layoutVariant by remember {
-        mutableStateOf(initialVariant)
-    }
-    
     // État pour le switch de layout RetroArch (overrides la préférence)
     var currentRetroArchLayout by remember { mutableStateOf<String?>(null) }
     
@@ -1780,28 +1728,10 @@ fun ComposeEmulatorScreen(
                     )
                 }
                 
-                // GamePad Settings Dialog avec LIVE PREVIEW et PERSISTANCE
-                if (showGamePadSettings.value) {
-                    GamePadSettingsDialog(
-                        console = console,
-                        currentSettings = settings,
-                        currentVariant = layoutVariant,
-                        onDismiss = { showGamePadSettings.value = false },
-                        onApply = { newSettings ->
-                            // Appliquer instantanément (live preview)
-                            settings = newSettings
-                            // Sauvegarder dans SharedPreferences
-                            onSettingsChanged(newSettings)
-                        },
-                        onVariantChange = { newVariant ->
-                            // Changer de variante et sauvegarder
-                            layoutVariant = newVariant
-                            onVariantChanged(newVariant)
-                        },
-                        context = retroView.context,
-                        prefs = prefs
-                    )
-                }
+                // TODO: Add RetroArchSettingsDialog here
+                // if (showGamePadSettings.value) {
+                //     RetroArchSettingsDialog(...)
+                // }
                 
                 // Cheat Codes Dialog
                 if (showCheatCodes) {
@@ -1929,28 +1859,16 @@ fun ComposeEmulatorScreen(
                     )
                 }
                 
-                // Box Zapper transparent par-dessus l'overlay RetroArch (zone de jeu uniquement)
-                // DOIT avoir exactement la même taille et le même offset que l'AndroidView
+                // Box Zapper transparent par-dessus l'overlay RetroArch
+                // PORTRAIT: 100% fullscreen | LANDSCAPE: TBD (à revoir plus tard)
                 if (isZapperGame && !showMainMenu.value && !showGamePadSettings.value && !showQuickMenu.value) {
-                    // Calculer le même offset vertical que l'AndroidView
-                    val zapperVerticalOffsetDp = if (isLandscape) {
-                        0.dp  // Landscape : pas d'offset
-                    } else {
-                        (-configuration.screenHeightDp * 0.20f).dp  // Portrait : 20% vers le haut
-                    }
-                    
                     // MODE DEBUG: Afficher la zone Zapper en rouge semi-transparent
-                    val showDebugZapperZone = true  // Mettre à false pour masquer
-                    
-                    // Calculer la largeur réelle de la Box (30% de l'écran)
-                    val boxWidthFraction = 0.30f
+                    val showDebugZapperZone = false  // false = transparent (production)
                     
                     androidx.compose.foundation.layout.Box(
                         modifier = Modifier
-                            .fillMaxWidth(boxWidthFraction)  // 30% de la largeur au centre
-                            .fillMaxHeight()  // Même hauteur que l'AndroidView
-                            .offset(y = zapperVerticalOffsetDp)  // MÊME offset que l'AndroidView
-                            .align(Alignment.Center)  // Centrer horizontalement
+                            .fillMaxWidth()   // 100% largeur (portrait)
+                            .fillMaxHeight()  // 100% hauteur (portrait)
                             .background(
                                 if (showDebugZapperZone) 
                                     Color.Red.copy(alpha = 0.3f)  // Rouge semi-transparent pour debug
@@ -1958,7 +1876,6 @@ fun ComposeEmulatorScreen(
                                     Color.Transparent
                             )
                             .pointerInteropFilter { event ->
-                                // Laisser passer les touches vers le gamepad si hors zone centrale
                                 val handled = onZapperTouch(event)
                                 android.util.Log.d("ZapperBox", "Touch at (${event.x}, ${event.y}) handled=$handled")
                                 handled
@@ -2305,428 +2222,7 @@ fun SlotSelectionDialog(
     }
 }
 
-@Composable
-fun GamePadSettingsDialog(
-    console: String,
-    currentSettings: TouchControllerSettingsManager.Settings,
-    currentVariant: GamePadLayoutManager.LayoutVariant,
-    onDismiss: () -> Unit,
-    onApply: (TouchControllerSettingsManager.Settings) -> Unit,
-    onVariantChange: (GamePadLayoutManager.LayoutVariant) -> Unit,
-    context: Context,
-    prefs: SharedPreferences
-) {
-    var scale by remember { mutableFloatStateOf(currentSettings.scale) }
-    var rotation by remember { mutableFloatStateOf(currentSettings.rotation) }
-    var marginX by remember { mutableFloatStateOf(currentSettings.marginX) }
-    var marginY by remember { mutableFloatStateOf(currentSettings.marginY) }
-    var selectedVariant by remember { mutableStateOf(currentVariant) }
-    
-    // État pour l'overlay RetroArch
-    val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
-    val availableOverlays = remember { assetManager.getCompatibleOverlays(console) }
-    
-    // Charger préférence actuelle
-    val currentOverlayPref = remember { com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console) }
-    var selectedOverlay by remember { mutableStateOf(currentOverlayPref?.overlayName ?: if (availableOverlays.isNotEmpty()) availableOverlays[0] else "") }
-    var selectedLandscapeLayout by remember { mutableStateOf(currentOverlayPref?.landscapeLayout ?: "landscape-A") }
-    var selectedPortraitLayout by remember { mutableStateOf(currentOverlayPref?.portraitLayout ?: "portrait-A") }
-    var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
-    
-    // État pour détecter si un slider est en train d'être bougé
-    var isAdjusting by remember { mutableStateOf(false) }
-    
-    // Liste des variantes disponibles pour cette console
-    val availableVariants = GamePadLayoutManager.getAvailableVariants(console)
-    
-    // Charger layouts disponibles pour l'overlay sélectionné (si RetroArch)
-    val availableLayouts = remember(selectedOverlay) {
-        if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH && selectedOverlay.isNotEmpty()) {
-            val layouts = assetManager.getAvailableLayouts(selectedOverlay)
-            android.util.Log.d("GamePadSettings", "Loaded ${layouts.size} layouts for '$selectedOverlay': ${layouts.joinToString()}")
-            layouts
-        } else {
-            emptyList()
-        }
-    }
-    
-    // Sauvegarder la préférence overlay quand modifiée
-    LaunchedEffect(selectedVariant, selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate) {
-        if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH && selectedOverlay.isNotEmpty()) {
-            val pref = com.retroplay.overlay.models.OverlayPreference(
-                enabled = true,
-                overlayName = selectedOverlay,
-                landscapeLayout = selectedLandscapeLayout,
-                portraitLayout = selectedPortraitLayout,
-                autoRotate = autoRotate
-            )
-            com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
-            android.util.Log.i("GamePadSettings", "✅ SAVED overlay pref for $console: overlay='$selectedOverlay' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate")
-        } else if (selectedVariant != GamePadLayoutManager.LayoutVariant.RETROARCH) {
-            // Désactiver RetroArch si autre variante choisie
-            com.retroplay.overlay.models.OverlayPreferenceManager.disable(prefs, console)
-        }
-    }
-    
-    // Alpha du fond : plus transparent quand on ajuste
-    val dialogAlpha = if (isAdjusting) 0x33000000 else 0x99000000
-    
-    // LIVE PREVIEW : Appliquer les changements instantanément
-    LaunchedEffect(scale, rotation, marginX, marginY) {
-        onApply(
-            TouchControllerSettingsManager.Settings(
-                scale = scale,
-                rotation = rotation,
-                marginX = marginX,
-                marginY = marginY
-            )
-        )
-    }
-    
-    // Appliquer changement de variante
-    LaunchedEffect(selectedVariant) {
-        if (selectedVariant != currentVariant) {
-            onVariantChange(selectedVariant)
-        }
-    }
-    
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.TopCenter  // Positionner en haut
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .fillMaxHeight(0.8f)  // Limiter hauteur à 80% de l'écran
-                    .padding(top = 40.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(dialogAlpha))
-            ) {
-            // Ajouter ScrollView pour le contenu qui peut être long
-            Column(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Titre
-                Text(
-                    "GamePad Settings",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White
-                )
-                
-                // Sélecteur de variante (si plusieurs disponibles)
-                if (availableVariants.size > 1) {
-                    Spacer(Modifier.height(4.dp))
-                    Text("Gamepad Mode", color = Color(0xFF4CAF50), style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        availableVariants.forEach { (variant, label) ->
-                            val isSelected = selectedVariant == variant
-                            TextButton(
-                                onClick = { selectedVariant = variant },
-                                colors = ButtonDefaults.textButtonColors(
-                                    containerColor = if (isSelected) Color(0xFF4CAF50) else Color.Transparent
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    label,
-                                    color = if (isSelected) Color.White else Color.Gray,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                    }
-                }
-                
-                // Configuration RetroArch Overlay (affiché seulement si variante RETROARCH sélectionnée)
-                if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
-                    Divider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 8.dp))
-                    
-                    Text("RetroArch Overlay", color = Color(0xFFFF9800), style = MaterialTheme.typography.titleMedium)
-                    
-                    // Sélection de l'overlay package
-                    if (availableOverlays.isNotEmpty()) {
-                        Text("Overlay Package", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
-                        Column {
-                            availableOverlays.forEach { overlayName ->
-                                val isSelected = selectedOverlay == overlayName
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { selectedOverlay = overlayName }
-                                        .background(if (isSelected) Color(0xFF4CAF50).copy(alpha = 0.3f) else Color.Transparent)
-                                        .padding(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { selectedOverlay = overlayName }
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        overlayName,
-                                        color = if (isSelected) Color.White else Color.Gray,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            }
-                        }
-                        
-                        // Sélection des layouts (si overlay chargé)
-                        if (selectedOverlay.isNotEmpty() && availableLayouts.isNotEmpty()) {
-                            Spacer(Modifier.height(12.dp))
-                            
-                            // Filtrer par orientation
-                            val landscapeLayouts = availableLayouts.filter { it.contains("landscape") }
-                            val portraitLayouts = availableLayouts.filter { it.contains("portrait") }
-                            
-                            if (landscapeLayouts.isNotEmpty()) {
-                                Text("Landscape Layout", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
-                                // Afficher tous les layouts en plusieurs lignes si nécessaire
-                                androidx.compose.foundation.layout.FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    landscapeLayouts.forEach { layoutName ->
-                                        val isSelected = selectedLandscapeLayout == layoutName
-                                        // Extraire label lisible (ex: "landscape-left-analog" -> "Left Analog")
-                                        val displayName = when {
-                                            layoutName.contains("both-analog") -> "Both Analog"
-                                            layoutName.contains("left-analog") && layoutName.contains("menu") -> "L.Analog+Menu"
-                                            layoutName.contains("left-analog") -> "Left Analog"
-                                            layoutName.contains("right-analog") -> "Right Analog"
-                                            layoutName.contains("analog") && layoutName.contains("menu") -> "Analog+Menu"
-                                            layoutName.contains("analog") -> "Analog"
-                                            layoutName.contains("menu") -> "Menu"
-                                            layoutName.endsWith("-B") -> "B"
-                                            else -> "Digital"
-                                        }
-                                        TextButton(
-                                            onClick = { 
-                                                android.util.Log.i("GamePadSettings", "Landscape layout changed: $selectedLandscapeLayout -> $layoutName")
-                                                selectedLandscapeLayout = layoutName
-                                            },
-                                            colors = ButtonDefaults.textButtonColors(
-                                                containerColor = if (isSelected) Color(0xFFFF9800) else Color.Transparent
-                                            ),
-                                            modifier = Modifier.padding(0.dp)
-                                        ) {
-                                            Text(
-                                                displayName,
-                                                color = if (isSelected) Color.Black else Color.Gray,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                maxLines = 1
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            if (portraitLayouts.isNotEmpty()) {
-                                Text("Portrait Layout", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
-                                // Afficher tous les layouts en plusieurs lignes si nécessaire
-                                androidx.compose.foundation.layout.FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    portraitLayouts.forEach { layoutName ->
-                                        val isSelected = selectedPortraitLayout == layoutName
-                                        // Extraire label lisible
-                                        val displayName = when {
-                                            layoutName.contains("analog") && layoutName.contains("menu") -> "Analog+Menu"
-                                            layoutName.contains("analog") -> "Analog"
-                                            layoutName.contains("menu") -> "Menu"
-                                            else -> "Digital"
-                                        }
-                                        TextButton(
-                                            onClick = { 
-                                                android.util.Log.i("GamePadSettings", "Portrait layout changed: $selectedPortraitLayout -> $layoutName")
-                                                selectedPortraitLayout = layoutName
-                                            },
-                                            colors = ButtonDefaults.textButtonColors(
-                                                containerColor = if (isSelected) Color(0xFFFF9800) else Color.Transparent
-                                            ),
-                                            modifier = Modifier.padding(0.dp)
-                                        ) {
-                                            Text(
-                                                displayName,
-                                                color = if (isSelected) Color.Black else Color.Gray,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                maxLines = 1
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // Auto-rotate option
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = autoRotate,
-                                    onCheckedChange = { autoRotate = it },
-                                    colors = CheckboxDefaults.colors(
-                                        checkedColor = Color(0xFFFF9800),
-                                        uncheckedColor = Color.Gray
-                                    )
-                                )
-                                Text(
-                                    "Auto-switch on rotation",
-                                    color = Color.LightGray,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            
-                            // DEBUG MODE - Afficher les hitboxes
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                var debugMode by remember { 
-                                    mutableStateOf(prefs.getBoolean("overlay_debug_mode", false)) 
-                                }
-                                
-                                androidx.compose.material3.Switch(
-                                    checked = debugMode,
-                                    onCheckedChange = { 
-                                        debugMode = it
-                                        prefs.edit().putBoolean("overlay_debug_mode", it).apply()
-                                    },
-                                    colors = androidx.compose.material3.SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFFFF5722),
-                                        checkedTrackColor = Color(0xFFFF5722).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color.Gray,
-                                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
-                                    )
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "DEBUG: Show hitboxes",
-                                    color = if (debugMode) Color(0xFFFF5722) else Color.Gray,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                    } else {
-                        Text(
-                            "No compatible overlays found for $console",
-                            color = Color.Gray,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    
-                    Divider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 8.dp))
-                }
-                
-                // Sliders Lemuroid (affichés SEULEMENT si mode Default ou Compact)
-                if (selectedVariant != GamePadLayoutManager.LayoutVariant.RETROARCH) {
-                    Text("Lemuroid Gamepad Adjustments", color = Color(0xFF2196F3), style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
-                    
-                    // Scale (0.75x - 1.5x)
-                    Text("Scale: ${String.format("%.2f", scale * 0.75f + 0.75f)}x", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
-                    Slider(
-                        value = scale,
-                        onValueChange = { 
-                            scale = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
-                        valueRange = 0f..1f,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    // Rotation (0° - 45°)
-                    Text("Rotation: ${String.format("%.0f", rotation * 45f)}°", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
-                    Slider(
-                        value = rotation,
-                        onValueChange = { 
-                            rotation = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
-                        valueRange = 0f..1f,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    // Margin X (0dp - 96dp)
-                    Text("Margin X: ${String.format("%.0f", marginX * 96f)}dp", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
-                    Slider(
-                        value = marginX,
-                        onValueChange = { 
-                            marginX = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
-                        valueRange = 0f..1f,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    // Margin Y (0dp - 96dp)
-                    Text("Margin Y: ${String.format("%.0f", marginY * 96f)}dp", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
-                    Slider(
-                        value = marginY,
-                        onValueChange = { 
-                            marginY = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
-                        valueRange = 0f..1f,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    Spacer(Modifier.height(8.dp))
-                }
-                
-                // Boutons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Bouton RESET TO DEFAULT (à gauche)
-                    androidx.compose.material3.Button(
-                        onClick = {
-                            // Forcer le retour au mode DEFAULT
-                            selectedVariant = GamePadLayoutManager.LayoutVariant.DEFAULT
-                            // Désactiver RetroArch overlay
-                            com.retroplay.overlay.models.OverlayPreferenceManager.disable(prefs, console)
-                            // Appliquer le changement
-                            onVariantChange(GamePadLayoutManager.LayoutVariant.DEFAULT)
-                            android.util.Log.i("GamePadSettings", "Force reset to DEFAULT mode for $console")
-                            onDismiss()
-                        },
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFF5722)
-                        )
-                    ) {
-                        Text("RESET TO DEFAULT", color = Color.White, style = MaterialTheme.typography.labelSmall)
-                    }
-                    
-                    // Bouton Done (à droite)
-                    androidx.compose.material3.Button(
-                        onClick = onDismiss,
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF4CAF50)
-                        )
-                    ) {
-                        Text("DONE", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
-            }
-        }
-    }
-}
+// GamePadSettingsDialog removed - will be replaced by RetroArchSettingsDialog
 
 // Quick Menu Dialog (Menu Rapide - Bouton Back)
 @Composable

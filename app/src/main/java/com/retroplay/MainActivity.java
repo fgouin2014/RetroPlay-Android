@@ -106,10 +106,10 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
             progressDialog.show();
             
             new Thread(() -> {
-                try {
-                    com.retroplay.overlay.assets.OverlayAssetManager assetManager = 
-                        new com.retroplay.overlay.assets.OverlayAssetManager(this);
-                    
+        try {
+            com.retroplay.overlay.assets.OverlayAssetManager assetManager = 
+                new com.retroplay.overlay.assets.OverlayAssetManager(this);
+            
                     Log.i(TAG, "Installing RetroArch overlays in background...");
                     boolean success = assetManager.installOverlaysIfNeeded(new com.retroplay.overlay.assets.OverlayAssetManager.ProgressCallback() {
                         @Override
@@ -135,8 +135,8 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
                         }
                     });
                     
-                    if (success) {
-                        Log.i(TAG, "RetroArch overlays installed successfully");
+            if (success) {
+                Log.i(TAG, "RetroArch overlays installed successfully");
                     } else {
                         Log.w(TAG, "RetroArch overlays installation failed");
                         runOnUiThread(() -> {
@@ -144,9 +144,9 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
                             // Still launch GameListActivity even if installation failed
                             launchGameListActivity();
                         });
-                    }
-                } catch (Exception e) {
-                    Log.e(TAG, "Error installing RetroArch overlays", e);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error installing RetroArch overlays", e);
                     runOnUiThread(() -> {
                         progressDialog.dismiss();
                         // Still launch GameListActivity even if error occurred

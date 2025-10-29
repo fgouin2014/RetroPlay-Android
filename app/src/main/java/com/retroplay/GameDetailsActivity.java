@@ -452,7 +452,10 @@ public class GameDetailsActivity extends AppCompatActivity {
         
         Log.i(TAG, "ROM path: " + romPath);
         
-        Intent intent = new Intent(this, NativeComposeEmulatorActivity.class);
+        // Determine which emulator activity to use based on user preference
+        Class<?> emulatorActivity = getEmulatorActivityClass(game.getConsole());
+        
+        Intent intent = new Intent(this, emulatorActivity);
         intent.putExtra("romPath", romPath);
         intent.putExtra("gameName", game.getName());
         intent.putExtra("console", game.getConsole());
@@ -782,7 +785,10 @@ public class GameDetailsActivity extends AppCompatActivity {
      * Lance l'emulateur avec une ROM deja extraite ou en cache
      */
     private void launchWithCachedRom(String romPath, int slot) {
-        Intent intent = new Intent(this, NativeComposeEmulatorActivity.class);
+        // Determine which emulator activity to use based on user preference
+        Class<?> emulatorActivity = getEmulatorActivityClass(game.getConsole());
+        
+        Intent intent = new Intent(this, emulatorActivity);
         intent.putExtra("romPath", romPath);
         intent.putExtra("gameName", game.getName());
         intent.putExtra("console", game.getConsole());
@@ -1193,6 +1199,24 @@ public class GameDetailsActivity extends AppCompatActivity {
             Log.w(TAG, "Erreur formatage date: " + releaseDate, e);
         }
         return releaseDate;
+    }
+    
+    /**
+     * Get the appropriate emulator activity class based on user preference
+     * 
+     * @param console Console ID (e.g., "nes", "snes", "psx")
+     * @return Class of emulator activity (NativeComposeEmulatorActivity or RetroArchEmulatorActivity)
+     */
+    private Class<?> getEmulatorActivityClass(String console) {
+        GamepadPreferenceManager.EmulatorMode mode = GamepadPreferenceManager.INSTANCE.loadMode(this, console);
+        
+        if (mode == GamepadPreferenceManager.EmulatorMode.RETROARCH) {
+            Log.i(TAG, "Launching with RetroArchEmulatorActivity for " + console);
+            return RetroArchEmulatorActivity.class;
+        } else {
+            Log.i(TAG, "Launching with NativeComposeEmulatorActivity for " + console);
+            return NativeComposeEmulatorActivity.class;
+        }
     }
     
     @Override

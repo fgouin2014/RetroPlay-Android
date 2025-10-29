@@ -62,10 +62,10 @@ import java.io.File
  * - Vector-based PlayStation symbols (uniform)
  * - LibretroDroid native cores (ARM64)
  */
-class NativeComposeEmulatorActivity : ComponentActivity() {
+class RetroArchEmulatorActivity : ComponentActivity() {
     
     companion object {
-        private const val TAG = "NativeComposeEmulator"
+        private const val TAG = "RetroArchEmulator"
         private const val CRASH_PREFS = "core_crash_detection"
         private const val KEY_LAST_GAME = "last_game_path"
         private const val KEY_LAST_CORE = "last_core_attempted"

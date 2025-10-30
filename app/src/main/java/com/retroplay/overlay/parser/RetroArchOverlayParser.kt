@@ -102,13 +102,13 @@ class RetroArchOverlayParser {
     private fun parseOverlay(lines: List<String>, index: Int): OverlayLayout? {
         val prefix = "overlay${index}_"
         
-        // Lire le nom de l'overlay
+        // Lire le nom de l'overlay (si absent, utiliser "overlay<index>")
         val name = lines.find { it.trim().startsWith("${prefix}name = ") }
             ?.substringAfter("\"")?.substringBefore("\"")
+            ?: "overlay$index"  // Fallback pour les overlays sans nom (ex: nes-small)
         
-        if (name == null) {
-            Log.w(TAG, "No name found for overlay $index")
-            return null
+        if (name.isEmpty()) {
+            Log.w(TAG, "Empty name for overlay $index, using fallback")
         }
         
         // Lire les propriétés

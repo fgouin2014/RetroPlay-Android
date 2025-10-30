@@ -115,7 +115,9 @@ fun RetroArchOverlayScreen(
                     onMenuToggle = onMenuToggle,
                     onAnalogMove = onAnalogMove,
                     swapAnalogSticks = swapAnalogSticks,
-                    invertAnalogY = invertAnalogY
+                    invertAnalogY = invertAnalogY,
+                    dpadDiagonalSensitivity = dpadDiagonalSensitivity,
+                    abxyDiagonalSensitivity = abxyDiagonalSensitivity
                 )
                 true
             }
@@ -286,7 +288,9 @@ private fun handleTouchEvent(
     onMenuToggle: () -> Unit,
     onAnalogMove: (String, Float, Float) -> Unit,
     swapAnalogSticks: Boolean = false,
-    invertAnalogY: Boolean = false
+    invertAnalogY: Boolean = false,
+    dpadDiagonalSensitivity: Int = 50,
+    abxyDiagonalSensitivity: Int = 50
 ): Boolean {
     val TAG = "TouchHandler"
     val ANALOG_DEADZONE = 0.15f  // 15% dead zone (zone morte)
@@ -348,7 +352,7 @@ private fun handleTouchEvent(
             
             // Si ce n'est pas un analog stick, traiter comme bouton normal
             val touchedButtons = detectButtonsAtPosition(
-                x, y, layout, screenSize
+                x, y, layout, screenSize, dpadDiagonalSensitivity, abxyDiagonalSensitivity
             )
             
             // DEBUG: Log si plusieurs boutons détectés (chevauchement potentiel)
@@ -419,7 +423,7 @@ private fun handleTouchEvent(
                 
                 // Si pas géré par analog, traiter comme bouton normal
                 if (!handledByAnalog) {
-                    val currentButtons = detectButtonsAtPosition(x, y, layout, screenSize)
+                    val currentButtons = detectButtonsAtPosition(x, y, layout, screenSize, dpadDiagonalSensitivity, abxyDiagonalSensitivity)
                     val previousButtons = pressedButtons[pointerId] ?: emptySet()
                     
                     // Boutons nouvellement pressés
@@ -567,7 +571,9 @@ private fun detectButtonsAtPosition(
     x: Float,
     y: Float,
     layout: OverlayLayout,
-    screenSize: IntSize
+    screenSize: IntSize,
+    dpadDiagonalSensitivity: Int = 50,
+    abxyDiagonalSensitivity: Int = 50
 ): Set<OverlayButton> {
     val touched = mutableSetOf<OverlayButton>()
     
@@ -587,8 +593,13 @@ private fun detectButtonsAtPosition(
                 val xDist = (x - centerX) / (button.width * screenSize.width)  // Normalisé
                 val yDist = (y - centerY) / (button.height * screenSize.height)  // Normalisé
                 
-                // Obtenir les directions 8-way
-                val directions = get8WayDirections(xDist, yDist)
+                // Obtenir les directions 8-way avec la bonne sensitivity
+                val sensitivity = if (button.type == OverlayButtonType.DPAD_AREA) {
+                    dpadDiagonalSensitivity
+                } else {
+                    abxyDiagonalSensitivity
+                }
+                val directions = get8WayDirections(xDist, yDist, sensitivity)
                 
                 // Mapper les directions vers les actions custom ou par défaut
                 // Defaults RetroArch (task_overlay.c lignes 138-156):

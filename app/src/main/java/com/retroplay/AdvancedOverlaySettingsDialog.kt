@@ -103,7 +103,7 @@ fun AdvancedOverlaySettingsDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.95f),  // Augmenté de 0.85 à 0.95 pour plus d'espace scroll
+                .fillMaxHeight(0.85f),  // Même taille que RetroArchSettingsDialog pour scroll
             colors = CardDefaults.cardColors(
                 containerColor = if (isTransparent) 
                     Color(0xDD000000).copy(alpha = 0.3f)  // Preview: 30% transparent

@@ -52,6 +52,9 @@ fun RetroArchSettingsDialog(
             if (availableOverlays.isNotEmpty()) availableOverlays[0] else ""
         ) 
     }
+    // Separate state for custom overlay path (ex: "flat/nes.cfg")
+    var selectedCustomPath by remember { mutableStateOf<String?>(null) }
+    
     var selectedLandscapeLayout by remember { mutableStateOf(currentOverlayPref?.landscapeLayout ?: "landscape-A") }
     var selectedPortraitLayout by remember { mutableStateOf(currentOverlayPref?.portraitLayout ?: "portrait-A") }
     var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
@@ -145,7 +148,8 @@ fun RetroArchSettingsDialog(
                         )
                     } else {
                         availableOverlays.forEach { overlayName ->
-                            val isSelected = selectedOverlay == overlayName
+                            // Standard overlay is selected only if no custom path is active
+                            val isSelected = selectedOverlay == overlayName && selectedCustomPath == null
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -158,13 +162,19 @@ fun RetroArchSettingsDialog(
                                         width = 1.dp,
                                         color = if (isSelected) Color(0xFF2196F3) else Color(0xFF444444)
                                     )
-                                    .clickable { selectedOverlay = overlayName }
+                                    .clickable { 
+                                        selectedCustomPath = null  // Clear custom selection
+                                        selectedOverlay = overlayName 
+                                    }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 RadioButton(
                                     selected = isSelected,
-                                    onClick = { selectedOverlay = overlayName },
+                                    onClick = { 
+                                        selectedCustomPath = null  // Clear custom selection
+                                        selectedOverlay = overlayName 
+                                    },
                                     colors = RadioButtonDefaults.colors(
                                         selectedColor = Color(0xFF2196F3),
                                         unselectedColor = Color(0xFF888888)
@@ -200,7 +210,8 @@ fun RetroArchSettingsDialog(
                         
                         customBrowsed.forEach { customPath ->
                             val customOverlayName = customPath.substringBefore("/")
-                            val isSelected = selectedOverlay == customOverlayName
+                            // Compare the FULL path, not just the overlay name
+                            val isSelected = selectedCustomPath == customPath
                             
                             Row(
                                 modifier = Modifier
@@ -214,13 +225,19 @@ fun RetroArchSettingsDialog(
                                         width = 1.dp,
                                         color = if (isSelected) Color(0xFFFF9800) else Color(0xFF444444)
                                     )
-                                    .clickable { selectedOverlay = customOverlayName }
+                                    .clickable { 
+                                        selectedCustomPath = customPath
+                                        selectedOverlay = customOverlayName
+                                    }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 RadioButton(
                                     selected = isSelected,
-                                    onClick = { selectedOverlay = customOverlayName },
+                                    onClick = { 
+                                        selectedCustomPath = customPath
+                                        selectedOverlay = customOverlayName
+                                    },
                                     colors = RadioButtonDefaults.colors(
                                         selectedColor = Color(0xFFFF9800),
                                         unselectedColor = Color(0xFF888888)

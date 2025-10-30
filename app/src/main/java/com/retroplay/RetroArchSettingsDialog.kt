@@ -773,14 +773,16 @@ fun RetroArchSettingsDialog(
         }
     }
     
-    // Advanced Settings Dialog
+    // Advanced Settings Dialog (remplace temporairement le dialog principal)
     if (showAdvancedSettings) {
+        // Ne pas afficher le dialog principal quand Advanced est ouvert (évite empilement)
         AdvancedOverlaySettingsDialog(
             console = console,
             onDismiss = { showAdvancedSettings = false },
             context = context,
             prefs = prefs
         )
+        return  // Skip l'affichage du dialog principal
     }
 }
 

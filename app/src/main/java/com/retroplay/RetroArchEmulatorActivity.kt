@@ -1762,6 +1762,10 @@ private fun ComposeEmulatorScreen(
                             showMainMenu.value = false
                             showGamePadSettings.value = true
                         },
+                        onAdvancedSettings = {
+                            showMainMenu.value = false
+                            showAdvancedOverlaySettings.value = true
+                        },
                         onCheatCodes = {
                             showMainMenu.value = false
                             showCheatCodes = true
@@ -2086,6 +2090,7 @@ private fun MainMenuDialog(
     onSaveGame: () -> Unit,
     onLoadGame: () -> Unit,
     onGamePadSettings: () -> Unit,
+    onAdvancedSettings: () -> Unit = {},  // Nouveau callback
     onCheatCodes: () -> Unit,
     onChangeCore: () -> Unit,
     onDipSwitches: () -> Unit,
@@ -2172,6 +2177,14 @@ private fun MainMenuDialog(
                         ) {
                             Text("Core Options", color = Color(0xFF64B5F6))
                         }
+                    }
+                    
+                    // Advanced Overlay Settings
+                    TextButton(
+                        onClick = onAdvancedSettings,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Advanced Overlay Settings", color = Color(0xFFFF9800))
                     }
                     
                     // Change Core

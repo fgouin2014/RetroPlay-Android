@@ -132,15 +132,19 @@ fun RetroArchOverlayScreen(
                 val displayHeightPx = button.modH * screenSize.height * overlayScale
                 
                 // Utiliser button.width/height (range_x/y) pour les HITBOXES uniquement
-                val hitboxWidthPx = button.width * screenSize.width * scaledLayout.rangeModifier * overlayScale
-                val hitboxHeightPx = button.height * screenSize.height * scaledLayout.rangeModifier * overlayScale
+                // IMPORTANT: Utiliser button.rangeModifier si != 1.0, sinon layout.rangeModifier
+                val effectiveRangeMod = if (button.rangeModifier != 1.0f) button.rangeModifier else scaledLayout.rangeModifier
+                val hitboxWidthPx = button.width * screenSize.width * effectiveRangeMod * overlayScale
+                val hitboxHeightPx = button.height * screenSize.height * effectiveRangeMod * overlayScale
                 
                 // Charger et afficher l'image du bouton
                 button.imagePath?.let { path ->
                     val bitmap = assetManager.loadButtonImage(overlayName, path)
                     if (bitmap != null) {
                         val imageBitmap = bitmap.asImageBitmap()
-                        val alpha = if (pressedButtons.values.any { it.contains(button) }) 1.0f else (0.7f * layout.alphaModifier)
+                        // IMPORTANT: Utiliser button.alphaModifier si défini, sinon layout.alphaModifier
+                        val effectiveAlphaMod = button.alphaModifier ?: scaledLayout.alphaModifier
+                        val alpha = if (pressedButtons.values.any { it.contains(button) }) effectiveAlphaMod else (0.7f * effectiveAlphaMod)
                         
                         // IMPORTANT: Utiliser modW et modH pour la taille d'affichage!
                         // RetroArch calcule mod_w = 2.0 * range_x et mod_h = 2.0 * range_y

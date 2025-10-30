@@ -35,7 +35,8 @@ fun RetroArchSettingsDialog(
     onDismiss: () -> Unit,
     context: Context,
     prefs: SharedPreferences,
-    onLoadCustomCfg: (() -> Unit)? = null  // Callback pour ouvrir file picker
+    onLoadCustomCfg: (() -> Unit)? = null,  // Callback pour ouvrir file picker
+    debugModeState: androidx.compose.runtime.MutableState<Boolean>  // État debug hitboxes
 ) {
     // Overlay Asset Manager
     val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
@@ -63,6 +64,13 @@ fun RetroArchSettingsDialog(
     
     // Semi-transparent state for preview (30% transparent for 2 seconds)
     var isTransparent by remember { mutableStateOf(false) }
+    
+    // Sauvegarder le mode debug quand il change
+    LaunchedEffect(debugModeState.value) {
+        prefs.edit()
+            .putBoolean("overlay_debug_mode", debugModeState.value)
+            .commit()
+    }
     
     // Available layouts for selected overlay
     val availableLayouts = remember(selectedOverlay, console) {
@@ -489,6 +497,80 @@ fun RetroArchSettingsDialog(
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color(0xFFE91E63),
                                     checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
+                                    uncheckedThumbColor = Color(0xFF888888),
+                                    uncheckedTrackColor = Color(0xFF444444)
+                                )
+                            )
+                        }
+                        
+                        Spacer(Modifier.height(16.dp))
+                        
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = Color(0xFF444444),
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                        
+                        // Auto-Rotate Toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Auto-switch on rotation",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Switch landscape/portrait layouts automatically",
+                                    color = Color(0xFF888888),
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Switch(
+                                checked = autoRotate,
+                                onCheckedChange = { autoRotate = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFF4CAF50),
+                                    checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
+                                    uncheckedThumbColor = Color(0xFF888888),
+                                    uncheckedTrackColor = Color(0xFF444444)
+                                )
+                            )
+                        }
+                        
+                        // DEBUG Toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "DEBUG: Show hitboxes",
+                                    color = Color(0xFFFFEB3B),
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Display colored hitboxes for debugging",
+                                    color = Color(0xFF888888),
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Switch(
+                                checked = debugModeState.value,
+                                onCheckedChange = { debugModeState.value = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFFFFEB3B),
+                                    checkedTrackColor = Color(0xFFFFEB3B).copy(alpha = 0.5f),
                                     uncheckedThumbColor = Color(0xFF888888),
                                     uncheckedTrackColor = Color(0xFF444444)
                                 )

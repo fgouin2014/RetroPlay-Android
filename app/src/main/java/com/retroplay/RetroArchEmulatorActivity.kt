@@ -1333,6 +1333,10 @@ private fun ComposeEmulatorScreen(
 ) {
     // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
+    // État debug mode (accessible partout dans le Composable)
+    val showDebug = remember { prefs.getBoolean("overlay_debug_mode", false) }
+    val debugModeState = remember { mutableStateOf(showDebug) }
+    
     // Variante de layout (state mutable)
     var layoutVariant by remember {
         mutableStateOf(initialVariant)
@@ -1476,7 +1480,8 @@ private fun ComposeEmulatorScreen(
                                 android.util.Log.d("ComposeEmulator", "⚙️ Preference changed: key='$key' | console='$console'")
                                 val matchesOverlay = key?.startsWith("overlay_$console") == true
                                 val matchesVariant = key == "gamepad_${console}_variant"
-                                android.util.Log.d("ComposeEmulator", "  matchesOverlay=$matchesOverlay, matchesVariant=$matchesVariant")
+                                val matchesDebug = key == "overlay_debug_mode"
+                                android.util.Log.d("ComposeEmulator", "  matchesOverlay=$matchesOverlay, matchesVariant=$matchesVariant, matchesDebug=$matchesDebug")
                                 
                                 if (matchesOverlay || matchesVariant) {
                                     val newPref = com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)
@@ -1484,6 +1489,11 @@ private fun ComposeEmulatorScreen(
                                     android.util.Log.i("ComposeEmulator", "🔄 Overlay preference reloaded for $console: overlay='${newPref?.overlayName}' landscape='${newPref?.landscapeLayout}' portrait='${newPref?.portraitLayout}'")
                                     // Reset currentRetroArchLayout pour forcer l'utilisation de la nouvelle préférence
                                     currentRetroArchLayout = null
+                                }
+                                
+                                if (matchesDebug) {
+                                    debugModeState.value = prefs.getBoolean("overlay_debug_mode", false)
+                                    android.util.Log.d("ComposeEmulator", "Debug mode changed: ${debugModeState.value}")
                                 }
                             }
                         }
@@ -1537,27 +1547,6 @@ private fun ComposeEmulatorScreen(
                             
                             if (layoutName != null) {
                                 overlayConfig?.layouts?.get(layoutName)?.let { overlayLayout ->
-                                // Lire le mode debug depuis les préférences
-                                val showDebug = remember { prefs.getBoolean("overlay_debug_mode", false) }
-                                val debugModeState = remember { mutableStateOf(showDebug) }
-                                
-                                // CRITIQUE: Garder une référence forte au listener pour éviter le garbage collection
-                                val debugListener = remember {
-                                    android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                                        if (key == "overlay_debug_mode") {
-                                            debugModeState.value = prefs.getBoolean("overlay_debug_mode", false)
-                                            android.util.Log.d("ComposeEmulator", "Debug mode changed: ${debugModeState.value}")
-                                        }
-                                    }
-                                }
-                                
-                                // Observer les changements de préférence
-                                DisposableEffect(Unit) {
-                                    prefs.registerOnSharedPreferenceChangeListener(debugListener)
-                                    onDispose {
-                                        prefs.unregisterOnSharedPreferenceChangeListener(debugListener)
-                                    }
-                                }
                                 
                                 // key() force le recompose quand layoutName OU orientation change
                                 // Afficher seulement si overlaysVisible est true
@@ -1806,7 +1795,8 @@ private fun ComposeEmulatorScreen(
                         onDismiss = { showGamePadSettings.value = false },
                         context = retroView.context,
                         prefs = prefs,
-                        onLoadCustomCfg = onLoadCustomCfg
+                        onLoadCustomCfg = onLoadCustomCfg,
+                        debugModeState = debugModeState
                     )
                 }
                 

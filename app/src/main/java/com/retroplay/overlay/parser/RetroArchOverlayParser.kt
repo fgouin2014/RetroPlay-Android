@@ -251,6 +251,9 @@ class RetroArchOverlayParser {
             val reachLeft = readFloat("reach_left", reachX)
             val reachRight = readFloat("reach_right", reachX)
             
+            // saturate_pct pour analog sticks (dead zone custom)
+            val saturatePct = readFloat("saturate_pct", 1.0f)
+            
             // Déterminer le type de bouton
             val buttonType = when (action.lowercase()) {
                 "analog_left" -> OverlayButtonType.ANALOG_LEFT
@@ -293,6 +296,7 @@ class RetroArchOverlayParser {
                 reachDown = reachDown,
                 reachLeft = reachLeft,
                 reachRight = reachRight,
+                analogSaturatePct = saturatePct,
                 modX = x - width,
                 modY = y - height,
                 modW = 2f * width,

@@ -18,11 +18,54 @@
         app:titleTextColor="@color/kitt_red"
         app:titleTextAppearance="@style/ToolbarTitleStyle" />
 
+    <!-- Dual-Color Pill Button (WASM Red | NATIVE Green) -->
+    <LinearLayout
+        android:id="@+id/dual_pill_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="?attr/actionBarSize"
+        android:orientation="horizontal"
+        android:paddingTop="12dp"
+        android:paddingBottom="8dp"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:gravity="center"
+        android:elevation="8dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:orientation="horizontal"
+            android:background="@android:color/transparent"
+            android:clipToOutline="true">
+
+            <!-- WASM Section (Red - Left Half) -->
+            <FrameLayout
+                android:id="@+id/pill_wasm"
+                android:layout_width="80dp"
+                android:layout_height="match_parent"
+                android:background="@drawable/pill_left_red_ripple"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <!-- NATIVE Section (Green - Right Half) -->
+            <FrameLayout
+                android:id="@+id/pill_native"
+                android:layout_width="80dp"
+                android:layout_height="match_parent"
+                android:background="@drawable/pill_right_green_ripple"
+                android:clickable="true"
+                android:focusable="true" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
     <!-- Main Content -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="?attr/actionBarSize">
+        android:layout_marginTop="108dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -366,19 +409,5 @@
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>
-
-    <!-- Floating Action Button -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabPlay"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:src="@drawable/ic_play_arrow_24"
-        app:backgroundTint="@color/kitt_red"
-        app:tint="@color/kitt_black"
-        app:layout_anchor="@id/toolbar"
-        app:layout_anchorGravity="bottom|end"
-        app:elevation="8dp"
-        android:contentDescription="Jouer" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

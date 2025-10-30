@@ -13,6 +13,7 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.FrameLayout;
 import android.content.Intent;
 import android.util.Log;
 import android.graphics.Color;
@@ -22,7 +23,6 @@ import com.bumptech.glide.Glide;
 import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.Chip;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
 /**
@@ -45,6 +45,8 @@ public class GameDetailsActivity extends AppCompatActivity {
     private MaterialButton cheatButton;
     private MaterialButton coreOverrideButton;
     private MaterialButton favoriteButton;
+    private FrameLayout pillWasm;
+    private FrameLayout pillNative;
     private LinearLayout nativeButtonsContainer;
     private FavoritesManager favoritesManager;
     
@@ -131,6 +133,8 @@ public class GameDetailsActivity extends AppCompatActivity {
         loadSaveButton = findViewById(R.id.load_save_button);
         cheatButton = findViewById(R.id.cheat_button);
         coreOverrideButton = findViewById(R.id.core_override_button);
+        pillWasm = findViewById(R.id.pill_wasm);
+        pillNative = findViewById(R.id.pill_native);
         nativeButtonsContainer = findViewById(R.id.native_buttons_container);
         
         // Emulator Mode Toggle
@@ -202,9 +206,16 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Vérifier si des sauvegardes existent dans les slots
         checkAndShowLoadSaveButton();
         
-        // Floating action button
-        FloatingActionButton fabPlay = findViewById(R.id.fabPlay);
-        fabPlay.setOnClickListener(v -> launchGame());
+        // Dual-Color Pill - WASM (Red) and Native (Green)
+        pillWasm.setOnClickListener(v -> {
+            Log.i(TAG, "WASM pill clicked - launching EmulatorJS");
+            launchGame();
+        });
+        
+        pillNative.setOnClickListener(v -> {
+            Log.i(TAG, "NATIVE pill clicked - launching RetroArch");
+            launchGameNative(0);  // 0 = new game
+        });
         
         // Favorite button
         favoriteButton = findViewById(R.id.favorite_button);

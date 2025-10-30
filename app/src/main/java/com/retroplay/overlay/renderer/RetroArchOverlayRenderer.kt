@@ -136,8 +136,27 @@ fun RetroArchOverlayScreen(
                         // C'est pour ça que les images du D-pad se chevauchent pour former un D-pad compact!
                         
                         // Position mod_x et mod_y (top-left corner de l'image)
-                        val modXPx = button.modX * screenSize.width
-                        val modYPx = button.modY * screenSize.height
+                        var modXPx = button.modX * screenSize.width
+                        var modYPx = button.modY * screenSize.height
+                        
+                        // MOVABLE: Si le bouton est movable (analog sticks), appliquer delta_x/delta_y
+                        // RetroArch: vertex_geom(..., mod_x + delta_x, mod_y + delta_y, ...)
+                        if (button.movable) {
+                            val analogState = when (button.type) {
+                                OverlayButtonType.ANALOG_LEFT -> analogLeftState.value
+                                OverlayButtonType.ANALOG_RIGHT -> analogRightState.value
+                                else -> null
+                            }
+                            
+                            if (analogState != null && analogState.isActivated) {
+                                // delta = (analog_value / 32768) * (range / 2.0)
+                                // Ici analogState.x/y sont déjà normalisés (-1.0 à 1.0)
+                                val deltaX = analogState.x * (button.width * screenSize.width / 2.0f)
+                                val deltaY = analogState.y * (button.height * screenSize.height / 2.0f)
+                                modXPx += deltaX
+                                modYPx += deltaY
+                            }
+                        }
                         
                         val topLeft = Offset(
                             x = modXPx,
@@ -492,11 +511,11 @@ private fun calculateAnalogValues(
     val xVal = xDist / rangeX
     val yVal = yDist / rangeY
     
-    // Saturation (analog_saturate_pct = 1.0 par défaut dans RetroArch)
-    // Nous pourrions parser ce paramètre depuis les .cfg si nécessaire
-    val saturate_pct = 1.0f
-    val xValSat = xVal / saturate_pct
-    val yValSat = yVal / saturate_pct
+    // Saturation (analog_saturate_pct dans RetroArch)
+    // Ex: saturate_pct = 0.75 signifie que les 75% internes contiennent toute la plage analog
+    // Au-delà de 75%, c'est complètement saturé (valeur max)
+    val xValSat = xVal / button.analogSaturatePct
+    val yValSat = yVal / button.analogSaturatePct
     
     // Clamp entre -1.0 et 1.0 (comme RetroArch)
     var finalX = xValSat.coerceIn(-1.0f, 1.0f)
@@ -548,12 +567,15 @@ private fun detectButtonsAtPosition(
                 val directions = get8WayDirections(xDist, yDist)
                 
                 // Mapper les directions vers les actions custom ou par défaut
+                // Defaults RetroArch (task_overlay.c lignes 138-156):
+                // DPAD_AREA: up=UP, down=DOWN, left=LEFT, right=RIGHT
+                // ABXY_AREA: up=X, down=B, left=Y, right=A
                 directions.forEach { dir ->
                     val mappedAction = when (dir) {
-                        "up" -> button.eightwayUp ?: "up"
-                        "down" -> button.eightwayDown ?: "down"
-                        "left" -> button.eightwayLeft ?: "left"
-                        "right" -> button.eightwayRight ?: "right"
+                        "up" -> button.eightwayUp ?: if (button.type == OverlayButtonType.ABXY_AREA) "x" else "up"
+                        "down" -> button.eightwayDown ?: if (button.type == OverlayButtonType.ABXY_AREA) "b" else "down"
+                        "left" -> button.eightwayLeft ?: if (button.type == OverlayButtonType.ABXY_AREA) "y" else "left"
+                        "right" -> button.eightwayRight ?: if (button.type == OverlayButtonType.ABXY_AREA) "a" else "right"
                         else -> null
                     }
                     

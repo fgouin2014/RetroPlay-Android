@@ -59,6 +59,7 @@ data class OverlayButton(
     val reachDown: Float = 1.0f,
     val reachLeft: Float = 1.0f,
     val reachRight: Float = 1.0f,
+    val analogSaturatePct: Float = 1.0f,  // overlayN_descM_saturate_pct (analog sticks)
     // Pré-calculs utiles pour rendu/hitbox (mod_x/w/y/h)
     val modX: Float = x - width,
     val modY: Float = y - height,

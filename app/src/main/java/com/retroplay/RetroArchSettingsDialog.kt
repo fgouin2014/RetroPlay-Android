@@ -90,7 +90,7 @@ fun RetroArchSettingsDialog(
                 .fillMaxWidth(0.95f)
                 .fillMaxHeight(0.85f),
             colors = CardDefaults.cardColors(
-                containerColor = if (isTransparent) Color(0xFF1E1E1E).copy(alpha = 0.3f) else Color(0xFF1E1E1E)
+                containerColor = if (isTransparent) Color(0xDD000000).copy(alpha = 0.3f) else Color(0xDD000000)
             )
         ) {
             Column(

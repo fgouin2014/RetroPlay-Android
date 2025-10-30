@@ -20,7 +20,20 @@ data class OverlayLayout(
     val normalized: Boolean = true,       // Coordonnées 0.0-1.0
     val rangeModifier: Float = 1.0f,      // Multiplier pour hit zones
     val alphaModifier: Float = 1.0f,      // Transparence
-    val buttons: List<OverlayButton>
+    val buttons: List<OverlayButton>,
+    val rect: OverlayRect? = null,        // overlay0_rect (custom positioning)
+    val backgroundImage: String? = null   // overlay0_overlay (image de fond)
+)
+
+/**
+ * Rectangle de positionnement custom pour un overlay
+ * overlay0_rect = "x,y,width,height" (normalized 0.0-1.0)
+ */
+data class OverlayRect(
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float
 )
 
 /**
@@ -50,7 +63,16 @@ data class OverlayButton(
     val modX: Float = x - width,
     val modY: Float = y - height,
     val modW: Float = 2f * width,
-    val modH: Float = 2f * height
+    val modH: Float = 2f * height,
+    // 8-way area custom mappings (pour dpad_area et abxy_area)
+    val eightwayUp: String? = null,           // overlayN_descM_up
+    val eightwayDown: String? = null,         // overlayN_descM_down
+    val eightwayLeft: String? = null,         // overlayN_descM_left
+    val eightwayRight: String? = null,        // overlayN_descM_right
+    val eightwayUpLeft: String? = null,       // overlayN_descM_up_left
+    val eightwayUpRight: String? = null,      // overlayN_descM_up_right
+    val eightwayDownLeft: String? = null,     // overlayN_descM_down_left
+    val eightwayDownRight: String? = null     // overlayN_descM_down_right
 ) {
     /**
      * Calcul de la hitbox réelle (range_x_hitbox) en appliquant reach_*
@@ -163,7 +185,9 @@ data class OverlayPreference(
     val overlayName: String,                     // "flat-nes", "dual-shock", etc.
     val landscapeLayout: String = "landscape-A", // Layout pour landscape
     val portraitLayout: String = "portrait-A",   // Layout pour portrait
-    val autoRotate: Boolean = true               // Auto-switch landscape/portrait
+    val autoRotate: Boolean = true,              // Auto-switch landscape/portrait
+    val swapAnalogSticks: Boolean = false,       // Inverser Left <-> Right sticks
+    val invertAnalogY: Boolean = false           // Inverser haut/bas (Y axis)
 )
 
 /**
@@ -184,6 +208,8 @@ object OverlayPreferenceManager {
             .putString("overlay_${console}_layout_landscape", preference.landscapeLayout)
             .putString("overlay_${console}_layout_portrait", preference.portraitLayout)
             .putBoolean("overlay_${console}_auto_rotate", preference.autoRotate)
+            .putBoolean("overlay_${console}_swap_analog_sticks", preference.swapAnalogSticks)
+            .putBoolean("overlay_${console}_invert_analog_y", preference.invertAnalogY)
             .commit()
     }
     
@@ -198,8 +224,10 @@ object OverlayPreferenceManager {
         val landscapeLayout = prefs.getString("overlay_${console}_layout_landscape", "landscape-A") ?: "landscape-A"
         val portraitLayout = prefs.getString("overlay_${console}_layout_portrait", "portrait-A") ?: "portrait-A"
         val autoRotate = prefs.getBoolean("overlay_${console}_auto_rotate", true)
+        val swapAnalogSticks = prefs.getBoolean("overlay_${console}_swap_analog_sticks", false)
+        val invertAnalogY = prefs.getBoolean("overlay_${console}_invert_analog_y", false)
         
-        return OverlayPreference(enabled, overlayName, landscapeLayout, portraitLayout, autoRotate)
+        return OverlayPreference(enabled, overlayName, landscapeLayout, portraitLayout, autoRotate, swapAnalogSticks, invertAnalogY)
     }
     
     fun disable(

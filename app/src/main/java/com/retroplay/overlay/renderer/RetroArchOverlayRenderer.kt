@@ -55,6 +55,8 @@ fun RetroArchOverlayScreen(
     onMenuToggle: () -> Unit = {},
     onAnalogMove: (String, Float, Float) -> Unit = { _, _, _ -> },  // Callback pour analog sticks (action, x, y)
     showDebug: Boolean = false,
+    swapAnalogSticks: Boolean = false,
+    invertAnalogY: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"
@@ -98,7 +100,9 @@ fun RetroArchOverlayScreen(
                     onButtonRelease = onButtonRelease,
                     onLayoutSwitch = onLayoutSwitch,
                     onMenuToggle = onMenuToggle,
-                    onAnalogMove = onAnalogMove
+                    onAnalogMove = onAnalogMove,
+                    swapAnalogSticks = swapAnalogSticks,
+                    invertAnalogY = invertAnalogY
                 )
                 true
             }
@@ -237,7 +241,9 @@ private fun handleTouchEvent(
     onButtonRelease: (String) -> Unit,
     onLayoutSwitch: (String) -> Unit,
     onMenuToggle: () -> Unit,
-    onAnalogMove: (String, Float, Float) -> Unit
+    onAnalogMove: (String, Float, Float) -> Unit,
+    swapAnalogSticks: Boolean = false,
+    invertAnalogY: Boolean = false
 ): Boolean {
     val TAG = "TouchHandler"
     val ANALOG_DEADZONE = 0.15f  // 15% dead zone (zone morte)
@@ -273,19 +279,22 @@ private fun handleTouchEvent(
             
             if (analogStick != null) {
                 // C'est un analog stick
-                val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier)
+                val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                 if (values != null) {
                     // Enregistrer le pointerId et activer le stick pour permettre hitbox étendue
+                    // Appliquer swap si demandé : LEFT devient RIGHT et RIGHT devient LEFT
                     when (analogStick.type) {
                         OverlayButtonType.ANALOG_LEFT -> {
                             analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
-                            onAnalogMove("analog_left", values.first, values.second)
-                            Log.d(TAG, "Analog LEFT: x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
+                            val actionName = if (swapAnalogSticks) "analog_right" else "analog_left"
+                            onAnalogMove(actionName, values.first, values.second)
+                            Log.d(TAG, "Analog LEFT (sent as $actionName): x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
                         }
                         OverlayButtonType.ANALOG_RIGHT -> {
                             analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
-                            onAnalogMove("analog_right", values.first, values.second)
-                            Log.d(TAG, "Analog RIGHT: x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
+                            val actionName = if (swapAnalogSticks) "analog_left" else "analog_right"
+                            onAnalogMove(actionName, values.first, values.second)
+                            Log.d(TAG, "Analog RIGHT (sent as $actionName): x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
                         }
                         else -> {}
                     }
@@ -341,10 +350,11 @@ private fun handleTouchEvent(
                     // Ce doigt contrôle le stick gauche
                     val leftStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
                     if (leftStick != null) {
-                        val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier)
+                        val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                         if (values != null) {
                             analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
-                            onAnalogMove("analog_left", values.first, values.second)
+                            val actionName = if (swapAnalogSticks) "analog_right" else "analog_left"
+                            onAnalogMove(actionName, values.first, values.second)
                         }
                         handledByAnalog = true
                     }
@@ -354,10 +364,11 @@ private fun handleTouchEvent(
                     // Ce doigt contrôle le stick droit
                     val rightStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
                     if (rightStick != null) {
-                        val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier)
+                        val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                         if (values != null) {
                             analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
-                            onAnalogMove("analog_right", values.first, values.second)
+                            val actionName = if (swapAnalogSticks) "analog_left" else "analog_right"
+                            onAnalogMove(actionName, values.first, values.second)
                         }
                         handledByAnalog = true
                     }
@@ -452,6 +463,7 @@ private fun handleTouchEvent(
 /**
  * Calculer les valeurs analogiques depuis une position de toucher
  * Implémentation basée sur RetroArch input_overlay_get_analog_state()
+ * @param invertY Si true, inverse l'axe Y (haut devient bas)
  * @return Pair(x, y) normalisées entre -1.0 et 1.0, ou null si hors dead zone
  */
 private fun calculateAnalogValues(
@@ -460,7 +472,8 @@ private fun calculateAnalogValues(
     button: OverlayButton,
     screenSize: IntSize,
     deadzone: Float,
-    layoutRangeMod: Float = 1.5f
+    layoutRangeMod: Float = 1.5f,
+    invertY: Boolean = false
 ): Pair<Float, Float>? {
     // Centre du stick en pixels (x_shift, y_shift dans RetroArch)
     val centerX = button.x * screenSize.width
@@ -486,8 +499,13 @@ private fun calculateAnalogValues(
     val yValSat = yVal / saturate_pct
     
     // Clamp entre -1.0 et 1.0 (comme RetroArch)
-    val finalX = xValSat.coerceIn(-1.0f, 1.0f)
-    val finalY = yValSat.coerceIn(-1.0f, 1.0f)
+    var finalX = xValSat.coerceIn(-1.0f, 1.0f)
+    var finalY = yValSat.coerceIn(-1.0f, 1.0f)
+    
+    // Appliquer inversion Y si demandé
+    if (invertY) {
+        finalY = -finalY
+    }
     
     // Vérifier dead zone simple (magnitude euclidienne)
     val magnitude = sqrt(finalX * finalX + finalY * finalY)
@@ -516,8 +534,36 @@ private fun detectButtonsAtPosition(
             return@forEach
         }
         
-        // Skip zones tactiles et boutons décoratifs (dpad_area, abxy_area, "nul")
+        // Traiter les zones 8-way (dpad_area, abxy_area)
         if (button.type == OverlayButtonType.DPAD_AREA || button.type == OverlayButtonType.ABXY_AREA) {
+            // Vérifier si le touch est dans la zone
+            if (isTouchInsideButton(x, y, button, layout.rangeModifier, screenSize)) {
+                // Calculer l'offset depuis le centre
+                val centerX = button.x * screenSize.width
+                val centerY = button.y * screenSize.height
+                val xDist = (x - centerX) / (button.width * screenSize.width)  // Normalisé
+                val yDist = (y - centerY) / (button.height * screenSize.height)  // Normalisé
+                
+                // Obtenir les directions 8-way
+                val directions = get8WayDirections(xDist, yDist)
+                
+                // Mapper les directions vers les actions custom ou par défaut
+                directions.forEach { dir ->
+                    val mappedAction = when (dir) {
+                        "up" -> button.eightwayUp ?: "up"
+                        "down" -> button.eightwayDown ?: "down"
+                        "left" -> button.eightwayLeft ?: "left"
+                        "right" -> button.eightwayRight ?: "right"
+                        else -> null
+                    }
+                    
+                    // Créer un bouton virtuel pour cette direction
+                    if (mappedAction != null) {
+                        val virtualButton = button.copy(action = mappedAction)
+                        touched.add(virtualButton)
+                    }
+                }
+            }
             return@forEach
         }
         
@@ -719,6 +765,76 @@ fun RetroArchOverlayDebug(
             
             // Label du bouton (debug)
             // Note: drawText nécessite TextMeasurer (Material3)
+        }
+    }
+}
+
+/**
+ * Calculer la direction 8-way basée sur l'offset (x_dist, y_dist) depuis le centre
+ * Identique à RetroArch input_overlay_get_eightway_state()
+ * 
+ * @param xDist Offset X depuis le centre (normalisé par range_x)
+ * @param yDist Offset Y depuis le centre (normalisé par range_y)
+ * @param diagonalSensitivity Sensibilité des diagonales (0-100, défaut 50)
+ * @return Liste des actions à déclencher (ex: ["left", "up"] pour diagonal up-left)
+ */
+private fun get8WayDirections(
+    xDist: Float,
+    yDist: Float,
+    diagonalSensitivity: Int = 50
+): List<String> {
+    // Calculer les slopes (pentes) pour définir les zones diagonales
+    val f = 2.0f * diagonalSensitivity / (100.0f + diagonalSensitivity)
+    val highAngle = f * (0.375 * Math.PI) + (1.0f - f) * (0.25 * Math.PI)  // 67.5 deg max
+    val lowAngle = f * (0.125 * Math.PI) + (1.0f - f) * (0.25 * Math.PI)   // 22.5 deg min
+    val slopeHigh = kotlin.math.tan(highAngle).toFloat()
+    val slopeLow = kotlin.math.tan(lowAngle).toFloat()
+    
+    // Éviter division par zéro
+    val xDistAdjusted = if (xDist == 0.0f) 0.0001f else xDist
+    val absSlope = kotlin.math.abs(yDist / xDistAdjusted)
+    
+    // Déterminer le quadrant et la direction
+    return when {
+        xDist > 0.0f -> {
+            when {
+                yDist < 0.0f -> {
+                    // Q1 (haut-droite)
+                    when {
+                        absSlope > slopeHigh -> listOf("up")
+                        absSlope < slopeLow -> listOf("right")
+                        else -> listOf("up", "right")  // diagonal up-right
+                    }
+                }
+                else -> {
+                    // Q4 (bas-droite)
+                    when {
+                        absSlope > slopeHigh -> listOf("down")
+                        absSlope < slopeLow -> listOf("right")
+                        else -> listOf("down", "right")  // diagonal down-right
+                    }
+                }
+            }
+        }
+        else -> {
+            when {
+                yDist < 0.0f -> {
+                    // Q2 (haut-gauche)
+                    when {
+                        absSlope > slopeHigh -> listOf("up")
+                        absSlope < slopeLow -> listOf("left")
+                        else -> listOf("up", "left")  // diagonal up-left
+                    }
+                }
+                else -> {
+                    // Q3 (bas-gauche)
+                    when {
+                        absSlope > slopeHigh -> listOf("down")
+                        absSlope < slopeLow -> listOf("left")
+                        else -> listOf("down", "left")  // diagonal down-left
+                    }
+                }
+            }
         }
     }
 }

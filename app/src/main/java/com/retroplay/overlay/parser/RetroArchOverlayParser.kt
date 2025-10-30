@@ -124,6 +124,25 @@ class RetroArchOverlayParser {
         val alphaMod = lines.find { it.trim().startsWith("${prefix}alpha_mod = ") }
             ?.substringAfter("= ")?.trim()?.toFloatOrNull() ?: 1.0f
         
+        // Parser overlay0_rect (custom positioning)
+        val rectLine = lines.find { it.trim().startsWith("${prefix}rect = ") }
+        val rect = if (rectLine != null) {
+            val rectValue = rectLine.substringAfter("\"").substringBefore("\"")
+            val rectParts = rectValue.split(",").map { it.trim().toFloatOrNull() ?: 0f }
+            if (rectParts.size >= 4) {
+                com.retroplay.overlay.models.OverlayRect(
+                    x = rectParts[0],
+                    y = rectParts[1],
+                    width = rectParts[2],
+                    height = rectParts[3]
+                )
+            } else null
+        } else null
+        
+        // Parser overlay0_overlay (background image)
+        val backgroundImage = lines.find { it.trim().startsWith("${prefix}overlay = ") }
+            ?.substringAfter("= ")?.trim()?.removePrefix("\"")?.removeSuffix("\"")
+        
         // Lire le nombre de descripteurs de boutons
         val descCount = lines.find { it.trim().startsWith("${prefix}descs = ") }
             ?.substringAfter("= ")?.trim()?.toIntOrNull() ?: 0
@@ -143,7 +162,9 @@ class RetroArchOverlayParser {
             normalized = normalized,
             rangeModifier = rangeMod,
             alphaModifier = alphaMod,
-            buttons = buttons
+            buttons = buttons,
+            rect = rect,
+            backgroundImage = backgroundImage
         )
     }
     
@@ -239,6 +260,20 @@ class RetroArchOverlayParser {
                 else -> OverlayButtonType.BUTTONS
             }
             
+            // Parser 8-way custom mappings pour dpad_area et abxy_area
+            fun readMapping(key: String): String? =
+                lines.find { it.trim().startsWith("${descKey}_${key} = ") }
+                    ?.substringAfter("= ")?.trim()
+            
+            val eightwayUp = readMapping("up")
+            val eightwayDown = readMapping("down")
+            val eightwayLeft = readMapping("left")
+            val eightwayRight = readMapping("right")
+            val eightwayUpLeft = readMapping("up_left")
+            val eightwayUpRight = readMapping("up_right")
+            val eightwayDownLeft = readMapping("down_left")
+            val eightwayDownRight = readMapping("down_right")
+            
             val button = OverlayButton(
                 action = action,
                 x = x,
@@ -261,7 +296,15 @@ class RetroArchOverlayParser {
                 modX = x - width,
                 modY = y - height,
                 modW = 2f * width,
-                modH = 2f * height
+                modH = 2f * height,
+                eightwayUp = eightwayUp,
+                eightwayDown = eightwayDown,
+                eightwayLeft = eightwayLeft,
+                eightwayRight = eightwayRight,
+                eightwayUpLeft = eightwayUpLeft,
+                eightwayUpRight = eightwayUpRight,
+                eightwayDownLeft = eightwayDownLeft,
+                eightwayDownRight = eightwayDownRight
             )
             
             // Log détaillé pour boutons système

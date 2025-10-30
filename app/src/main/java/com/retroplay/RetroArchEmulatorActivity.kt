@@ -1568,6 +1568,8 @@ private fun ComposeEmulatorScreen(
                                         overlayName = overlayPreference.overlayName,
                                         assetManager = assetManager,
                                         showDebug = debugModeState.value,
+                                        swapAnalogSticks = overlayPreference.swapAnalogSticks,
+                                        invertAnalogY = overlayPreference.invertAnalogY,
                                         onButtonPress = { action ->
                                             val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
                                             if (keyCodes.isNotEmpty()) {

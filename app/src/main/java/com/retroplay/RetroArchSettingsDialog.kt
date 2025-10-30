@@ -58,6 +58,8 @@ fun RetroArchSettingsDialog(
     var selectedLandscapeLayout by remember { mutableStateOf(currentOverlayPref?.landscapeLayout ?: "landscape-A") }
     var selectedPortraitLayout by remember { mutableStateOf(currentOverlayPref?.portraitLayout ?: "portrait-A") }
     var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
+    var swapAnalogSticks by remember { mutableStateOf(currentOverlayPref?.swapAnalogSticks ?: false) }
+    var invertAnalogY by remember { mutableStateOf(currentOverlayPref?.invertAnalogY ?: false) }
     
     // Semi-transparent state for preview (30% transparent for 2 seconds)
     var isTransparent by remember { mutableStateOf(false) }
@@ -72,17 +74,19 @@ fun RetroArchSettingsDialog(
     }
     
     // Save preferences when changed + trigger 30% transparency for 2 seconds
-    LaunchedEffect(selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate) {
+    LaunchedEffect(selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate, swapAnalogSticks, invertAnalogY) {
         if (selectedOverlay.isNotEmpty()) {
             val pref = com.retroplay.overlay.models.OverlayPreference(
                 enabled = true,
                 overlayName = selectedOverlay,
                 landscapeLayout = selectedLandscapeLayout,
                 portraitLayout = selectedPortraitLayout,
-                autoRotate = autoRotate
+                autoRotate = autoRotate,
+                swapAnalogSticks = swapAnalogSticks,
+                invertAnalogY = invertAnalogY
             )
             com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
-            android.util.Log.i("RetroArchSettings", "Saved overlay pref for $console: overlay='$selectedOverlay' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate")
+            android.util.Log.i("RetroArchSettings", "Saved overlay pref for $console: overlay='$selectedOverlay' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate swap=$swapAnalogSticks invertY=$invertAnalogY")
             
             // Trigger 30% transparency for 2 seconds to preview overlay
             isTransparent = true
@@ -403,6 +407,88 @@ fun RetroArchSettingsDialog(
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color(0xFF4CAF50),
                                     checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
+                                    uncheckedThumbColor = Color(0xFF888888),
+                                    uncheckedTrackColor = Color(0xFF444444)
+                                )
+                            )
+                        }
+                        
+                        Spacer(Modifier.height(16.dp))
+                        
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = Color(0xFF444444),
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                        
+                        Text(
+                            "Analog Stick Options",
+                            color = Color(0xFFFF9800),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        // Swap Analog Sticks Toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Swap Left/Right Sticks",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Swap analog stick L and R positions",
+                                    color = Color(0xFF888888),
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Switch(
+                                checked = swapAnalogSticks,
+                                onCheckedChange = { swapAnalogSticks = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFF2196F3),
+                                    checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
+                                    uncheckedThumbColor = Color(0xFF888888),
+                                    uncheckedTrackColor = Color(0xFF444444)
+                                )
+                            )
+                        }
+                        
+                        // Invert Y Axis Toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Invert Y Axis",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Invert up/down for analog sticks",
+                                    color = Color(0xFF888888),
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Switch(
+                                checked = invertAnalogY,
+                                onCheckedChange = { invertAnalogY = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFFE91E63),
+                                    checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
                                     uncheckedThumbColor = Color(0xFF888888),
                                     uncheckedTrackColor = Color(0xFF444444)
                                 )

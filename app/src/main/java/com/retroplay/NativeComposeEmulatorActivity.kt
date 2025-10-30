@@ -287,6 +287,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
         console = intent.getStringExtra("console") ?: "psx"
         gameName = intent.getStringExtra("gameName") ?: "Game"
+        val gameId = intent.getStringExtra("gameId") ?: gameName  // Use gameName as fallback
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
         
         // Détecter les jeux Zapper AVANT la création de GLRetroViewData
@@ -310,15 +311,15 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
         val savedSettings = loadSettings(prefs, console)
         
-        // Check emulator mode preference (from ConsoleConfigActivity)
-        val emulatorMode = GamepadPreferenceManager.loadMode(this, console)
-        val savedVariant = if (emulatorMode == GamepadPreferenceManager.EmulatorMode.RETROARCH) {
-            // User chose RETROARCH mode in settings -> force RetroArch overlays
-            Log.i(TAG, "⚙️ Emulator mode: RETROARCH (forced via ConsoleConfigActivity)")
+        // Check effective emulator mode (game override or console default)
+        val effectiveMode = GamepadPreferenceManager.getEffectiveMode(this, console, gameId)
+        val savedVariant = if (effectiveMode == GamepadPreferenceManager.EmulatorMode.RETROARCH) {
+            // User chose RETROARCH mode (console default or game override) -> force RetroArch overlays
+            Log.i(TAG, "⚙️ Emulator mode: RETROARCH (effective mode for $console/$gameId)")
             GamePadLayoutManager.LayoutVariant.RETROARCH
         } else {
-            // User chose NATIVE mode -> force Radial/Lemuroid gamepad
-            Log.i(TAG, "⚙️ Emulator mode: NATIVE (forced DEFAULT variant)")
+            // User chose NATIVE mode (console default or game override) -> force Radial/Lemuroid gamepad
+            Log.i(TAG, "⚙️ Emulator mode: NATIVE (effective mode for $console/$gameId)")
             GamePadLayoutManager.LayoutVariant.DEFAULT
         }
         

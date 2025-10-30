@@ -23,6 +23,7 @@ import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.switchmaterial.SwitchMaterial;
 
 /**
  * Activity pour afficher les détails d'un jeu
@@ -46,6 +47,12 @@ public class GameDetailsActivity extends AppCompatActivity {
     private MaterialButton favoriteButton;
     private LinearLayout nativeButtonsContainer;
     private FavoritesManager favoritesManager;
+    
+    // Emulator Mode Toggle
+    private SwitchMaterial emulatorModeSwitch;
+    private TextView consoleDefaultInfo;
+    private String currentConsole;
+    private String currentGameId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,6 +73,10 @@ public class GameDetailsActivity extends AppCompatActivity {
         
         Log.i(TAG, "Affichage des détails pour: " + game.getName());
         
+        // Initialiser les variables console et gameId
+        currentConsole = game.getConsole();
+        currentGameId = game.getId();
+        
         // Initialiser le manager des favoris
         favoritesManager = FavoritesManager.getInstance(this);
         
@@ -73,6 +84,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         setupViews();
         populateGameDetails();
         setupButtons();
+        setupEmulatorModeToggle();
     }
     
     private void setupFullscreenMode() {
@@ -120,6 +132,10 @@ public class GameDetailsActivity extends AppCompatActivity {
         cheatButton = findViewById(R.id.cheat_button);
         coreOverrideButton = findViewById(R.id.core_override_button);
         nativeButtonsContainer = findViewById(R.id.native_buttons_container);
+        
+        // Emulator Mode Toggle
+        emulatorModeSwitch = findViewById(R.id.emulatorModeSwitch);
+        consoleDefaultInfo = findViewById(R.id.consoleDefaultInfo);
     }
     
            private void populateGameDetails() {
@@ -458,6 +474,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         Intent intent = new Intent(this, emulatorActivity);
         intent.putExtra("romPath", romPath);
         intent.putExtra("gameName", game.getName());
+        intent.putExtra("gameId", game.getId());
         intent.putExtra("console", game.getConsole());
         intent.putExtra("loadSlot", slot);  // 0 = nouvelle partie, 1-5 = charger slot
         
@@ -791,6 +808,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         Intent intent = new Intent(this, emulatorActivity);
         intent.putExtra("romPath", romPath);
         intent.putExtra("gameName", game.getName());
+        intent.putExtra("gameId", game.getId());
         intent.putExtra("console", game.getConsole());
         intent.putExtra("loadSlot", slot);
         startActivity(intent);
@@ -1215,11 +1233,52 @@ public class GameDetailsActivity extends AppCompatActivity {
      * @return Class of emulator activity (always NativeComposeEmulatorActivity for now)
      */
     private Class<?> getEmulatorActivityClass(String console) {
-        GamepadPreferenceManager.EmulatorMode mode = GamepadPreferenceManager.INSTANCE.loadMode(this, console);
+        // Use effective mode (game override or console default)
+        GamepadPreferenceManager.EmulatorMode effectiveMode = GamepadPreferenceManager.INSTANCE.getEffectiveMode(this, currentConsole, currentGameId);
         
         // For now, always use NativeComposeEmulatorActivity (supports both NATIVE and RETROARCH modes)
-        Log.i(TAG, "Launching with NativeComposeEmulatorActivity (mode: " + mode + ") for " + console);
+        Log.i(TAG, "Launching with NativeComposeEmulatorActivity (effective mode: " + effectiveMode + ") for " + console + "/" + currentGameId);
         return NativeComposeEmulatorActivity.class;
+    }
+    
+    /**
+     * Setup the emulator mode toggle switch
+     */
+    private void setupEmulatorModeToggle() {
+        // Load console default mode
+        GamepadPreferenceManager.EmulatorMode consoleMode = GamepadPreferenceManager.INSTANCE.loadMode(this, currentConsole);
+        
+        // Load effective mode (game override or console default)
+        GamepadPreferenceManager.EmulatorMode effectiveMode = GamepadPreferenceManager.INSTANCE.getEffectiveMode(this, currentConsole, currentGameId);
+        
+        // Check if game has an override
+        boolean hasOverride = GamepadPreferenceManager.INSTANCE.hasGameOverride(this, currentConsole, currentGameId);
+        
+        // Set switch state (true = RETROARCH, false = NATIVE)
+        emulatorModeSwitch.setChecked(effectiveMode == GamepadPreferenceManager.EmulatorMode.RETROARCH);
+        
+        // Update console default info
+        String consoleModeLabel = consoleMode == GamepadPreferenceManager.EmulatorMode.NATIVE ? "NATIVE" : "RETROARCH";
+        consoleDefaultInfo.setText("Console default: " + consoleModeLabel);
+        
+        // Set up switch listener
+        emulatorModeSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            GamepadPreferenceManager.EmulatorMode selectedMode = isChecked ? 
+                GamepadPreferenceManager.EmulatorMode.RETROARCH : 
+                GamepadPreferenceManager.EmulatorMode.NATIVE;
+            
+            if (selectedMode == consoleMode) {
+                // Same as console default, remove override
+                GamepadPreferenceManager.INSTANCE.removeGameOverride(this, currentConsole, currentGameId);
+                Log.i(TAG, "Removed game override for " + currentGameId + " (now using console default)");
+            } else {
+                // Different from console default, save override
+                GamepadPreferenceManager.INSTANCE.saveGameOverride(this, currentConsole, currentGameId, selectedMode);
+                Log.i(TAG, "Saved game override for " + currentGameId + ": " + selectedMode);
+            }
+        });
+        
+        Log.i(TAG, "Emulator mode toggle setup - Console: " + consoleMode + ", Effective: " + effectiveMode + ", Has Override: " + hasOverride);
     }
     
     @Override

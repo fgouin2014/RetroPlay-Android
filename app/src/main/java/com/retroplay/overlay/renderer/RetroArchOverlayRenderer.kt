@@ -57,6 +57,7 @@ fun RetroArchOverlayScreen(
     onLayoutSwitch: (String) -> Unit,
     onMenuToggle: () -> Unit = {},
     onAnalogMove: (String, Float, Float) -> Unit = { _, _, _ -> },  // Callback pour analog sticks (action, x, y)
+    onHotkey: (String) -> Unit = {},  // Callback pour hotkeys RetroArch
     showDebug: Boolean = false,
     swapAnalogSticks: Boolean = false,
     invertAnalogY: Boolean = false,
@@ -446,7 +447,7 @@ private fun handleTouchEvent(
             
             // Déclencher les callbacks
             touchedButtons.forEach { button ->
-                // Actions spéciales
+                // Actions spéciales (overlay control)
                 if (RetroArchButtonMapping.isOverlayControlAction(button.action)) {
                     if (button.action.startsWith("overlay_next") && button.nextTarget != null) {
                         // Tous les boutons overlay_next changent de layout (RetroArch officiel)
@@ -456,6 +457,10 @@ private fun handleTouchEvent(
                         Log.i(TAG, "SYSTEM BUTTON: MENU | Img='${button.imagePath}' | Normalized center: (${button.x}, ${button.y}) | Touch px: ($x, $y)")
                         onMenuToggle()
                     }
+                } else if (RetroArchButtonMapping.isHotkeyAction(button.action)) {
+                    // Hotkeys RetroArch (save/load/rewind/fast_forward, etc.)
+                    Log.i(TAG, "HOTKEY: ${button.action} | Img='${button.imagePath}' | Touch px: ($x, $y)")
+                    onHotkey(button.action)
                 } else {
                     // Actions normales (boutons gamepad)
                     Log.d(TAG, "Button pressed: ${button.action}")
@@ -540,7 +545,10 @@ private fun handleTouchEvent(
                     // Boutons nouvellement pressés
                     val newButtons = currentButtons - previousButtons
                     newButtons.forEach { button ->
-                        if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
+                        if (RetroArchButtonMapping.isHotkeyAction(button.action)) {
+                            Log.i(TAG, "HOTKEY (move): ${button.action}")
+                            onHotkey(button.action)
+                        } else if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
                             Log.d(TAG, "Button pressed (move): ${button.action}")
                             onButtonPress(button.action)
                         }
@@ -549,7 +557,7 @@ private fun handleTouchEvent(
                     // Boutons relâchés
                     val releasedButtons = previousButtons - currentButtons
                     releasedButtons.forEach { button ->
-                        if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
+                        if (!RetroArchButtonMapping.isOverlayControlAction(button.action) && !RetroArchButtonMapping.isHotkeyAction(button.action)) {
                             Log.d(TAG, "Button released (move): ${button.action}")
                             onButtonRelease(button.action)
                         }
@@ -579,10 +587,10 @@ private fun handleTouchEvent(
                 Log.d(TAG, "Analog RIGHT released")
             }
             
-            // Relâcher tous les boutons de ce pointeur
+            // Relâcher tous les boutons de ce pointeur (pas les hotkeys, ils sont one-shot)
             val releasedButtons = pressedButtons[pointerId] ?: emptySet()
             releasedButtons.forEach { button ->
-                if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
+                if (!RetroArchButtonMapping.isOverlayControlAction(button.action) && !RetroArchButtonMapping.isHotkeyAction(button.action)) {
                     Log.d(TAG, "Button released: ${button.action}")
                     onButtonRelease(button.action)
                 }
@@ -604,9 +612,9 @@ private fun handleTouchEvent(
                 Log.d(TAG, "Analog RIGHT released (cancel)")
             }
             
-            // Relâcher tous les boutons
+            // Relâcher tous les boutons (pas les hotkeys, ils sont one-shot)
             pressedButtons.flatMap { it.value }.distinct().forEach { button ->
-                if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
+                if (!RetroArchButtonMapping.isOverlayControlAction(button.action) && !RetroArchButtonMapping.isHotkeyAction(button.action)) {
                     Log.d(TAG, "Button released (cancel): ${button.action}")
                     onButtonRelease(button.action)
                 }

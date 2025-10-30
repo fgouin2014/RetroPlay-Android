@@ -183,6 +183,25 @@ object RetroArchButtonMapping {
     }
     
     /**
+     * Hotkeys RetroArch (actions spéciales)
+     */
+    val HOTKEY_ACTIONS = setOf(
+        // Save/Load states
+        "save_state", "load_state",
+        "state_slot_increase", "state_slot_decrease",
+        // Rewind / Fast forward
+        "rewind", "toggle_fast_forward", "hold_fast_forward",
+        // Reset / Pause
+        "reset", "pause_toggle",
+        // Screenshot
+        "screenshot",
+        // Shader cycling
+        "shader_next", "shader_prev",
+        // Misc
+        "toggle_slowmotion", "frame_advance"
+    )
+    
+    /**
      * Vérifier si c'est une action de contrôle overlay (non-input)
      */
     fun isOverlayControlAction(action: String): Boolean {
@@ -190,6 +209,13 @@ object RetroArchButtonMapping {
                action.startsWith("menu_toggle") ||
                action == "nul" ||
                action == "null"
+    }
+    
+    /**
+     * Vérifier si c'est un hotkey RetroArch
+     */
+    fun isHotkeyAction(action: String): Boolean {
+        return HOTKEY_ACTIONS.contains(action)
     }
     
     /**

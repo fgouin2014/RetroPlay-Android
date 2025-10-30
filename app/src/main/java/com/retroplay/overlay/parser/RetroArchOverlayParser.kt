@@ -32,7 +32,8 @@ class RetroArchOverlayParser {
         }
         
         try {
-            val lines = cfgFile.readLines()
+            // Lire le fichier avec support #include (jusqu'à 16 niveaux)
+            val lines = readConfigWithIncludes(cfgFile, 0)
             
             // Lire le nombre total d'overlays
             val totalOverlays = lines.find { it.trim().startsWith("overlays = ") }
@@ -61,6 +62,38 @@ class RetroArchOverlayParser {
             Log.e(TAG, "Error parsing config file", e)
             return null
         }
+    }
+
+    /**
+     * Lecture récursive d'un fichier .cfg avec support des directives #include
+     * Compatibilité avec RetroArch (MAX_INCLUDE_DEPTH = 16)
+     */
+    private fun readConfigWithIncludes(file: File, depth: Int): List<String> {
+        if (depth >= 16) return emptyList()
+        val baseDir = file.parentFile
+        val result = mutableListOf<String>()
+        val raw = try { file.readLines() } catch (e: Exception) { emptyList<String>() }
+        for (line in raw) {
+            // Détecter commentaire/directive (#...)
+            if (line.trim().startsWith("#")) {
+                val comment = line.trim().substring(1).trim()
+                if (comment.startsWith("include ")) {
+                    // extraire valeur après include (peut être entre guillemets)
+                    val value = comment.removePrefix("include").trim()
+                    val includePath = value.trim().trim('"')
+                    val includeFile = File(baseDir, includePath)
+                    if (includeFile.exists()) {
+                        result += readConfigWithIncludes(includeFile, depth + 1)
+                    } else {
+                        Log.w(TAG, "Include file not found: ${includeFile.absolutePath}")
+                    }
+                }
+                // ignorer les autres directives/commentaires
+                continue
+            }
+            result += line
+        }
+        return result
     }
     
     /**
@@ -175,6 +208,27 @@ class RetroArchOverlayParser {
             // Range modifier pour analog sticks (sensibilité)
             val rangeModLine = lines.find { it.trim().startsWith("${descKey}_range_mod = ") }
             val rangeModifier = rangeModLine?.substringAfter("= ")?.trim()?.toFloatOrNull() ?: 1.0f
+
+            // Extras RetroArch: alpha_mod, exclusive, range_mod_exclusive, movable, reach_*
+            val alphaMod = lines.find { it.trim().startsWith("${descKey}_alpha_mod = ") }
+                ?.substringAfter("= ")?.trim()?.toFloatOrNull()
+            val exclusive = lines.find { it.trim().startsWith("${descKey}_exclusive = ") }
+                ?.substringAfter("= ")?.trim()?.toBooleanStrictOrNull() ?: false
+            val rangeModExclusive = lines.find { it.trim().startsWith("${descKey}_range_mod_exclusive = ") }
+                ?.substringAfter("= ")?.trim()?.toBooleanStrictOrNull() ?: false
+            val movable = lines.find { it.trim().startsWith("${descKey}_movable = ") }
+                ?.substringAfter("= ")?.trim()?.toBooleanStrictOrNull() ?: false
+
+            fun readFloat(key: String, default: Float): Float =
+                lines.find { it.trim().startsWith("${descKey}_${key} = ") }
+                    ?.substringAfter("= ")?.trim()?.toFloatOrNull() ?: default
+
+            val reachX = readFloat("reach_x", 1.0f)
+            val reachY = readFloat("reach_y", 1.0f)
+            val reachUp = readFloat("reach_up", reachY)
+            val reachDown = readFloat("reach_down", reachY)
+            val reachLeft = readFloat("reach_left", reachX)
+            val reachRight = readFloat("reach_right", reachX)
             
             // Déterminer le type de bouton
             val buttonType = when (action.lowercase()) {
@@ -195,7 +249,19 @@ class RetroArchOverlayParser {
                 imagePath = imagePath,
                 nextTarget = nextTarget,
                 type = buttonType,
-                rangeModifier = rangeModifier
+                rangeModifier = rangeModifier,
+                alphaModifier = alphaMod,
+                exclusive = exclusive,
+                rangeModExclusive = rangeModExclusive,
+                movable = movable,
+                reachUp = reachUp,
+                reachDown = reachDown,
+                reachLeft = reachLeft,
+                reachRight = reachRight,
+                modX = x - width,
+                modY = y - height,
+                modW = 2f * width,
+                modH = 2f * height
             )
             
             // Log détaillé pour boutons système

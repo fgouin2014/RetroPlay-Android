@@ -53,9 +53,9 @@ fun RetroArchSettingsDialog(
     var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
     
     // Available layouts for selected overlay
-    val availableLayouts = remember(selectedOverlay) {
+    val availableLayouts = remember(selectedOverlay, console) {
         if (selectedOverlay.isNotEmpty()) {
-            assetManager.getAvailableLayouts(selectedOverlay)
+            assetManager.getAvailableLayouts(selectedOverlay, console)
         } else {
             emptyList()
         }

@@ -259,8 +259,8 @@ object GamePadLayoutManager {
         
         // Charger la configuration de l'overlay
         val assetManager = remember { OverlayAssetManager(context) }
-        val overlayConfig = remember(overlayPreference.overlayName) {
-            assetManager.loadOverlayConfig(overlayPreference.overlayName)
+        val overlayConfig = remember(overlayPreference.overlayName, console) {
+            assetManager.loadOverlayConfig(overlayPreference.overlayName, console)
         }
         
         if (overlayConfig == null) {

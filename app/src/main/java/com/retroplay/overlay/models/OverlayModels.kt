@@ -31,12 +31,26 @@ data class OverlayButton(
     val x: Float,                         // Position X (0.0-1.0 if normalized)
     val y: Float,                         // Position Y (0.0-1.0 if normalized)
     val shape: ButtonShape,               // RADIAL or RECT
-    val width: Float,                     // Width (0.0-1.0 if normalized)
-    val height: Float,                    // Height (0.0-1.0 if normalized)
+    val width: Float,                     // Width (range_x) (0.0-1.0 if normalized)
+    val height: Float,                    // Height (range_y) (0.0-1.0 if normalized)
     val imagePath: String? = null,        // "img/A.png"
     val nextTarget: String? = null,       // Pour overlay_next buttons
     val type: OverlayButtonType = OverlayButtonType.BUTTONS,  // Type de bouton
-    val rangeModifier: Float = 1.0f       // Multiplier pour analog sticks (sensibilité)
+    val rangeModifier: Float = 1.0f,      // Multiplier pour analog sticks (sensibilité)
+    // Extensions pour compat 100% RetroArch
+    val alphaModifier: Float? = null,     // overlayN_descM_alpha_mod
+    val exclusive: Boolean = false,       // overlayN_descM_exclusive
+    val rangeModExclusive: Boolean = false, // overlayN_descM_range_mod_exclusive
+    val movable: Boolean = false,         // overlayN_descM_movable
+    val reachUp: Float = 1.0f,            // overlayN_descM_reach_up/_y
+    val reachDown: Float = 1.0f,
+    val reachLeft: Float = 1.0f,
+    val reachRight: Float = 1.0f,
+    // Pré-calculs utiles pour rendu/hitbox (mod_x/w/y/h)
+    val modX: Float = x - width,
+    val modY: Float = y - height,
+    val modW: Float = 2f * width,
+    val modH: Float = 2f * height
 )
 
 /**

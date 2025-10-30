@@ -1463,8 +1463,8 @@ private fun ComposeEmulatorScreen(
                         if (overlayPreference != null) {
                             val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(retroView.context) }
                             // Recharger la config si le nom de l'overlay change
-                            val overlayConfig = remember(overlayPreference.overlayName) {
-                                assetManager.loadOverlayConfig(overlayPreference.overlayName)
+                            val overlayConfig = remember(overlayPreference.overlayName, console) {
+                                assetManager.loadOverlayConfig(overlayPreference.overlayName, console)
                             }
                             
                             // Utiliser currentRetroArchLayout si défini (boutons overlay_next), 
@@ -2349,9 +2349,9 @@ private fun GamePadSettingsDialog(
     val availableVariants = GamePadLayoutManager.getAvailableVariants(console)
     
     // Charger layouts disponibles pour l'overlay sélectionné (si RetroArch)
-    val availableLayouts = remember(selectedOverlay) {
+    val availableLayouts = remember(selectedOverlay, console) {
         if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH && selectedOverlay.isNotEmpty()) {
-            val layouts = assetManager.getAvailableLayouts(selectedOverlay)
+            val layouts = assetManager.getAvailableLayouts(selectedOverlay, console)
             android.util.Log.d("GamePadSettings", "Loaded ${layouts.size} layouts for '$selectedOverlay': ${layouts.joinToString()}")
             layouts
         } else {

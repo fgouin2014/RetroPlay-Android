@@ -1424,8 +1424,8 @@ private fun ComposeEmulatorScreen(
                         if (overlayPreference != null) {
                             val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(retroView.context) }
                             // Recharger la config si le nom de l'overlay change
-                            val overlayConfig = remember(overlayPreference.overlayName) {
-                                assetManager.loadOverlayConfig(overlayPreference.overlayName)
+                            val overlayConfig = remember(overlayPreference.overlayName, console) {
+                                assetManager.loadOverlayConfig(overlayPreference.overlayName, console)
                             }
                             
                             // Utiliser currentRetroArchLayout si défini (boutons overlay_next), 

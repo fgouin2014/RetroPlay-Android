@@ -395,19 +395,16 @@ private fun handleTouchEvent(
                     val (visualOffsetX, visualOffsetY) = if (analogStick.movable) {
                         val centerX = analogStick.x * screenSize.width
                         val centerY = analogStick.y * screenSize.height
-                        val rangeX = analogStick.width * screenSize.width * layout.rangeModifier * analogStick.rangeModifier
-                        val rangeY = analogStick.height * screenSize.height * layout.rangeModifier * analogStick.rangeModifier
+                        // Range de BASE en pixels (sans modifiers, juste width/height)
+                        // RetroArch limite le delta visuel au range de base, pas au range étendu pour hitbox
+                        val baseRangeX = analogStick.width * screenSize.width
+                        val baseRangeY = analogStick.height * screenSize.height
                         val dx = x - centerX
                         val dy = y - centerY
-                        // Limiter l'offset visuel au rayon du stick (saturation)
-                        val distance = sqrt(dx * dx + dy * dy)
-                        val maxDistance = sqrt(rangeX * rangeX + rangeY * rangeY)
-                        if (distance > maxDistance) {
-                            val scale = maxDistance / distance
-                            Pair(dx * scale, dy * scale)
-                        } else {
-                            Pair(dx, dy)
-                        }
+                        // Limiter l'offset visuel au range de base (clamp chaque axe)
+                        val clampedDx = dx.coerceIn(-baseRangeX, baseRangeX)
+                        val clampedDy = dy.coerceIn(-baseRangeY, baseRangeY)
+                        Pair(clampedDx, clampedDy)
                     } else {
                         Pair(0f, 0f)
                     }
@@ -487,18 +484,14 @@ private fun handleTouchEvent(
                             val (visualOffsetX, visualOffsetY) = if (leftStick.movable) {
                                 val centerX = leftStick.x * screenSize.width
                                 val centerY = leftStick.y * screenSize.height
-                                val rangeX = leftStick.width * screenSize.width * layout.rangeModifier * leftStick.rangeModifier
-                                val rangeY = leftStick.height * screenSize.height * layout.rangeModifier * leftStick.rangeModifier
+                                val baseRangeX = leftStick.width * screenSize.width
+                                val baseRangeY = leftStick.height * screenSize.height
                                 val dx = x - centerX
                                 val dy = y - centerY
-                                val distance = sqrt(dx * dx + dy * dy)
-                                val maxDistance = sqrt(rangeX * rangeX + rangeY * rangeY)
-                                if (distance > maxDistance) {
-                                    val scale = maxDistance / distance
-                                    Pair(dx * scale, dy * scale)
-                                } else {
-                                    Pair(dx, dy)
-                                }
+                                // Limiter l'offset visuel au range de base (clamp chaque axe)
+                                val clampedDx = dx.coerceIn(-baseRangeX, baseRangeX)
+                                val clampedDy = dy.coerceIn(-baseRangeY, baseRangeY)
+                                Pair(clampedDx, clampedDy)
                             } else {
                                 Pair(0f, 0f)
                             }
@@ -520,18 +513,14 @@ private fun handleTouchEvent(
                             val (visualOffsetX, visualOffsetY) = if (rightStick.movable) {
                                 val centerX = rightStick.x * screenSize.width
                                 val centerY = rightStick.y * screenSize.height
-                                val rangeX = rightStick.width * screenSize.width * layout.rangeModifier * rightStick.rangeModifier
-                                val rangeY = rightStick.height * screenSize.height * layout.rangeModifier * rightStick.rangeModifier
+                                val baseRangeX = rightStick.width * screenSize.width
+                                val baseRangeY = rightStick.height * screenSize.height
                                 val dx = x - centerX
                                 val dy = y - centerY
-                                val distance = sqrt(dx * dx + dy * dy)
-                                val maxDistance = sqrt(rangeX * rangeX + rangeY * rangeY)
-                                if (distance > maxDistance) {
-                                    val scale = maxDistance / distance
-                                    Pair(dx * scale, dy * scale)
-                                } else {
-                                    Pair(dx, dy)
-                                }
+                                // Limiter l'offset visuel au range de base (clamp chaque axe)
+                                val clampedDx = dx.coerceIn(-baseRangeX, baseRangeX)
+                                val clampedDy = dy.coerceIn(-baseRangeY, baseRangeY)
+                                Pair(clampedDx, clampedDy)
                             } else {
                                 Pair(0f, 0f)
                             }

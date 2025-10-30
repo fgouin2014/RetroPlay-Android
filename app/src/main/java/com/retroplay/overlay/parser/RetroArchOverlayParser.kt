@@ -199,7 +199,7 @@ class RetroArchOverlayParser {
             
             // Image overlay (optionnel)
             val overlayLine = lines.find { it.trim().startsWith("${descKey}_overlay = ") }
-            val imagePath = overlayLine?.substringAfter("= ")?.trim()
+            val imagePath = overlayLine?.substringAfter("= ")?.trim()?.removePrefix("\"")?.removeSuffix("\"")
             
             // Target pour overlay_next (optionnel)
             val nextTargetLine = lines.find { it.trim().startsWith("${descKey}_next_target = ") }

@@ -137,6 +137,16 @@ class OverlayAssetManager(private val context: Context) {
             if (alt.exists()) cfgFile = alt
         }
         
+        // 3) Sinon, prendre le PREMIER .cfg trouvé (ex: nes-small/nes-small-ab.cfg)
+        if (!cfgFile.exists()) {
+            val overlayDir = File(OVERLAY_DIR, overlayName)
+            val cfgFiles = overlayDir.listFiles { file -> file.extension == "cfg" }
+            if (!cfgFiles.isNullOrEmpty()) {
+                cfgFile = cfgFiles.first()
+                Log.i(TAG, "Using first .cfg found: ${cfgFile.name}")
+            }
+        }
+        
         if (!cfgFile.exists()) {
             Log.e(TAG, "Config file not found for overlay='$overlayName' console='$console' in ${File(OVERLAY_DIR, overlayName).absolutePath}")
             return null

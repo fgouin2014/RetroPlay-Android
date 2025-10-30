@@ -34,7 +34,8 @@ fun RetroArchSettingsDialog(
     console: String,
     onDismiss: () -> Unit,
     context: Context,
-    prefs: SharedPreferences
+    prefs: SharedPreferences,
+    onLoadCustomCfg: (() -> Unit)? = null  // Callback pour ouvrir file picker
 ) {
     // Overlay Asset Manager
     val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
@@ -332,8 +333,23 @@ fun RetroArchSettingsDialog(
                 // Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                    // Load Custom .cfg Button
+                    if (onLoadCustomCfg != null) {
+                        Button(
+                            onClick = onLoadCustomCfg,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF2196F3)
+                            )
+                        ) {
+                            Text("Load Custom .cfg", color = Color.White, fontSize = 14.sp)
+                        }
+                    } else {
+                        Spacer(Modifier.width(1.dp))
+                    }
+                    
+                    // Done Button
                     Button(
                         onClick = onDismiss,
                         colors = ButtonDefaults.buttonColors(

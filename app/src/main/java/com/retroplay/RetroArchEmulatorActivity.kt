@@ -1725,7 +1725,11 @@ private fun ComposeEmulatorScreen(
                         console = console,
                         onDismiss = { showGamePadSettings.value = false },
                         context = retroView.context,
-                        prefs = prefs
+                        prefs = prefs,
+                        onLoadCustomCfg = { 
+                            // TODO: Implement file picker for custom .cfg
+                            android.util.Log.i("RetroArchEmulator", "Load Custom .cfg clicked")
+                        }
                     )
                 }
                 

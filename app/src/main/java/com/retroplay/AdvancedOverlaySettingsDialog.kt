@@ -48,8 +48,12 @@ fun AdvancedOverlaySettingsDialog(
     var showInputs by remember { mutableStateOf(com.retroplay.overlay.models.ShowInputsMode.valueOf(showInputsString)) }
     var showInputsPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_show_inputs_port", 0)) }
     
+    // Lightgun options
+    var lightgunTriggerOnTouch by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", false)) }
+    var lightgunAllowOffscreen by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true)) }
+    
     // Save when changed
-    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort) {
+    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort, lightgunTriggerOnTouch, lightgunAllowOffscreen) {
         prefs.edit()
             .putInt("overlay_${console}_dpad_diagonal_sensitivity", dpadDiagonalSensitivity)
             .putInt("overlay_${console}_abxy_diagonal_sensitivity", abxyDiagonalSensitivity)
@@ -61,6 +65,8 @@ fun AdvancedOverlaySettingsDialog(
             .putBoolean("overlay_${console}_hide_when_gamepad", hideWhenGamepad)
             .putString("overlay_${console}_show_inputs", showInputs.name)
             .putInt("overlay_${console}_show_inputs_port", showInputsPort)
+            .putBoolean("overlay_${console}_lightgun_trigger_on_touch", lightgunTriggerOnTouch)
+            .putBoolean("overlay_${console}_lightgun_allow_offscreen", lightgunAllowOffscreen)
             .commit()
         android.util.Log.i("AdvancedOverlaySettings", "Saved for $console: dpadSens=$dpadDiagonalSensitivity abxySens=$abxyDiagonalSensitivity recenter=$analogRecenterZone opacity=$opacity")
     }
@@ -397,6 +403,83 @@ fun AdvancedOverlaySettingsDialog(
                             )
                         )
                     }
+                }
+                
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
+                Spacer(Modifier.height(16.dp))
+                
+                // === LIGHTGUN ===
+                Text(
+                    "Lightgun (Zapper)",
+                    color = Color(0xFFFF9800),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                // Trigger on Touch
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Trigger on Touch",
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            "Fire immediately on touch (vs on release)",
+                            color = Color(0xFF888888),
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = lightgunTriggerOnTouch,
+                        onCheckedChange = { lightgunTriggerOnTouch = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFFE91E63),
+                            checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
+                            uncheckedThumbColor = Color(0xFF888888),
+                            uncheckedTrackColor = Color(0xFF444444)
+                        )
+                    )
+                }
+                
+                // Allow Offscreen
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Allow Offscreen Shots",
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            "Allow shooting outside the game screen area",
+                            color = Color(0xFF888888),
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = lightgunAllowOffscreen,
+                        onCheckedChange = { lightgunAllowOffscreen = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF9C27B0),
+                            checkedTrackColor = Color(0xFF9C27B0).copy(alpha = 0.5f),
+                            uncheckedThumbColor = Color(0xFF888888),
+                            uncheckedTrackColor = Color(0xFF444444)
+                        )
+                    )
                 }
                 
                 Spacer(Modifier.height(16.dp))

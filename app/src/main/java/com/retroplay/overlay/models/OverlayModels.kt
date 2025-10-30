@@ -223,7 +223,15 @@ data class AdvancedOverlaySettings(
     val behindMenu: Boolean = false,
     val hideWhenGamepadConnected: Boolean = false,
     val showInputs: ShowInputsMode = ShowInputsMode.NONE,
-    val showInputsPort: Int = 0                // Port à afficher (0 = all)
+    val showInputsPort: Int = 0,               // Port à afficher (0 = all)
+    // Lightgun options
+    val lightgunPort: Int = 0,                 // Port du lightgun (0-3)
+    val lightgunTriggerOnTouch: Boolean = false,  // Déclencher au touch (vs release)
+    val lightgunTriggerDelay: Int = 0,         // Délai avant déclenchement (ms)
+    val lightgunAllowOffscreen: Boolean = true,   // Permettre tir hors écran
+    val lightgunTwoTouchInput: Int = 0,        // Action pour 2 doigts (0=none, 1=start, 2=select, etc.)
+    val lightgunThreeTouchInput: Int = 0,      // Action pour 3 doigts
+    val lightgunFourTouchInput: Int = 0        // Action pour 4 doigts
 )
 
 /**
@@ -328,7 +336,14 @@ object OverlayPreferenceManager {
             behindMenu = prefs.getBoolean("overlay_${console}_behind_menu", false),
             hideWhenGamepadConnected = prefs.getBoolean("overlay_${console}_hide_when_gamepad", false),
             showInputs = showInputsMode,
-            showInputsPort = prefs.getInt("overlay_${console}_show_inputs_port", 0)
+            showInputsPort = prefs.getInt("overlay_${console}_show_inputs_port", 0),
+            lightgunPort = prefs.getInt("overlay_${console}_lightgun_port", 0),
+            lightgunTriggerOnTouch = prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", false),
+            lightgunTriggerDelay = prefs.getInt("overlay_${console}_lightgun_trigger_delay", 0),
+            lightgunAllowOffscreen = prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true),
+            lightgunTwoTouchInput = prefs.getInt("overlay_${console}_lightgun_two_touch", 0),
+            lightgunThreeTouchInput = prefs.getInt("overlay_${console}_lightgun_three_touch", 0),
+            lightgunFourTouchInput = prefs.getInt("overlay_${console}_lightgun_four_touch", 0)
         )
     }
     

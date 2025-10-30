@@ -201,6 +201,19 @@ object RetroArchButtonMapping {
 }
 
 /**
+ * Advanced overlay settings (options avancées)
+ */
+data class AdvancedOverlaySettings(
+    val dpadDiagonalSensitivity: Int = 50,     // 0-100
+    val abxyDiagonalSensitivity: Int = 50,     // 0-100
+    val analogRecenterZone: Int = 0,           // 0-100
+    val opacity: Float = 1.0f,                 // 0.0-1.0
+    val aspectAdjust: Float = 0.0f,            // -0.5 à 0.5
+    val hideInMenu: Boolean = false,
+    val behindMenu: Boolean = false
+)
+
+/**
  * Préférences d'overlay pour une console
  */
 data class OverlayPreference(
@@ -276,6 +289,24 @@ object OverlayPreferenceManager {
         prefs.edit()
             .putBoolean("overlay_${console}_enabled", false)
             .commit()
+    }
+    
+    /**
+     * Load advanced settings for a console
+     */
+    fun loadAdvancedSettings(
+        prefs: android.content.SharedPreferences,
+        console: String
+    ): AdvancedOverlaySettings {
+        return AdvancedOverlaySettings(
+            dpadDiagonalSensitivity = prefs.getInt("overlay_${console}_dpad_diagonal_sensitivity", 50),
+            abxyDiagonalSensitivity = prefs.getInt("overlay_${console}_abxy_diagonal_sensitivity", 50),
+            analogRecenterZone = prefs.getInt("overlay_${console}_analog_recenter_zone", 0),
+            opacity = prefs.getFloat("overlay_${console}_opacity", 1.0f),
+            aspectAdjust = prefs.getFloat("overlay_${console}_aspect_adjust", 0.0f),
+            hideInMenu = prefs.getBoolean("overlay_${console}_hide_in_menu", false),
+            behindMenu = prefs.getBoolean("overlay_${console}_behind_menu", false)
+        )
     }
     
     /**

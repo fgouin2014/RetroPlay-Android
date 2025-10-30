@@ -38,6 +38,8 @@ fun RetroArchSettingsDialog(
     onLoadCustomCfg: (() -> Unit)? = null,  // Callback pour ouvrir file picker
     debugModeState: androidx.compose.runtime.MutableState<Boolean>  // État debug hitboxes
 ) {
+    // État pour ouvrir Advanced Settings
+    var showAdvancedSettings by remember { mutableStateOf(false) }
     // Overlay Asset Manager
     val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
     val availableOverlays = remember { assetManager.getCompatibleOverlays(console) }
@@ -723,36 +725,61 @@ fun RetroArchSettingsDialog(
                 Spacer(Modifier.height(16.dp))
                 
                 // Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Load Custom .cfg Button
-                    if (onLoadCustomCfg != null) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Load Custom .cfg Button
+                        if (onLoadCustomCfg != null) {
+                            Button(
+                                onClick = onLoadCustomCfg,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF2196F3)
+                                )
+                            ) {
+                                Text("Load Custom .cfg", color = Color.White, fontSize = 14.sp)
+                            }
+                        } else {
+                            Spacer(Modifier.width(1.dp))
+                        }
+                        
+                        // Done Button
                         Button(
-                            onClick = onLoadCustomCfg,
+                            onClick = onDismiss,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF2196F3)
+                                containerColor = Color(0xFF4CAF50)
                             )
                         ) {
-                            Text("Load Custom .cfg", color = Color.White, fontSize = 14.sp)
+                            Text("DONE", color = Color.White)
                         }
-                    } else {
-                        Spacer(Modifier.width(1.dp))
                     }
                     
-                    // Done Button
+                    Spacer(Modifier.height(8.dp))
+                    
+                    // Advanced Settings Button
                     Button(
-                        onClick = onDismiss,
+                        onClick = { showAdvancedSettings = true },
+                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF4CAF50)
+                            containerColor = Color(0xFFFF9800)
                         )
                     ) {
-                        Text("DONE", color = Color.White)
+                        Text("⚙️ Advanced Settings", color = Color.White, fontSize = 14.sp)
                     }
                 }
             }
         }
+    }
+    
+    // Advanced Settings Dialog
+    if (showAdvancedSettings) {
+        AdvancedOverlaySettingsDialog(
+            console = console,
+            onDismiss = { showAdvancedSettings = false },
+            context = context,
+            prefs = prefs
+        )
     }
 }
 

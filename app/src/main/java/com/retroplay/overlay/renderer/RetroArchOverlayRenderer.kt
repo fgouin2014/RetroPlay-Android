@@ -62,6 +62,9 @@ fun RetroArchOverlayScreen(
     overlayYOffset: Float = 0.0f,          // Décalage Y (-0.2 à 0.2)
     overlayXSeparation: Float = 0.0f,      // Séparation interne X (-0.2 à 0.2)
     overlayYSeparation: Float = 0.0f,      // Séparation interne Y (-0.2 à 0.2)
+    overlayOpacity: Float = 1.0f,          // Opacité globale (0.0-1.0)
+    dpadDiagonalSensitivity: Int = 50,     // Sensibilité diagonales D-pad (0-100)
+    abxyDiagonalSensitivity: Int = 50,     // Sensibilité diagonales ABXY (0-100)
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"
@@ -144,7 +147,8 @@ fun RetroArchOverlayScreen(
                         val imageBitmap = bitmap.asImageBitmap()
                         // IMPORTANT: Utiliser button.alphaModifier si défini, sinon layout.alphaModifier
                         val effectiveAlphaMod = button.alphaModifier ?: scaledLayout.alphaModifier
-                        val alpha = if (pressedButtons.values.any { it.contains(button) }) effectiveAlphaMod else (0.7f * effectiveAlphaMod)
+                        val baseAlpha = if (pressedButtons.values.any { it.contains(button) }) effectiveAlphaMod else (0.7f * effectiveAlphaMod)
+                        val alpha = baseAlpha * overlayOpacity  // Appliquer opacity globale
                         
                         // IMPORTANT: Utiliser modW et modH pour la taille d'affichage!
                         // RetroArch calcule mod_w = 2.0 * range_x et mod_h = 2.0 * range_y

@@ -1520,6 +1520,11 @@ private fun ComposeEmulatorScreen(
                                     }
                                 }
                                 
+                                // Charger advanced settings
+                                val advancedSettings = remember(console) {
+                                    com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+                                }
+                                
                                 // key() force le recompose quand layoutName OU orientation change
                                 // Afficher seulement si overlaysVisible est true
                                 if (overlaysVisible.value) {
@@ -1536,6 +1541,9 @@ private fun ComposeEmulatorScreen(
                                         overlayYOffset = overlayPreference.yOffset,
                                         overlayXSeparation = overlayPreference.xSeparation,
                                         overlayYSeparation = overlayPreference.ySeparation,
+                                        overlayOpacity = advancedSettings.opacity,
+                                        dpadDiagonalSensitivity = advancedSettings.dpadDiagonalSensitivity,
+                                        abxyDiagonalSensitivity = advancedSettings.abxyDiagonalSensitivity,
                                         onButtonPress = { action ->
                                             val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
                                             if (keyCodes.isNotEmpty()) {

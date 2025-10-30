@@ -195,6 +195,11 @@ fun RetroArchOverlayScreen(
                 
                 // MODE DEBUG: Afficher les hitboxes (utiliser hitboxWidthPx/hitboxHeightPx, PAS displayWidthPx!)
                 if (showDebug) {
+                    // CRITIQUE: Utiliser xHitbox/yHitbox pour la POSITION (pas x/y!)
+                    // Les hitboxes peuvent être décalées si reach asymétrique
+                    val hitboxX = button.xHitbox * screenSize.width
+                    val hitboxY = button.yHitbox * screenSize.height
+                    
                     val debugColor = when (button.type) {
                         OverlayButtonType.ANALOG_LEFT, OverlayButtonType.ANALOG_RIGHT -> Color.Green
                         else -> Color.Red
@@ -205,14 +210,14 @@ fun RetroArchOverlayScreen(
                             drawCircle(
                                 color = debugColor,
                                 radius = (hitboxWidthPx / 2).coerceAtLeast(hitboxHeightPx / 2),
-                                center = Offset(xPx, yPx),
+                                center = Offset(hitboxX, hitboxY),
                                 alpha = 0.5f
                             )
                         }
                         ButtonShape.RECT -> {
                             drawRect(
                                 color = Color.Blue,
-                                topLeft = Offset(xPx - hitboxWidthPx / 2, yPx - hitboxHeightPx / 2),
+                                topLeft = Offset(hitboxX - hitboxWidthPx / 2, hitboxY - hitboxHeightPx / 2),
                                 size = Size(hitboxWidthPx, hitboxHeightPx),
                                 alpha = 0.5f
                             )

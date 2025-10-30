@@ -20,11 +20,11 @@ class OverlayAssetManager(private val context: Context) {
     companion object {
         private const val TAG = "OverlayAssetManager"
         
-        // Répertoire de stockage des overlays sur le device
-        const val OVERLAY_DIR = "/storage/emulated/0/RetroPlay-Data/overlays"
+        // Répertoire de stockage des overlays sur le device (structure RetroArch officielle)
+        const val OVERLAY_DIR = "/storage/emulated/0/RetroPlay-Data/overlays/gamepads"
         
         // Racine des overlays dans les assets (structure identique aux repos RetroArch)
-        private const val ASSETS_OVERLAYS_ROOT = "overlays"
+        private const val ASSETS_OVERLAYS_ROOT = "overlays/gamepads"
     }
     
     private val parser = RetroArchOverlayParser()

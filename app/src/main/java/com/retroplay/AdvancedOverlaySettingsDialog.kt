@@ -43,8 +43,12 @@ fun AdvancedOverlaySettingsDialog(
     var hideInMenu by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_hide_in_menu", false)) }
     var behindMenu by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_behind_menu", false)) }
     
+    val showInputsString = remember { prefs.getString("overlay_${console}_show_inputs", "NONE") ?: "NONE" }
+    var showInputs by remember { mutableStateOf(com.retroplay.overlay.models.ShowInputsMode.valueOf(showInputsString)) }
+    var showInputsPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_show_inputs_port", 0)) }
+    
     // Save when changed
-    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu) {
+    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, showInputs, showInputsPort) {
         prefs.edit()
             .putInt("overlay_${console}_dpad_diagonal_sensitivity", dpadDiagonalSensitivity)
             .putInt("overlay_${console}_abxy_diagonal_sensitivity", abxyDiagonalSensitivity)
@@ -53,6 +57,8 @@ fun AdvancedOverlaySettingsDialog(
             .putFloat("overlay_${console}_aspect_adjust", aspectAdjust)
             .putBoolean("overlay_${console}_hide_in_menu", hideInMenu)
             .putBoolean("overlay_${console}_behind_menu", behindMenu)
+            .putString("overlay_${console}_show_inputs", showInputs.name)
+            .putInt("overlay_${console}_show_inputs_port", showInputsPort)
             .commit()
         android.util.Log.i("AdvancedOverlaySettings", "Saved for $console: dpadSens=$dpadDiagonalSensitivity abxySens=$abxyDiagonalSensitivity recenter=$analogRecenterZone opacity=$opacity")
     }
@@ -238,6 +244,47 @@ fun AdvancedOverlaySettingsDialog(
                             color = Color(0xFF888888),
                             fontSize = 11.sp
                         )
+                    }
+                    
+                    // Show Inputs (Radio buttons)
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        Text("Show Inputs", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Visual highlight of pressed buttons",
+                            color = Color(0xFF888888),
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        
+                        // Radio buttons pour les modes
+                        com.retroplay.overlay.models.ShowInputsMode.values().forEach { mode ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = showInputs == mode,
+                                    onClick = { showInputs = mode },
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = Color(0xFF9C27B0),
+                                        unselectedColor = Color(0xFF888888)
+                                    )
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = when (mode) {
+                                        com.retroplay.overlay.models.ShowInputsMode.NONE -> "None (default)"
+                                        com.retroplay.overlay.models.ShowInputsMode.TOUCHED -> "Touched (touch only)"
+                                        com.retroplay.overlay.models.ShowInputsMode.PHYSICAL -> "Physical (gamepad only)"
+                                        com.retroplay.overlay.models.ShowInputsMode.BOTH -> "Both (touch + gamepad)"
+                                    },
+                                    color = Color.White,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
                     }
                     
                     Spacer(Modifier.height(16.dp))

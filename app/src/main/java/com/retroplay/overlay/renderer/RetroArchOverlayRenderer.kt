@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
@@ -65,6 +66,7 @@ fun RetroArchOverlayScreen(
     overlayOpacity: Float = 1.0f,          // Opacité globale (0.0-1.0)
     dpadDiagonalSensitivity: Int = 50,     // Sensibilité diagonales D-pad (0-100)
     abxyDiagonalSensitivity: Int = 50,     // Sensibilité diagonales ABXY (0-100)
+    showInputsMode: com.retroplay.overlay.models.ShowInputsMode = com.retroplay.overlay.models.ShowInputsMode.NONE,
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"
@@ -266,6 +268,52 @@ fun RetroArchOverlayScreen(
                         center = Offset(currentX, currentY),
                         alpha = 0.8f
                     )
+                }
+            }
+            
+            // MODE SHOW INPUTS: Afficher visuel des boutons pressés (TOUCHED mode)
+            if (showInputsMode == com.retroplay.overlay.models.ShowInputsMode.TOUCHED || 
+                showInputsMode == com.retroplay.overlay.models.ShowInputsMode.BOTH) {
+                
+                // Parcourir tous les boutons pressés
+                pressedButtons.values.flatten().toSet().forEach { pressedButton ->
+                    // Skip system buttons (overlay, layout_next, etc.)
+                    if (!com.retroplay.overlay.models.RetroArchButtonMapping.isOverlayControlAction(pressedButton.action)) {
+                        val xPx = pressedButton.x * screenSize.width
+                        val yPx = pressedButton.y * screenSize.height
+                        val wPx = pressedButton.width * screenSize.width * scaledLayout.rangeModifier
+                        val hPx = pressedButton.height * screenSize.height * scaledLayout.rangeModifier
+                        
+                        // Dessiner un overlay vert semi-transparent sur le bouton pressé
+                        when (pressedButton.shape) {
+                            ButtonShape.RECT -> {
+                                drawRect(
+                                    color = Color(0x4400FF00),  // Vert transparent
+                                    topLeft = Offset(xPx - wPx / 2, yPx - hPx / 2),
+                                    size = Size(wPx, hPx)
+                                )
+                                drawRect(
+                                    color = Color(0xFF00FF00),  // Bordure verte
+                                    topLeft = Offset(xPx - wPx / 2, yPx - hPx / 2),
+                                    size = Size(wPx, hPx),
+                                    style = Stroke(width = 4f)
+                                )
+                            }
+                            else -> {  // "radial" ou défaut
+                                drawCircle(
+                                    color = Color(0x4400FF00),  // Vert transparent
+                                    radius = wPx,
+                                    center = Offset(xPx, yPx)
+                                )
+                                drawCircle(
+                                    color = Color(0xFF00FF00),  // Bordure verte
+                                    radius = wPx,
+                                    center = Offset(xPx, yPx),
+                                    style = Stroke(width = 4f)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

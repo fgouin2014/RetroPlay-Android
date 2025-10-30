@@ -1544,6 +1544,7 @@ private fun ComposeEmulatorScreen(
                                         overlayOpacity = advancedSettings.opacity,
                                         dpadDiagonalSensitivity = advancedSettings.dpadDiagonalSensitivity,
                                         abxyDiagonalSensitivity = advancedSettings.abxyDiagonalSensitivity,
+                                        showInputsMode = advancedSettings.showInputs,
                                         onButtonPress = { action ->
                                             val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
                                             if (keyCodes.isNotEmpty()) {

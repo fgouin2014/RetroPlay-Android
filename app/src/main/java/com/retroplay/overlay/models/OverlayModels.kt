@@ -201,6 +201,16 @@ object RetroArchButtonMapping {
 }
 
 /**
+ * Show Inputs mode
+ */
+enum class ShowInputsMode {
+    NONE,      // Pas d'affichage
+    TOUCHED,   // Afficher les touches tactiles
+    PHYSICAL,  // Afficher les touches du gamepad physique
+    BOTH       // Afficher les deux
+}
+
+/**
  * Advanced overlay settings (options avancées)
  */
 data class AdvancedOverlaySettings(
@@ -210,7 +220,9 @@ data class AdvancedOverlaySettings(
     val opacity: Float = 1.0f,                 // 0.0-1.0
     val aspectAdjust: Float = 0.0f,            // -0.5 à 0.5
     val hideInMenu: Boolean = false,
-    val behindMenu: Boolean = false
+    val behindMenu: Boolean = false,
+    val showInputs: ShowInputsMode = ShowInputsMode.NONE,
+    val showInputsPort: Int = 0                // Port à afficher (0 = all)
 )
 
 /**
@@ -298,6 +310,13 @@ object OverlayPreferenceManager {
         prefs: android.content.SharedPreferences,
         console: String
     ): AdvancedOverlaySettings {
+        val showInputsString = prefs.getString("overlay_${console}_show_inputs", "NONE") ?: "NONE"
+        val showInputsMode = try {
+            ShowInputsMode.valueOf(showInputsString)
+        } catch (e: IllegalArgumentException) {
+            ShowInputsMode.NONE
+        }
+        
         return AdvancedOverlaySettings(
             dpadDiagonalSensitivity = prefs.getInt("overlay_${console}_dpad_diagonal_sensitivity", 50),
             abxyDiagonalSensitivity = prefs.getInt("overlay_${console}_abxy_diagonal_sensitivity", 50),
@@ -305,7 +324,9 @@ object OverlayPreferenceManager {
             opacity = prefs.getFloat("overlay_${console}_opacity", 1.0f),
             aspectAdjust = prefs.getFloat("overlay_${console}_aspect_adjust", 0.0f),
             hideInMenu = prefs.getBoolean("overlay_${console}_hide_in_menu", false),
-            behindMenu = prefs.getBoolean("overlay_${console}_behind_menu", false)
+            behindMenu = prefs.getBoolean("overlay_${console}_behind_menu", false),
+            showInputs = showInputsMode,
+            showInputsPort = prefs.getInt("overlay_${console}_show_inputs_port", 0)
         )
     }
     

@@ -812,6 +812,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 onLoadState = { slot ->
                     loadGameState(slot)
                 },
+                onHotkey = { action ->
+                    handleHotkey(action)
+                },
                 showDipSwitchDialog = showDipSwitchDialog,
                 showCoreOptionsDialog = showCoreOptionsDialog,
                 dipSwitches = dipSwitches,
@@ -1243,6 +1246,117 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
     }
     
+    // État pour fast forward
+    private var isFastForwardActive = false
+    private val currentSaveSlot = 0  // Slot par défaut (0-9)
+    
+    // Gérer les hotkeys RetroArch
+    private fun handleHotkey(action: String) {
+        Log.i(TAG, "Hotkey triggered: $action")
+        when (action) {
+            // Save/Load states
+            "save_state" -> {
+                saveGameState(currentSaveSlot)
+            }
+            "load_state" -> {
+                loadGameState(currentSaveSlot)
+            }
+            "state_slot_increase" -> {
+                // TODO: Implémenter changement de slot (nécessite UI feedback)
+                Log.i(TAG, "State slot increase (not implemented yet)")
+                runOnUiThread {
+                    Toast.makeText(this, "Slot+ (not implemented)", Toast.LENGTH_SHORT).show()
+                }
+            }
+            "state_slot_decrease" -> {
+                // TODO: Implémenter changement de slot (nécessite UI feedback)
+                Log.i(TAG, "State slot decrease (not implemented yet)")
+                runOnUiThread {
+                    Toast.makeText(this, "Slot- (not implemented)", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            // Fast forward
+            "toggle_fast_forward" -> {
+                isFastForwardActive = !isFastForwardActive
+                retroView.frameSpeed = if (isFastForwardActive) 2 else 1
+                Log.i(TAG, "Fast forward: ${if (isFastForwardActive) "ON" else "OFF"}")
+                runOnUiThread {
+                    Toast.makeText(this, "Fast Forward: ${if (isFastForwardActive) "ON" else "OFF"}", Toast.LENGTH_SHORT).show()
+                }
+            }
+            "hold_fast_forward" -> {
+                // Hold fast forward (maintenir pour accélérer)
+                retroView.frameSpeed = 2
+                isFastForwardActive = true
+                Log.i(TAG, "Hold fast forward: ON")
+            }
+            
+            // Rewind (nécessite support du core)
+            "rewind" -> {
+                Log.i(TAG, "Rewind (not supported by LibretroDroid)")
+                runOnUiThread {
+                    Toast.makeText(this, "Rewind not supported", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            // Reset
+            "reset" -> {
+                retroView.reset()
+                Log.i(TAG, "Game reset")
+                runOnUiThread {
+                    Toast.makeText(this, "Game Reset", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            // Pause toggle
+            "pause_toggle" -> {
+                // LibretroDroid ne supporte pas le pause/resume direct
+                Log.i(TAG, "Pause toggle (not supported by LibretroDroid)")
+                runOnUiThread {
+                    Toast.makeText(this, "Pause not supported", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            // Screenshot
+            "screenshot" -> {
+                Log.i(TAG, "Screenshot (not implemented yet)")
+                runOnUiThread {
+                    Toast.makeText(this, "Screenshot not implemented", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            // Shaders
+            "shader_next", "shader_prev" -> {
+                Log.i(TAG, "Shader cycling (not implemented yet)")
+                runOnUiThread {
+                    Toast.makeText(this, "Shader cycling not implemented", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            // Slow motion
+            "toggle_slowmotion" -> {
+                // TODO: Implémenter slow motion
+                Log.i(TAG, "Slow motion (not implemented yet)")
+                runOnUiThread {
+                    Toast.makeText(this, "Slow motion not implemented", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            // Frame advance
+            "frame_advance" -> {
+                Log.i(TAG, "Frame advance (not supported by LibretroDroid)")
+                runOnUiThread {
+                    Toast.makeText(this, "Frame advance not supported", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            else -> {
+                Log.w(TAG, "Unknown hotkey: $action")
+            }
+        }
+    }
+    
     // Lifecycle managed by lifecycle.addObserver(retroView)
     
     override fun onDestroy() {
@@ -1339,6 +1453,7 @@ private fun ComposeEmulatorScreen(
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
     onFinishActivity: () -> Unit,
+    onHotkey: (String) -> Unit,  // Callback pour hotkeys
     showDipSwitchDialog: MutableState<Boolean>,
     showCoreOptionsDialog: MutableState<Boolean>,
     dipSwitches: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
@@ -1634,6 +1749,7 @@ private fun ComposeEmulatorScreen(
                                             Log.d("AnalogInput", "sendMotionEvent: source=$source, x=$x, y=$y")
                                             retroView.sendMotionEvent(source, x, y)
                                         },
+                                        onHotkey = onHotkey,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }

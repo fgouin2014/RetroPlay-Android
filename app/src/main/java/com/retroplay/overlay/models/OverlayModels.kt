@@ -221,6 +221,7 @@ data class AdvancedOverlaySettings(
     val aspectAdjust: Float = 0.0f,            // -0.5 à 0.5
     val hideInMenu: Boolean = false,
     val behindMenu: Boolean = false,
+    val hideWhenGamepadConnected: Boolean = false,
     val showInputs: ShowInputsMode = ShowInputsMode.NONE,
     val showInputsPort: Int = 0                // Port à afficher (0 = all)
 )
@@ -325,6 +326,7 @@ object OverlayPreferenceManager {
             aspectAdjust = prefs.getFloat("overlay_${console}_aspect_adjust", 0.0f),
             hideInMenu = prefs.getBoolean("overlay_${console}_hide_in_menu", false),
             behindMenu = prefs.getBoolean("overlay_${console}_behind_menu", false),
+            hideWhenGamepadConnected = prefs.getBoolean("overlay_${console}_hide_when_gamepad", false),
             showInputs = showInputsMode,
             showInputsPort = prefs.getInt("overlay_${console}_show_inputs_port", 0)
         )

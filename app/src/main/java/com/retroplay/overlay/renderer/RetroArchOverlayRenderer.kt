@@ -67,9 +67,24 @@ fun RetroArchOverlayScreen(
     dpadDiagonalSensitivity: Int = 50,     // Sensibilité diagonales D-pad (0-100)
     abxyDiagonalSensitivity: Int = 50,     // Sensibilité diagonales ABXY (0-100)
     showInputsMode: com.retroplay.overlay.models.ShowInputsMode = com.retroplay.overlay.models.ShowInputsMode.NONE,
+    hideWhenGamepadConnected: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"
+    
+    // Détecter si un gamepad physique est connecté
+    val isGamepadConnected = remember {
+        android.view.InputDevice.getDeviceIds().any { deviceId ->
+            val device = android.view.InputDevice.getDevice(deviceId)
+            device != null && (device.sources and android.view.InputDevice.SOURCE_GAMEPAD) == android.view.InputDevice.SOURCE_GAMEPAD
+        }
+    }
+    
+    // Si hideWhenGamepadConnected est activé et qu'un gamepad est connecté, ne rien afficher
+    if (hideWhenGamepadConnected && isGamepadConnected) {
+        Log.i(TAG, "Gamepad connected, hiding overlay (hideWhenGamepadConnected=true)")
+        return
+    }
     
     // Appliquer scale/offset/separation à tous les boutons (pré-calcul pour éviter répétition)
     val scaledLayout = remember(layout, overlayScale, overlayXOffset, overlayYOffset, overlayXSeparation, overlayYSeparation) {

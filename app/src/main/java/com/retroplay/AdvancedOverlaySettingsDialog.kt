@@ -42,13 +42,14 @@ fun AdvancedOverlaySettingsDialog(
     
     var hideInMenu by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_hide_in_menu", false)) }
     var behindMenu by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_behind_menu", false)) }
+    var hideWhenGamepad by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_hide_when_gamepad", false)) }
     
     val showInputsString = remember { prefs.getString("overlay_${console}_show_inputs", "NONE") ?: "NONE" }
     var showInputs by remember { mutableStateOf(com.retroplay.overlay.models.ShowInputsMode.valueOf(showInputsString)) }
     var showInputsPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_show_inputs_port", 0)) }
     
     // Save when changed
-    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, showInputs, showInputsPort) {
+    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort) {
         prefs.edit()
             .putInt("overlay_${console}_dpad_diagonal_sensitivity", dpadDiagonalSensitivity)
             .putInt("overlay_${console}_abxy_diagonal_sensitivity", abxyDiagonalSensitivity)
@@ -57,6 +58,7 @@ fun AdvancedOverlaySettingsDialog(
             .putFloat("overlay_${console}_aspect_adjust", aspectAdjust)
             .putBoolean("overlay_${console}_hide_in_menu", hideInMenu)
             .putBoolean("overlay_${console}_behind_menu", behindMenu)
+            .putBoolean("overlay_${console}_hide_when_gamepad", hideWhenGamepad)
             .putString("overlay_${console}_show_inputs", showInputs.name)
             .putInt("overlay_${console}_show_inputs_port", showInputsPort)
             .commit()
@@ -358,6 +360,38 @@ fun AdvancedOverlaySettingsDialog(
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color(0xFF2196F3),
                                 checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
+                                uncheckedThumbColor = Color(0xFF888888),
+                                uncheckedTrackColor = Color(0xFF444444)
+                            )
+                        )
+                    }
+                    
+                    // Hide When Gamepad Connected
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Hide When Gamepad Connected",
+                                color = Color.White,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                "Hide touch overlay when physical gamepad is detected",
+                                color = Color(0xFF888888),
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = hideWhenGamepad,
+                            onCheckedChange = { hideWhenGamepad = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFFFF9800),
+                                checkedTrackColor = Color(0xFFFF9800).copy(alpha = 0.5f),
                                 uncheckedThumbColor = Color(0xFF888888),
                                 uncheckedTrackColor = Color(0xFF444444)
                             )

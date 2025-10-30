@@ -1545,6 +1545,7 @@ private fun ComposeEmulatorScreen(
                                         dpadDiagonalSensitivity = advancedSettings.dpadDiagonalSensitivity,
                                         abxyDiagonalSensitivity = advancedSettings.abxyDiagonalSensitivity,
                                         showInputsMode = advancedSettings.showInputs,
+                                        hideWhenGamepadConnected = advancedSettings.hideWhenGamepadConnected,
                                         onButtonPress = { action ->
                                             val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
                                             if (keyCodes.isNotEmpty()) {

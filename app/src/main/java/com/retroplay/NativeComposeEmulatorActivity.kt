@@ -2201,14 +2201,6 @@ private fun MainMenuDialog(
                         Text("GamePad Settings", color = Color.White)
                     }
                     
-                    // Advanced Overlay Settings
-                    TextButton(
-                        onClick = onAdvancedSettings,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Advanced Overlay Settings", color = Color(0xFFFF9800))
-                    }
-                    
                     // DIP Switches (arcade only, if available)
                     if (hasDipSwitches) {
                         TextButton(
@@ -2227,6 +2219,14 @@ private fun MainMenuDialog(
                         ) {
                             Text("Core Options", color = Color(0xFF64B5F6))
                         }
+                    }
+                    
+                    // Advanced Overlay Settings
+                    TextButton(
+                        onClick = onAdvancedSettings,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Advanced Overlay Settings", color = Color(0xFFFF9800))
                     }
                     
                     // Change Core

@@ -38,8 +38,6 @@ fun RetroArchSettingsDialog(
     onLoadCustomCfg: (() -> Unit)? = null,  // Callback pour ouvrir file picker
     debugModeState: androidx.compose.runtime.MutableState<Boolean>  // État debug hitboxes
 ) {
-    // État pour ouvrir Advanced Settings
-    var showAdvancedSettings by remember { mutableStateOf(false) }
     // Overlay Asset Manager
     val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
     val availableOverlays = remember { assetManager.getCompatibleOverlays(console) }
@@ -755,34 +753,9 @@ fun RetroArchSettingsDialog(
                             Text("DONE", color = Color.White)
                         }
                     }
-                    
-                    Spacer(Modifier.height(8.dp))
-                    
-                    // Advanced Settings Button
-                    Button(
-                        onClick = { showAdvancedSettings = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFF9800)
-                        )
-                    ) {
-                        Text("⚙️ Advanced Settings", color = Color.White, fontSize = 14.sp)
-                    }
                 }
             }
         }
-    }
-    
-    // Advanced Settings Dialog (remplace temporairement le dialog principal)
-    if (showAdvancedSettings) {
-        // Ne pas afficher le dialog principal quand Advanced est ouvert (évite empilement)
-        AdvancedOverlaySettingsDialog(
-            console = console,
-            onDismiss = { showAdvancedSettings = false },
-            context = context,
-            prefs = prefs
-        )
-        return  // Skip l'affichage du dialog principal
     }
 }
 

@@ -110,6 +110,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     // États des menus
     private val showMainMenu = mutableStateOf(false)
     private val showGamePadSettings = mutableStateOf(false)
+    private val showAdvancedOverlaySettings = mutableStateOf(false)
     private val showQuickMenu = mutableStateOf(false)
     private val overlaysVisible = mutableStateOf(true)
     private val showCoreErrorDialog = mutableStateOf(false)
@@ -788,6 +789,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 prefs = prefs,
                 showMainMenu = showMainMenu,
                 showGamePadSettings = showGamePadSettings,
+                showAdvancedOverlaySettings = showAdvancedOverlaySettings,
                 showQuickMenu = showQuickMenu,
                 overlaysVisible = overlaysVisible,
                 initialVariant = savedVariant,
@@ -1315,6 +1317,7 @@ private fun ComposeEmulatorScreen(
     prefs: SharedPreferences,
     showMainMenu: MutableState<Boolean>,
     showGamePadSettings: MutableState<Boolean>,
+    showAdvancedOverlaySettings: MutableState<Boolean>,
     showQuickMenu: MutableState<Boolean>,
     overlaysVisible: MutableState<Boolean>,
     initialVariant: GamePadLayoutManager.LayoutVariant,
@@ -1719,6 +1722,10 @@ private fun ComposeEmulatorScreen(
                             showQuickMenu.value = false
                             showMainMenu.value = true
                         },
+                        onAdvancedSettings = {
+                            showQuickMenu.value = false
+                            showAdvancedOverlaySettings.value = true
+                        },
                         onSaveState = { slot ->
                             closeQuickMenuWithCooldown()  // Fermer avec cooldown
                             onSaveState(slot)
@@ -1813,6 +1820,16 @@ private fun ComposeEmulatorScreen(
                         prefs = prefs,
                         onLoadCustomCfg = onLoadCustomCfg,
                         debugModeState = debugModeState
+                    )
+                }
+                
+                // Advanced Overlay Settings Dialog
+                if (showAdvancedOverlaySettings.value) {
+                    AdvancedOverlaySettingsDialog(
+                        console = console,
+                        onDismiss = { showAdvancedOverlaySettings.value = false },
+                        context = retroView.context,
+                        prefs = prefs
                     )
                 }
                 
@@ -2744,6 +2761,7 @@ private fun QuickMenuDialog(
     onDismiss: () -> Unit,
     onHideOverlay: () -> Unit,
     onSettings: () -> Unit,
+    onAdvancedSettings: () -> Unit = {},  // Nouveau callback
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
     onQuit: () -> Unit,
@@ -2830,6 +2848,17 @@ private fun QuickMenuDialog(
                     )
                 ) {
                     Text("SETTINGS", color = Color.White)
+                }
+                
+                // Bouton Advanced Overlay Settings
+                androidx.compose.material3.Button(
+                    onClick = onAdvancedSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF9800)
+                    )
+                ) {
+                    Text("ADVANCED OVERLAY SETTINGS", color = Color.White)
                 }
                 
                 Divider(color = Color.Gray, modifier = Modifier.padding(vertical = 4.dp))

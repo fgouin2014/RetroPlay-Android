@@ -113,6 +113,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     // États des menus
     private val showMainMenu = mutableStateOf(false)
     private val showGamePadSettings = mutableStateOf(false)
+    private val showAdvancedOverlaySettings = mutableStateOf(false)
     private val showQuickMenu = mutableStateOf(false)
     private val overlaysVisible = mutableStateOf(true)
     private val showCoreErrorDialog = mutableStateOf(false)
@@ -745,6 +746,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 prefs = prefs,
                 showMainMenu = showMainMenu,
                 showGamePadSettings = showGamePadSettings,
+                showAdvancedOverlaySettings = showAdvancedOverlaySettings,
                 showQuickMenu = showQuickMenu,
                 overlaysVisible = overlaysVisible,
                 initialSettings = savedSettings,
@@ -1298,6 +1300,7 @@ private fun ComposeEmulatorScreen(
     prefs: SharedPreferences,
     showMainMenu: MutableState<Boolean>,
     showGamePadSettings: MutableState<Boolean>,
+    showAdvancedOverlaySettings: MutableState<Boolean>,
     showQuickMenu: MutableState<Boolean>,
     overlaysVisible: MutableState<Boolean>,
     initialSettings: TouchControllerSettingsManager.Settings,
@@ -1749,6 +1752,10 @@ private fun ComposeEmulatorScreen(
                             showQuickMenu.value = false
                             showMainMenu.value = true
                         },
+                        onAdvancedSettings = {
+                            showQuickMenu.value = false
+                            showAdvancedOverlaySettings.value = true
+                        },
                         onSaveState = { slot ->
                             closeQuickMenuWithCooldown()  // Fermer avec cooldown
                             onSaveState(slot)
@@ -1784,6 +1791,10 @@ private fun ComposeEmulatorScreen(
                         onGamePadSettings = {
                             showMainMenu.value = false
                             showGamePadSettings.value = true
+                        },
+                        onAdvancedSettings = {
+                            showMainMenu.value = false
+                            showAdvancedOverlaySettings.value = true
                         },
                         onCheatCodes = {
                             showMainMenu.value = false
@@ -1852,6 +1863,16 @@ private fun ComposeEmulatorScreen(
                             layoutVariant = newVariant
                             onVariantChanged(newVariant)
                         },
+                        context = retroView.context,
+                        prefs = prefs
+                    )
+                }
+                
+                // Advanced Overlay Settings Dialog
+                if (showAdvancedOverlaySettings.value) {
+                    AdvancedOverlaySettingsDialog(
+                        console = console,
+                        onDismiss = { showAdvancedOverlaySettings.value = false },
                         context = retroView.context,
                         prefs = prefs
                     )
@@ -2111,6 +2132,7 @@ private fun MainMenuDialog(
     onSaveGame: () -> Unit,
     onLoadGame: () -> Unit,
     onGamePadSettings: () -> Unit,
+    onAdvancedSettings: () -> Unit = {},  // Nouveau callback
     onCheatCodes: () -> Unit,
     onChangeCore: () -> Unit,
     onDipSwitches: () -> Unit,
@@ -2177,6 +2199,14 @@ private fun MainMenuDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("GamePad Settings", color = Color.White)
+                    }
+                    
+                    // Advanced Overlay Settings
+                    TextButton(
+                        onClick = onAdvancedSettings,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Advanced Overlay Settings", color = Color(0xFFFF9800))
                     }
                     
                     // DIP Switches (arcade only, if available)
@@ -2793,6 +2823,7 @@ private fun QuickMenuDialog(
     onDismiss: () -> Unit,
     onHideOverlay: () -> Unit,
     onSettings: () -> Unit,
+    onAdvancedSettings: () -> Unit = {},  // Nouveau callback
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
     onQuit: () -> Unit,
@@ -2879,6 +2910,17 @@ private fun QuickMenuDialog(
                     )
                 ) {
                     Text("SETTINGS", color = Color.White)
+                }
+                
+                // Bouton Advanced Overlay Settings
+                androidx.compose.material3.Button(
+                    onClick = onAdvancedSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF9800)
+                    )
+                ) {
+                    Text("ADVANCED OVERLAY SETTINGS", color = Color.White)
                 }
                 
                 Divider(color = Color.Gray, modifier = Modifier.padding(vertical = 4.dp))

@@ -68,6 +68,7 @@ fun RetroArchOverlayScreen(
     abxyDiagonalSensitivity: Int = 50,     // Sensibilité diagonales ABXY (0-100)
     showInputsMode: com.retroplay.overlay.models.ShowInputsMode = com.retroplay.overlay.models.ShowInputsMode.NONE,
     hideWhenGamepadConnected: Boolean = false,
+    analogRecenterZone: Int = 0,           // Recentrage analog sticks (0-100)
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"

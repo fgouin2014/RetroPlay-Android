@@ -40,10 +40,6 @@ import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.Variable
 import com.swordfish.libretrodroid.ShaderConfig
-import com.swordfish.touchinput.radial.LemuroidPadTheme
-import com.swordfish.touchinput.radial.LocalLemuroidPadTheme
-import com.swordfish.touchinput.radial.layouts.*
-import com.swordfish.touchinput.radial.settings.TouchControllerSettingsManager
 import gg.padkit.PadKit
 import gg.padkit.inputevents.InputEvent
 import gg.padkit.ids.Id
@@ -54,18 +50,18 @@ import kotlinx.coroutines.flow.collect
 import java.io.File
 
 /**
- * Native Compose Emulator Activity
+ * RetroArch Emulator Activity
  * 
  * Features:
- * - Jetpack Compose UI
- * - Lemuroid-TouchInput native gamepads
- * - Vector-based PlayStation symbols (uniform)
+ * - Jetpack Compose UI for dialogs/menus
+ * - Pure RetroArch overlays (Android layouts)
  * - LibretroDroid native cores (ARM64)
+ * - NO Radial/Lemuroid gamepads
  */
-class NativeComposeEmulatorActivity : ComponentActivity() {
+class RetroArchEmulatorActivity : ComponentActivity() {
     
     companion object {
-        private const val TAG = "NativeComposeEmulator"
+        private const val TAG = "RetroArchEmulator"
         private const val CRASH_PREFS = "core_crash_detection"
         private const val KEY_LAST_GAME = "last_game_path"
         private const val KEY_LAST_CORE = "last_core_attempted"
@@ -307,13 +303,12 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         val lastTimestamp = crashPrefs.getLong(KEY_TIMESTAMP, 0)
         val currentTime = System.currentTimeMillis()
         
-        // Charger les settings depuis SharedPreferences
+        // Charger les SharedPreferences
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
-        val savedSettings = loadSettings(prefs, console)
         
-        // ALWAYS use NATIVE (Radial/Lemuroid) in this activity
-        val savedVariant = GamePadLayoutManager.LayoutVariant.DEFAULT
-        Log.i(TAG, "Emulator mode forced: NATIVE (Radial) in NativeComposeEmulatorActivity")
+        // ALWAYS use RetroArch overlays (this activity is dedicated to RetroArch mode only)
+        val savedVariant = GamePadLayoutManager.LayoutVariant.RETROARCH
+        Log.i(TAG, "⚙️ RetroArch mode FORCED (pure RetroArch overlays - NO Radial gamepads)")
         
         // Créer GLRetroView avec GLRetroViewData
         val data = com.swordfish.libretrodroid.GLRetroViewData(this).apply {
@@ -345,7 +340,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             gameFilePath = romPath
             
             // Sauvegarder le core actuel pour le cleanup
-            this@NativeComposeEmulatorActivity.currentCoreFilePath = selectedCore
+            this@RetroArchEmulatorActivity.currentCoreFilePath = selectedCore
             
             // Sauvegarder la tentative actuelle pour détecter un crash futur
             crashPrefs.edit().apply {
@@ -372,7 +367,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             preferLowLatencyAudio = true
 
             // Configuration des variables de core via l'API officielle LibretroDroid
-            val corePrefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this@NativeComposeEmulatorActivity)
+            val corePrefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this@RetroArchEmulatorActivity)
             val prefix = "${console}_"
 
             // Détecter le core N64 réellement utilisé
@@ -619,7 +614,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 runOnUiThread {
                     Toast.makeText(
-                        this@NativeComposeEmulatorActivity,
+                        this@RetroArchEmulatorActivity,
                         "Zapper detected!\nPort 1: Gamepad (Start/Select)\nPort 2: Touch game area to shoot",
                         Toast.LENGTH_LONG
                     ).show()
@@ -634,7 +629,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     Log.i(TAG, "[N64] Configuring controller extensions...")
 
                     // Charger les paramètres depuis SharedPreferences
-                    val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this@NativeComposeEmulatorActivity)
+                    val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this@RetroArchEmulatorActivity)
                     val prefix = "n64_"
 
                     // Mapping des positions spinner vers les valeurs Libretro :
@@ -722,12 +717,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 showGamePadSettings = showGamePadSettings,
                 showQuickMenu = showQuickMenu,
                 overlaysVisible = overlaysVisible,
-                initialSettings = savedSettings,
                 initialVariant = savedVariant,
                 cheatApplier = cheatApplier,
-                onSettingsChanged = { newSettings ->
-                    saveSettings(prefs, console, newSettings)
-                },
                 onVariantChanged = { newVariant ->
                     GamePadLayoutManager.saveVariant(prefs, console, newVariant)
                 },
@@ -880,7 +871,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                         val gameId = File(romPath).nameWithoutExtension
                         
                         // Sauvegarder les modifications
-                        CoreVariableManager.saveVariables(this@NativeComposeEmulatorActivity, gameId, coreId, modifiedValues)
+                        CoreVariableManager.saveVariables(this@RetroArchEmulatorActivity, gameId, coreId, modifiedValues)
                         
                         // Appliquer au core
                         val updatedVars = dipSwitches.map { dip ->
@@ -914,7 +905,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                         val gameId = File(romPath).nameWithoutExtension
                         
                         // Sauvegarder les modifications
-                        CoreVariableManager.saveVariables(this@NativeComposeEmulatorActivity, gameId, coreId, modifiedValues)
+                        CoreVariableManager.saveVariables(this@RetroArchEmulatorActivity, gameId, coreId, modifiedValues)
                         
                         // Appliquer au core
                         val updatedVars = coreOptions.map { opt ->
@@ -1098,30 +1089,6 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         }
     }
     
-    // Charger les settings depuis SharedPreferences
-    private fun loadSettings(prefs: android.content.SharedPreferences, console: String): TouchControllerSettingsManager.Settings {
-        val key = "gamepad_${console}_settings"
-        return TouchControllerSettingsManager.Settings(
-            scale = prefs.getFloat("${key}_scale", 0.5f),
-            rotation = prefs.getFloat("${key}_rotation", 0.0f),
-            marginX = prefs.getFloat("${key}_marginX", 0.0f),
-            marginY = prefs.getFloat("${key}_marginY", 0.0f)
-        )
-    }
-    
-    // Sauvegarder les settings dans SharedPreferences
-    private fun saveSettings(prefs: android.content.SharedPreferences, console: String, settings: TouchControllerSettingsManager.Settings) {
-        val key = "gamepad_${console}_settings"
-        prefs.edit().apply {
-            putFloat("${key}_scale", settings.scale)
-            putFloat("${key}_rotation", settings.rotation)
-            putFloat("${key}_marginX", settings.marginX)
-            putFloat("${key}_marginY", settings.marginY)
-            apply()
-        }
-        Log.i(TAG, "Settings saved for $console: scale=${settings.scale}, rotation=${settings.rotation}")
-    }
-    
     // Charger et appliquer les codes de triche au démarrage
     private fun loadAndApplyCheats() {
         try {
@@ -1273,10 +1240,8 @@ private fun ComposeEmulatorScreen(
     showGamePadSettings: MutableState<Boolean>,
     showQuickMenu: MutableState<Boolean>,
     overlaysVisible: MutableState<Boolean>,
-    initialSettings: TouchControllerSettingsManager.Settings,
     initialVariant: GamePadLayoutManager.LayoutVariant,
     cheatApplier: com.retroplay.cheat.CheatApplier,
-    onSettingsChanged: (TouchControllerSettingsManager.Settings) -> Unit,
     onVariantChanged: (GamePadLayoutManager.LayoutVariant) -> Unit,
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
@@ -1288,10 +1253,7 @@ private fun ComposeEmulatorScreen(
     isZapperGame: Boolean = false,
     onZapperTouch: (android.view.MotionEvent) -> Boolean = { false }
 ) {
-    // Settings manager pour les gamepads (state mutable)
-    var settings by remember {
-        mutableStateOf(initialSettings)
-    }
+    // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
     // Variante de layout (state mutable)
     var layoutVariant by remember {
@@ -1399,14 +1361,13 @@ private fun ComposeEmulatorScreen(
         buildPortraitConstraints()
     }
     
-    // Fournir le thème Lemuroid pour les gamepads
-    CompositionLocalProvider(LocalLemuroidPadTheme provides LemuroidPadTheme()) {
-        MaterialTheme {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-            ) {
+    // NO Lemuroid theme needed - RetroArch overlays only!
+    MaterialTheme {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
                 if (layoutVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
                     // Mode RetroArch : Overlay fullscreen par-dessus le gameView
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -1644,34 +1605,8 @@ private fun ComposeEmulatorScreen(
                             }
                         }
                     }
-                } else {
-                    // Mode Lemuroid : Layout gauche/droite standard
-                    PadKit(
-                        onInputEvents = { event ->
-                            handlePadKitEvent(event, retroView, showMainMenu)
-                        }
-                    ) {
-                        ConstraintLayout(
-                            modifier = Modifier.fillMaxSize(),
-                            constraintSet = constraintSet
-                        ) {
-                            // Emulator View
-                            AndroidView(
-                                factory = { retroView },
-                                modifier = Modifier.layoutId("gameView")
-                            )
-                            
-                            // GamePads (affichés seulement si overlaysVisible est true)
-                            if (overlaysVisible.value) {
-                                // Left GamePad (dynamique selon console et variante)
-                                layout.left(this@PadKit, Modifier.layoutId("leftPad"), settings)
-                                
-                                // Right GamePad (dynamique selon console et variante)
-                                layout.right(this@PadKit, Modifier.layoutId("rightPad"), settings)
-                            }
-                        }
-                    }
                 }
+                // NO ELSE - RetroArch mode ONLY in this activity!
                 
                 // États locaux pour les sous-menus
                 var showSaveSlots by remember { mutableStateOf(false) }
@@ -1784,24 +1719,11 @@ private fun ComposeEmulatorScreen(
                     )
                 }
                 
-                // GamePad Settings Dialog avec LIVE PREVIEW et PERSISTANCE
+                // RetroArch Settings Dialog (simplified - NO Radial gamepad settings)
                 if (showGamePadSettings.value) {
-                    GamePadSettingsDialog(
+                    RetroArchSettingsDialog(
                         console = console,
-                        currentSettings = settings,
-                        currentVariant = layoutVariant,
                         onDismiss = { showGamePadSettings.value = false },
-                        onApply = { newSettings ->
-                            // Appliquer instantanément (live preview)
-                            settings = newSettings
-                            // Sauvegarder dans SharedPreferences
-                            onSettingsChanged(newSettings)
-                        },
-                        onVariantChange = { newVariant ->
-                            // Changer de variante et sauvegarder
-                            layoutVariant = newVariant
-                            onVariantChanged(newVariant)
-                        },
                         context = retroView.context,
                         prefs = prefs
                     )
@@ -1977,7 +1899,6 @@ private fun ComposeEmulatorScreen(
             }
         }
     }
-}
 
 // Build ConstraintSet pour mode Portrait
 private fun buildPortraitConstraints(): ConstraintSet {
@@ -2314,19 +2235,11 @@ private fun SlotSelectionDialog(
     }
 }
 
-@Composable
-private fun GamePadSettingsDialog(
-    console: String,
-    currentSettings: TouchControllerSettingsManager.Settings,
-    currentVariant: GamePadLayoutManager.LayoutVariant,
-    onDismiss: () -> Unit,
-    onApply: (TouchControllerSettingsManager.Settings) -> Unit,
-    onVariantChange: (GamePadLayoutManager.LayoutVariant) -> Unit,
-    context: Context,
-    prefs: SharedPreferences
-) {
-    var scale by remember { mutableFloatStateOf(currentSettings.scale) }
-    var rotation by remember { mutableFloatStateOf(currentSettings.rotation) }
+// GamePadSettingsDialog REMOVED - Not needed for RetroArch-only activity
+// TODO: Create RetroArchSettingsDialog for RetroArch-specific overlay configuration
+
+/*
+ * OLD GamePadSettingsDialog CODE COMMENTED OUT - TO BE REMOVED
     var marginX by remember { mutableFloatStateOf(currentSettings.marginX) }
     var marginY by remember { mutableFloatStateOf(currentSettings.marginY) }
     var selectedVariant by remember { mutableStateOf(currentVariant) }
@@ -2736,6 +2649,7 @@ private fun GamePadSettingsDialog(
         }
     }
 }
+*/
 
 // Quick Menu Dialog (Menu Rapide - Bouton Back)
 @Composable

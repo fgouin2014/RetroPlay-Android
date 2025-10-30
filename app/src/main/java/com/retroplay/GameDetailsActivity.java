@@ -1222,23 +1222,24 @@ public class GameDetailsActivity extends AppCompatActivity {
     /**
      * Get the appropriate emulator activity class based on user preference
      * 
-     * NOTE: Currently always uses NativeComposeEmulatorActivity which supports both modes:
-     * - NATIVE mode: Uses Radial/Lemuroid gamepads
-     * - RETROARCH mode: Uses RetroArch overlays
-     * 
-     * The mode preference is still saved and NativeComposeEmulatorActivity will
-     * automatically use the correct gamepad system based on the user's choice.
+     * Two separate activities for clean separation:
+     * - NATIVE mode: NativeComposeEmulatorActivity (Radial/Lemuroid gamepads)
+     * - RETROARCH mode: RetroArchEmulatorActivity (Pure RetroArch overlays)
      * 
      * @param console Console ID (e.g., "nes", "snes", "psx")
-     * @return Class of emulator activity (always NativeComposeEmulatorActivity for now)
+     * @return Class of emulator activity based on effective mode
      */
     private Class<?> getEmulatorActivityClass(String console) {
         // Use effective mode (game override or console default)
         GamepadPreferenceManager.EmulatorMode effectiveMode = GamepadPreferenceManager.INSTANCE.getEffectiveMode(this, currentConsole, currentGameId);
         
-        // For now, always use NativeComposeEmulatorActivity (supports both NATIVE and RETROARCH modes)
-        Log.i(TAG, "Launching with NativeComposeEmulatorActivity (effective mode: " + effectiveMode + ") for " + console + "/" + currentGameId);
-        return NativeComposeEmulatorActivity.class;
+        if (effectiveMode == GamepadPreferenceManager.EmulatorMode.RETROARCH) {
+            Log.i(TAG, "Launching RetroArchEmulatorActivity for " + console + "/" + currentGameId);
+            return RetroArchEmulatorActivity.class;
+        } else {
+            Log.i(TAG, "Launching NativeComposeEmulatorActivity for " + console + "/" + currentGameId);
+            return NativeComposeEmulatorActivity.class;
+        }
     }
     
     /**
@@ -1276,9 +1277,30 @@ public class GameDetailsActivity extends AppCompatActivity {
                 GamepadPreferenceManager.INSTANCE.saveGameOverride(this, currentConsole, currentGameId, selectedMode);
                 Log.i(TAG, "Saved game override for " + currentGameId + ": " + selectedMode);
             }
+            
+            // Show "Restart Required" dialog
+            showRestartRequiredDialog(selectedMode);
         });
         
         Log.i(TAG, "Emulator mode toggle setup - Console: " + consoleMode + ", Effective: " + effectiveMode + ", Has Override: " + hasOverride);
+    }
+    
+    /**
+     * Show "Restart Required" dialog when emulator mode is changed
+     * @param newMode The new emulator mode that was selected
+     */
+    private void showRestartRequiredDialog(GamepadPreferenceManager.EmulatorMode newMode) {
+        String modeName = newMode == GamepadPreferenceManager.EmulatorMode.NATIVE ? "NATIVE" : "RETROARCH";
+        
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("Restart Required")
+            .setMessage("Emulator mode changed to " + modeName + ".\n\nRestart the game to apply changes.")
+            .setIcon(android.R.drawable.ic_dialog_info)
+            .setPositiveButton("OK", (dialog, which) -> {
+                dialog.dismiss();
+            })
+            .setCancelable(true)
+            .show();
     }
     
     @Override

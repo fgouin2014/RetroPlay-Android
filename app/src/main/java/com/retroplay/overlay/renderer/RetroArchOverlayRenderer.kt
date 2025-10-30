@@ -225,9 +225,14 @@ fun RetroArchOverlayScreen(
                     val hitboxX = button.xHitbox * screenSize.width
                     val hitboxY = button.yHitbox * screenSize.height
                     
-                    val debugColor = when (button.type) {
-                        OverlayButtonType.ANALOG_LEFT, OverlayButtonType.ANALOG_RIGHT -> Color.Green
-                        else -> Color.Red
+                    // Couleur debug selon type:
+                    // - ROUGE: range_mod_exclusive = true (zone exclusive, bloque autres touches)
+                    // - VERT: analog sticks
+                    // - BLEU: boutons normaux
+                    val debugColor = when {
+                        button.rangeModExclusive -> Color.Red
+                        button.type == OverlayButtonType.ANALOG_LEFT || button.type == OverlayButtonType.ANALOG_RIGHT -> Color.Green
+                        else -> Color.Blue
                     }
                     
                     when (button.shape) {
@@ -241,7 +246,7 @@ fun RetroArchOverlayScreen(
                         }
                         ButtonShape.RECT -> {
                             drawRect(
-                                color = Color.Blue,
+                                color = debugColor,
                                 topLeft = Offset(hitboxX - hitboxWidthPx / 2, hitboxY - hitboxHeightPx / 2),
                                 size = Size(hitboxWidthPx, hitboxHeightPx),
                                 alpha = 0.5f

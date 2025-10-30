@@ -42,20 +42,40 @@
             <!-- WASM Section (Red - Left Half) -->
             <FrameLayout
                 android:id="@+id/pill_wasm"
-                android:layout_width="80dp"
+                android:layout_width="56dp"
                 android:layout_height="match_parent"
                 android:background="@drawable/pill_left_red_ripple"
                 android:clickable="true"
-                android:focusable="true" />
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_play_arrow_24"
+                    android:tint="@color/kitt_black"
+                    android:contentDescription="Play WASM" />
+
+            </FrameLayout>
 
             <!-- NATIVE Section (Green - Right Half) -->
             <FrameLayout
                 android:id="@+id/pill_native"
-                android:layout_width="80dp"
+                android:layout_width="56dp"
                 android:layout_height="match_parent"
                 android:background="@drawable/pill_right_green_ripple"
                 android:clickable="true"
-                android:focusable="true" />
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_play_arrow_24"
+                    android:tint="@color/kitt_black"
+                    android:contentDescription="Play Native" />
+
+            </FrameLayout>
 
         </LinearLayout>
 

@@ -22,7 +22,12 @@ data class OverlayLayout(
     val alphaModifier: Float = 1.0f,      // Transparence
     val buttons: List<OverlayButton>,
     val rect: OverlayRect? = null,        // overlay0_rect (custom positioning)
-    val backgroundImage: String? = null   // overlay0_overlay (image de fond)
+    val backgroundImage: String? = null,  // overlay0_overlay (image de fond)
+    val aspectRatio: Float? = null,       // overlay0_aspect_ratio
+    val blockXSeparation: Boolean = false, // overlay0_block_x_separation
+    val blockYSeparation: Boolean = false, // overlay0_block_y_separation
+    val autoXSeparation: Boolean = true,   // overlay0_auto_x_separation (défaut true)
+    val autoYSeparation: Boolean = true    // overlay0_auto_y_separation (défaut true)
 )
 
 /**
@@ -188,7 +193,12 @@ data class OverlayPreference(
     val portraitLayout: String = "portrait-A",   // Layout pour portrait
     val autoRotate: Boolean = true,              // Auto-switch landscape/portrait
     val swapAnalogSticks: Boolean = false,       // Inverser Left <-> Right sticks
-    val invertAnalogY: Boolean = false           // Inverser haut/bas (Y axis)
+    val invertAnalogY: Boolean = false,          // Inverser haut/bas (Y axis)
+    val scale: Float = 1.0f,                     // Échelle globale (0.5-1.5)
+    val xOffset: Float = 0.0f,                   // Décalage X (-0.2 à 0.2)
+    val yOffset: Float = 0.0f,                   // Décalage Y (-0.2 à 0.2)
+    val xSeparation: Float = 0.0f,               // Séparation interne X (-0.2 à 0.2)
+    val ySeparation: Float = 0.0f                // Séparation interne Y (-0.2 à 0.2)
 )
 
 /**
@@ -211,6 +221,11 @@ object OverlayPreferenceManager {
             .putBoolean("overlay_${console}_auto_rotate", preference.autoRotate)
             .putBoolean("overlay_${console}_swap_analog_sticks", preference.swapAnalogSticks)
             .putBoolean("overlay_${console}_invert_analog_y", preference.invertAnalogY)
+            .putFloat("overlay_${console}_scale", preference.scale)
+            .putFloat("overlay_${console}_x_offset", preference.xOffset)
+            .putFloat("overlay_${console}_y_offset", preference.yOffset)
+            .putFloat("overlay_${console}_x_separation", preference.xSeparation)
+            .putFloat("overlay_${console}_y_separation", preference.ySeparation)
             .commit()
     }
     
@@ -227,8 +242,13 @@ object OverlayPreferenceManager {
         val autoRotate = prefs.getBoolean("overlay_${console}_auto_rotate", true)
         val swapAnalogSticks = prefs.getBoolean("overlay_${console}_swap_analog_sticks", false)
         val invertAnalogY = prefs.getBoolean("overlay_${console}_invert_analog_y", false)
+        val scale = prefs.getFloat("overlay_${console}_scale", 1.0f)
+        val xOffset = prefs.getFloat("overlay_${console}_x_offset", 0.0f)
+        val yOffset = prefs.getFloat("overlay_${console}_y_offset", 0.0f)
+        val xSeparation = prefs.getFloat("overlay_${console}_x_separation", 0.0f)
+        val ySeparation = prefs.getFloat("overlay_${console}_y_separation", 0.0f)
         
-        return OverlayPreference(enabled, overlayName, landscapeLayout, portraitLayout, autoRotate, swapAnalogSticks, invertAnalogY)
+        return OverlayPreference(enabled, overlayName, landscapeLayout, portraitLayout, autoRotate, swapAnalogSticks, invertAnalogY, scale, xOffset, yOffset, xSeparation, ySeparation)
     }
     
     fun disable(

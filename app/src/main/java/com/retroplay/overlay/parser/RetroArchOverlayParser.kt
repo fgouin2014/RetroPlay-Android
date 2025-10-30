@@ -143,6 +143,20 @@ class RetroArchOverlayParser {
         val backgroundImage = lines.find { it.trim().startsWith("${prefix}overlay = ") }
             ?.substringAfter("= ")?.trim()?.removePrefix("\"")?.removeSuffix("\"")
         
+        // Parser aspect_ratio
+        val aspectRatio = lines.find { it.trim().startsWith("${prefix}aspect_ratio = ") }
+            ?.substringAfter("= ")?.trim()?.toFloatOrNull()
+        
+        // Parser separation flags
+        val blockXSeparation = lines.find { it.trim().startsWith("${prefix}block_x_separation = ") }
+            ?.substringAfter("= ")?.trim()?.toBoolean() ?: false
+        val blockYSeparation = lines.find { it.trim().startsWith("${prefix}block_y_separation = ") }
+            ?.substringAfter("= ")?.trim()?.toBoolean() ?: false
+        val autoXSeparation = lines.find { it.trim().startsWith("${prefix}auto_x_separation = ") }
+            ?.substringAfter("= ")?.trim()?.toBoolean() ?: true
+        val autoYSeparation = lines.find { it.trim().startsWith("${prefix}auto_y_separation = ") }
+            ?.substringAfter("= ")?.trim()?.toBoolean() ?: true
+        
         // Lire le nombre de descripteurs de boutons
         val descCount = lines.find { it.trim().startsWith("${prefix}descs = ") }
             ?.substringAfter("= ")?.trim()?.toIntOrNull() ?: 0
@@ -164,7 +178,12 @@ class RetroArchOverlayParser {
             alphaModifier = alphaMod,
             buttons = buttons,
             rect = rect,
-            backgroundImage = backgroundImage
+            backgroundImage = backgroundImage,
+            aspectRatio = aspectRatio,
+            blockXSeparation = blockXSeparation,
+            blockYSeparation = blockYSeparation,
+            autoXSeparation = autoXSeparation,
+            autoYSeparation = autoYSeparation
         )
     }
     

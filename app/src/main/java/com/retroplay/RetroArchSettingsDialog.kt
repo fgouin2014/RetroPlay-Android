@@ -61,6 +61,11 @@ fun RetroArchSettingsDialog(
     var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
     var swapAnalogSticks by remember { mutableStateOf(currentOverlayPref?.swapAnalogSticks ?: false) }
     var invertAnalogY by remember { mutableStateOf(currentOverlayPref?.invertAnalogY ?: false) }
+    var scale by remember { mutableStateOf(currentOverlayPref?.scale ?: 1.0f) }
+    var xOffset by remember { mutableStateOf(currentOverlayPref?.xOffset ?: 0.0f) }
+    var yOffset by remember { mutableStateOf(currentOverlayPref?.yOffset ?: 0.0f) }
+    var xSeparation by remember { mutableStateOf(currentOverlayPref?.xSeparation ?: 0.0f) }
+    var ySeparation by remember { mutableStateOf(currentOverlayPref?.ySeparation ?: 0.0f) }
     
     // Semi-transparent state for preview (30% transparent for 2 seconds)
     var isTransparent by remember { mutableStateOf(false) }
@@ -82,7 +87,7 @@ fun RetroArchSettingsDialog(
     }
     
     // Save preferences when changed + trigger 30% transparency for 2 seconds
-    LaunchedEffect(selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate, swapAnalogSticks, invertAnalogY) {
+    LaunchedEffect(selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate, swapAnalogSticks, invertAnalogY, scale, xOffset, yOffset, xSeparation, ySeparation) {
         if (selectedOverlay.isNotEmpty()) {
             val pref = com.retroplay.overlay.models.OverlayPreference(
                 enabled = true,
@@ -91,7 +96,12 @@ fun RetroArchSettingsDialog(
                 portraitLayout = selectedPortraitLayout,
                 autoRotate = autoRotate,
                 swapAnalogSticks = swapAnalogSticks,
-                invertAnalogY = invertAnalogY
+                invertAnalogY = invertAnalogY,
+                scale = scale,
+                xOffset = xOffset,
+                yOffset = yOffset,
+                xSeparation = xSeparation,
+                ySeparation = ySeparation
             )
             com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
             android.util.Log.i("RetroArchSettings", "Saved overlay pref for $console: overlay='$selectedOverlay' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate swap=$swapAnalogSticks invertY=$invertAnalogY")
@@ -573,6 +583,137 @@ fun RetroArchSettingsDialog(
                                     checkedTrackColor = Color(0xFFFFEB3B).copy(alpha = 0.5f),
                                     uncheckedThumbColor = Color(0xFF888888),
                                     uncheckedTrackColor = Color(0xFF444444)
+                                )
+                            )
+                        }
+                        
+                        Spacer(Modifier.height(16.dp))
+                        
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = Color(0xFF444444),
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                        
+                        Text(
+                            "Position & Scale",
+                            color = Color(0xFFFF9800),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        // Scale Slider
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Scale", color = Color.White, fontSize = 14.sp)
+                                Text("${String.format("%.2f", scale)}x", color = Color(0xFF4CAF50), fontSize = 14.sp)
+                            }
+                            Slider(
+                                value = scale,
+                                onValueChange = { scale = it },
+                                valueRange = 0.5f..1.5f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFF4CAF50),
+                                    activeTrackColor = Color(0xFF4CAF50),
+                                    inactiveTrackColor = Color(0xFF444444)
+                                )
+                            )
+                        }
+                        
+                        // X Offset Slider
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("X Offset", color = Color.White, fontSize = 14.sp)
+                                Text(String.format("%.3f", xOffset), color = Color(0xFF2196F3), fontSize = 14.sp)
+                            }
+                            Slider(
+                                value = xOffset,
+                                onValueChange = { newValue ->
+                                    // Snap au centre si proche de 0.0
+                                    xOffset = if (kotlin.math.abs(newValue) < 0.01f) 0.0f else newValue
+                                },
+                                valueRange = -0.2f..0.2f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFF2196F3),
+                                    activeTrackColor = Color(0xFF2196F3),
+                                    inactiveTrackColor = Color(0xFF444444)
+                                )
+                            )
+                        }
+                        
+                        // Y Offset Slider
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Y Offset", color = Color.White, fontSize = 14.sp)
+                                Text(String.format("%.3f", yOffset), color = Color(0xFFE91E63), fontSize = 14.sp)
+                            }
+                            Slider(
+                                value = yOffset,
+                                onValueChange = { newValue ->
+                                    // Snap au centre si proche de 0.0
+                                    yOffset = if (kotlin.math.abs(newValue) < 0.01f) 0.0f else newValue
+                                },
+                                valueRange = -0.2f..0.2f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFFE91E63),
+                                    activeTrackColor = Color(0xFFE91E63),
+                                    inactiveTrackColor = Color(0xFF444444)
+                                )
+                            )
+                        }
+                        
+                        // X Separation Slider (espacement interne horizontal)
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("X Separation", color = Color.White, fontSize = 14.sp)
+                                Text(String.format("%.3f", xSeparation), color = Color(0xFF00BCD4), fontSize = 14.sp)
+                            }
+                            Slider(
+                                value = xSeparation,
+                                onValueChange = { newValue ->
+                                    xSeparation = if (kotlin.math.abs(newValue) < 0.01f) 0.0f else newValue
+                                },
+                                valueRange = -0.2f..0.2f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFF00BCD4),
+                                    activeTrackColor = Color(0xFF00BCD4),
+                                    inactiveTrackColor = Color(0xFF444444)
+                                )
+                            )
+                        }
+                        
+                        // Y Separation Slider (espacement interne vertical)
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Y Separation", color = Color.White, fontSize = 14.sp)
+                                Text(String.format("%.3f", ySeparation), color = Color(0xFF9C27B0), fontSize = 14.sp)
+                            }
+                            Slider(
+                                value = ySeparation,
+                                onValueChange = { newValue ->
+                                    ySeparation = if (kotlin.math.abs(newValue) < 0.01f) 0.0f else newValue
+                                },
+                                valueRange = -0.2f..0.2f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFF9C27B0),
+                                    activeTrackColor = Color(0xFF9C27B0),
+                                    inactiveTrackColor = Color(0xFF444444)
                                 )
                             )
                         }

@@ -57,9 +57,19 @@ fun RetroArchOverlayScreen(
     showDebug: Boolean = false,
     swapAnalogSticks: Boolean = false,
     invertAnalogY: Boolean = false,
+    overlayScale: Float = 1.0f,            // Échelle globale (0.5-1.5)
+    overlayXOffset: Float = 0.0f,          // Décalage X (-0.2 à 0.2)
+    overlayYOffset: Float = 0.0f,          // Décalage Y (-0.2 à 0.2)
+    overlayXSeparation: Float = 0.0f,      // Séparation interne X (-0.2 à 0.2)
+    overlayYSeparation: Float = 0.0f,      // Séparation interne Y (-0.2 à 0.2)
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"
+    
+    // Appliquer scale/offset/separation à tous les boutons (pré-calcul pour éviter répétition)
+    val scaledLayout = remember(layout, overlayScale, overlayXOffset, overlayYOffset, overlayXSeparation, overlayYSeparation) {
+        applyScaleAndOffset(layout, overlayScale, overlayXOffset, overlayYOffset, overlayXSeparation, overlayYSeparation)
+    }
     
     // Taille de l'écran
     var screenSize by remember { mutableStateOf(IntSize(1920, 1080)) }
@@ -77,10 +87,10 @@ fun RetroArchOverlayScreen(
             .onSizeChanged { size ->
                 screenSize = size
                 Log.d(TAG, "Screen size: ${size.width}x${size.height}")
-                Log.d(TAG, "Layout: ${layout.name} | Buttons: ${layout.buttons.size} | RangeMod: ${layout.rangeModifier} | AlphaMod: ${layout.alphaModifier}")
+                Log.d(TAG, "Layout: ${scaledLayout.name} | Buttons: ${scaledLayout.buttons.size} | RangeMod: ${scaledLayout.rangeModifier} | AlphaMod: ${scaledLayout.alphaModifier} | Scale: $overlayScale | Offset: ($overlayXOffset, $overlayYOffset)")
                 
                 // DEBUG: Afficher TOUS les boutons système dans le layout
-                val systemButtons = layout.buttons.filter { 
+                val systemButtons = scaledLayout.buttons.filter { 
                     it.action.startsWith("overlay_next") || it.action == "menu_toggle"
                 }
                 Log.w(TAG, "🔍 SYSTEM BUTTONS IN LAYOUT: ${systemButtons.size} total")
@@ -91,7 +101,7 @@ fun RetroArchOverlayScreen(
             .pointerInteropFilter { event ->
                 handleTouchEvent(
                     event = event,
-                    layout = layout,
+                    layout = scaledLayout,
                     screenSize = screenSize,
                     pressedButtons = pressedButtons,
                     analogLeftState = analogLeftState,
@@ -109,20 +119,21 @@ fun RetroArchOverlayScreen(
     ) {
         // Canvas unique pour afficher TOUS les boutons
         Canvas(modifier = Modifier.fillMaxSize()) {
-            layout.buttons.forEach { button ->
+            scaledLayout.buttons.forEach { button ->
                 // Convertir coordonnées normalisées → pixels
+                // Scale/offset déjà appliqués dans scaledLayout!
                 val xPx = button.x * screenSize.width
                 val yPx = button.y * screenSize.height
                 
                 // CRITIQUE: Utiliser button.modW et button.modH pour l'affichage des IMAGES!
                 // RetroArch utilise mod_w = 2.0 * range_x et mod_h = 2.0 * range_y
                 // C'est pour ça que les images du D-pad se chevauchent et forment un D-pad compact!
-                val displayWidthPx = button.modW * screenSize.width
-                val displayHeightPx = button.modH * screenSize.height
+                val displayWidthPx = button.modW * screenSize.width * overlayScale
+                val displayHeightPx = button.modH * screenSize.height * overlayScale
                 
                 // Utiliser button.width/height (range_x/y) pour les HITBOXES uniquement
-                val hitboxWidthPx = button.width * screenSize.width * layout.rangeModifier
-                val hitboxHeightPx = button.height * screenSize.height * layout.rangeModifier
+                val hitboxWidthPx = button.width * screenSize.width * scaledLayout.rangeModifier * overlayScale
+                val hitboxHeightPx = button.height * screenSize.height * scaledLayout.rangeModifier * overlayScale
                 
                 // Charger et afficher l'image du bouton
                 button.imagePath?.let { path ->
@@ -209,11 +220,11 @@ fun RetroArchOverlayScreen(
             // MODE DEBUG: Afficher la position actuelle des analog sticks
             if (showDebug) {
                 // Stick gauche
-                val leftStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
+                val leftStick = scaledLayout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
                 if (leftStick != null && (analogLeftState.value.x != 0f || analogLeftState.value.y != 0f)) {
                     val centerX = leftStick.x * screenSize.width
                     val centerY = leftStick.y * screenSize.height
-                    val radius = leftStick.width * screenSize.width * layout.rangeModifier
+                    val radius = leftStick.width * screenSize.width * scaledLayout.rangeModifier * overlayScale
                     val currentX = centerX + analogLeftState.value.x * radius
                     val currentY = centerY + analogLeftState.value.y * radius
                     
@@ -226,11 +237,11 @@ fun RetroArchOverlayScreen(
                 }
                 
                 // Stick droit
-                val rightStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
+                val rightStick = scaledLayout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
                 if (rightStick != null && (analogRightState.value.x != 0f || analogRightState.value.y != 0f)) {
                     val centerX = rightStick.x * screenSize.width
                     val centerY = rightStick.y * screenSize.height
-                    val radius = rightStick.width * screenSize.width * layout.rangeModifier
+                    val radius = rightStick.width * screenSize.width * scaledLayout.rangeModifier * overlayScale
                     val currentX = centerX + analogRightState.value.x * radius
                     val currentY = centerY + analogRightState.value.y * radius
                     
@@ -789,6 +800,63 @@ fun RetroArchOverlayDebug(
             // Note: drawText nécessite TextMeasurer (Material3)
         }
     }
+}
+
+/**
+ * Appliquer scale, offset et separation à tous les boutons du layout
+ * Identique à RetroArch input_driver.c ligne 2674-2715
+ */
+private fun applyScaleAndOffset(
+    layout: OverlayLayout,
+    scale: Float,
+    xOffset: Float,
+    yOffset: Float,
+    xSeparation: Float,
+    ySeparation: Float
+): OverlayLayout {
+    if (scale == 1.0f && xOffset == 0.0f && yOffset == 0.0f && xSeparation == 0.0f && ySeparation == 0.0f) {
+        return layout  // Pas de transformation nécessaire
+    }
+    
+    val transformedButtons = layout.buttons.map { button ->
+        // 1. Appliquer SEPARATION interne (RetroArch ligne 2692-2705)
+        var xShiftOffset = 0.0f
+        var yShiftOffset = 0.0f
+        
+        // Si bouton à gauche du centre (x < 0.5), décaler vers la gauche
+        if (button.x < 0.5f - 0.0001f) {
+            xShiftOffset = xSeparation * -1.0f
+        }
+        // Si bouton à droite du centre (x > 0.5), décaler vers la droite
+        else if (button.x > 0.5f + 0.0001f) {
+            xShiftOffset = xSeparation
+        }
+        
+        // Pareil pour Y
+        if (button.y < 0.5f - 0.0001f) {
+            yShiftOffset = ySeparation * -1.0f
+        }
+        else if (button.y > 0.5f + 0.0001f) {
+            yShiftOffset = ySeparation
+        }
+        
+        val xWithSeparation = button.x + xShiftOffset
+        val yWithSeparation = button.y + yShiftOffset
+        
+        // 2. Appliquer SCALE (centré autour de 0.5) puis OFFSET global
+        val newX = 0.5f + (xWithSeparation - 0.5f) * scale + xOffset
+        val newY = 0.5f + (yWithSeparation - 0.5f) * scale + yOffset
+        
+        // Recalculer modX/modY avec les nouvelles positions
+        button.copy(
+            x = newX,
+            y = newY,
+            modX = newX - button.width,
+            modY = newY - button.height
+        )
+    }
+    
+    return layout.copy(buttons = transformedButtons)
 }
 
 /**

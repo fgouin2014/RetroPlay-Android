@@ -225,8 +225,10 @@ class OverlayAssetManager(private val context: Context) {
         Log.d(TAG, "getCompatibleOverlays for console='$console': found ${allOverlays.size} total overlays")
         Log.d(TAG, "Available overlays: ${allOverlays.joinToString()}")
         
-        // Les retropads universels (compatibles avec TOUTES les consoles)
-        val universalOverlays = allOverlays.filter { it.contains("retropad") }
+        // Les overlays universels (compatibles avec TOUTES les consoles)
+        val universalOverlays = allOverlays.filter { 
+            it.contains("retropad") || it == "flat"
+        }
         
         // Correspondances console -> overlays spécifiques
         val specificOverlays = allOverlays.filter { overlay ->

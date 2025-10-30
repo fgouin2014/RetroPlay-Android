@@ -42,7 +42,9 @@ data class AnalogStickState(
     val x: Float = 0f,    // -1.0 à 1.0
     val y: Float = 0f,    // -1.0 à 1.0
     val pointerId: Int? = null,  // ID du doigt qui contrôle ce stick
-    val isActivated: Boolean = false  // true si le stick a été touché (permet hitbox étendue)
+    val isActivated: Boolean = false,  // true si le stick a été touché (permet hitbox étendue)
+    val visualOffsetX: Float = 0f,  // Offset visuel pour movable (pixels)
+    val visualOffsetY: Float = 0f   // Offset visuel pour movable (pixels)
 )
 
 @Composable
@@ -178,8 +180,8 @@ fun RetroArchOverlayScreen(
                         var modXPx = button.modX * screenSize.width
                         var modYPx = button.modY * screenSize.height
                         
-                        // MOVABLE: Si le bouton est movable (analog sticks), appliquer delta_x/delta_y
-                        // RetroArch: vertex_geom(..., mod_x + delta_x, mod_y + delta_y, ...)
+                        // MOVABLE: Si le bouton est movable (analog sticks), appliquer visualOffset
+                        // L'image du stick suit le doigt dans la limite du rayon
                         if (button.movable) {
                             val analogState = when (button.type) {
                                 OverlayButtonType.ANALOG_LEFT -> analogLeftState.value
@@ -188,12 +190,9 @@ fun RetroArchOverlayScreen(
                             }
                             
                             if (analogState != null && analogState.isActivated) {
-                                // delta = (analog_value / 32768) * (range / 2.0)
-                                // Ici analogState.x/y sont déjà normalisés (-1.0 à 1.0)
-                                val deltaX = analogState.x * (button.width * screenSize.width / 2.0f)
-                                val deltaY = analogState.y * (button.height * screenSize.height / 2.0f)
-                                modXPx += deltaX
-                                modYPx += deltaY
+                                // Appliquer l'offset visuel calculé dans handleTouchEvent
+                                modXPx += analogState.visualOffsetX
+                                modYPx += analogState.visualOffsetY
                             }
                         }
                         
@@ -392,17 +391,38 @@ private fun handleTouchEvent(
                 // C'est un analog stick
                 val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                 if (values != null) {
+                    // Calculer l'offset visuel pour movable buttons
+                    val (visualOffsetX, visualOffsetY) = if (analogStick.movable) {
+                        val centerX = analogStick.x * screenSize.width
+                        val centerY = analogStick.y * screenSize.height
+                        val rangeX = analogStick.width * screenSize.width * layout.rangeModifier * analogStick.rangeModifier
+                        val rangeY = analogStick.height * screenSize.height * layout.rangeModifier * analogStick.rangeModifier
+                        val dx = x - centerX
+                        val dy = y - centerY
+                        // Limiter l'offset visuel au rayon du stick (saturation)
+                        val distance = sqrt(dx * dx + dy * dy)
+                        val maxDistance = sqrt(rangeX * rangeX + rangeY * rangeY)
+                        if (distance > maxDistance) {
+                            val scale = maxDistance / distance
+                            Pair(dx * scale, dy * scale)
+                        } else {
+                            Pair(dx, dy)
+                        }
+                    } else {
+                        Pair(0f, 0f)
+                    }
+                    
                     // Enregistrer le pointerId et activer le stick pour permettre hitbox étendue
                     // Appliquer swap si demandé : LEFT devient RIGHT et RIGHT devient LEFT
                     when (analogStick.type) {
                         OverlayButtonType.ANALOG_LEFT -> {
-                            analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
+                            analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true, visualOffsetX, visualOffsetY)
                             val actionName = if (swapAnalogSticks) "analog_right" else "analog_left"
                             onAnalogMove(actionName, values.first, values.second)
                             Log.d(TAG, "Analog LEFT (sent as $actionName): x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
                         }
                         OverlayButtonType.ANALOG_RIGHT -> {
-                            analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
+                            analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true, visualOffsetX, visualOffsetY)
                             val actionName = if (swapAnalogSticks) "analog_left" else "analog_right"
                             onAnalogMove(actionName, values.first, values.second)
                             Log.d(TAG, "Analog RIGHT (sent as $actionName): x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
@@ -463,7 +483,26 @@ private fun handleTouchEvent(
                     if (leftStick != null) {
                         val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                         if (values != null) {
-                            analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
+                            // Calculer l'offset visuel pour movable buttons
+                            val (visualOffsetX, visualOffsetY) = if (leftStick.movable) {
+                                val centerX = leftStick.x * screenSize.width
+                                val centerY = leftStick.y * screenSize.height
+                                val rangeX = leftStick.width * screenSize.width * layout.rangeModifier * leftStick.rangeModifier
+                                val rangeY = leftStick.height * screenSize.height * layout.rangeModifier * leftStick.rangeModifier
+                                val dx = x - centerX
+                                val dy = y - centerY
+                                val distance = sqrt(dx * dx + dy * dy)
+                                val maxDistance = sqrt(rangeX * rangeX + rangeY * rangeY)
+                                if (distance > maxDistance) {
+                                    val scale = maxDistance / distance
+                                    Pair(dx * scale, dy * scale)
+                                } else {
+                                    Pair(dx, dy)
+                                }
+                            } else {
+                                Pair(0f, 0f)
+                            }
+                            analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true, visualOffsetX, visualOffsetY)
                             val actionName = if (swapAnalogSticks) "analog_right" else "analog_left"
                             onAnalogMove(actionName, values.first, values.second)
                         }
@@ -477,7 +516,26 @@ private fun handleTouchEvent(
                     if (rightStick != null) {
                         val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                         if (values != null) {
-                            analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
+                            // Calculer l'offset visuel pour movable buttons
+                            val (visualOffsetX, visualOffsetY) = if (rightStick.movable) {
+                                val centerX = rightStick.x * screenSize.width
+                                val centerY = rightStick.y * screenSize.height
+                                val rangeX = rightStick.width * screenSize.width * layout.rangeModifier * rightStick.rangeModifier
+                                val rangeY = rightStick.height * screenSize.height * layout.rangeModifier * rightStick.rangeModifier
+                                val dx = x - centerX
+                                val dy = y - centerY
+                                val distance = sqrt(dx * dx + dy * dy)
+                                val maxDistance = sqrt(rangeX * rangeX + rangeY * rangeY)
+                                if (distance > maxDistance) {
+                                    val scale = maxDistance / distance
+                                    Pair(dx * scale, dy * scale)
+                                } else {
+                                    Pair(dx, dy)
+                                }
+                            } else {
+                                Pair(0f, 0f)
+                            }
+                            analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true, visualOffsetX, visualOffsetY)
                             val actionName = if (swapAnalogSticks) "analog_left" else "analog_right"
                             onAnalogMove(actionName, values.first, values.second)
                         }

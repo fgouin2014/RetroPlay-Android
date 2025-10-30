@@ -100,38 +100,36 @@ fun AdvancedOverlaySettingsDialog(
     }
     
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.85f),  // Même taille que RetroArchSettingsDialog pour scroll
-            colors = CardDefaults.cardColors(
-                containerColor = if (isTransparent) 
-                    Color(0xDD000000).copy(alpha = 0.3f)  // Preview: 30% transparent
-                else 
-                    Color(0xDD000000).copy(alpha = 0.4f)  // Normal: 40% transparent
-            )
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Card(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
-                // Header
-                Text(
-                    "Advanced Overlay Settings",
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    .fillMaxWidth(0.95f)
+                    .fillMaxHeight(0.90f)
+                    .verticalScroll(rememberScrollState()),  // Scroll sur le Card directement
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isTransparent) 
+                        Color(0xDD000000).copy(alpha = 0.3f)  // Preview: 30% transparent
+                    else 
+                        Color(0xDD000000).copy(alpha = 0.4f)  // Normal: 40% transparent
                 )
-                
-                // Scrollable content
+            ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // Header
+                    Text(
+                        "Advanced Overlay Settings",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
                     // === SENSITIVITY ===
                     Text(
                         "Sensitivity",

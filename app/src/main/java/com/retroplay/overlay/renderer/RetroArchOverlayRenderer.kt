@@ -109,10 +109,16 @@ fun RetroArchOverlayScreen(
                 // Convertir coordonnées normalisées → pixels
                 val xPx = button.x * screenSize.width
                 val yPx = button.y * screenSize.height
-                // Utiliser layout.rangeModifier pour le rendu visuel (tous les boutons)
-                // button.rangeModifier est utilisé UNIQUEMENT pour le calcul des valeurs, pas le rendu
-                val widthPx = button.width * screenSize.width * layout.rangeModifier
-                val heightPx = button.height * screenSize.height * layout.rangeModifier
+                
+                // CRITIQUE: Utiliser button.modW et button.modH pour l'affichage des IMAGES!
+                // RetroArch utilise mod_w = 2.0 * range_x et mod_h = 2.0 * range_y
+                // C'est pour ça que les images du D-pad se chevauchent et forment un D-pad compact!
+                val displayWidthPx = button.modW * screenSize.width
+                val displayHeightPx = button.modH * screenSize.height
+                
+                // Utiliser button.width/height (range_x/y) pour les HITBOXES uniquement
+                val hitboxWidthPx = button.width * screenSize.width * layout.rangeModifier
+                val hitboxHeightPx = button.height * screenSize.height * layout.rangeModifier
                 
                 // Charger et afficher l'image du bouton
                 button.imagePath?.let { path ->
@@ -121,10 +127,17 @@ fun RetroArchOverlayScreen(
                         val imageBitmap = bitmap.asImageBitmap()
                         val alpha = if (pressedButtons.values.any { it.contains(button) }) 1.0f else (0.7f * layout.alphaModifier)
                         
-                        // Position top-left depuis le centre
+                        // IMPORTANT: Utiliser modW et modH pour la taille d'affichage!
+                        // RetroArch calcule mod_w = 2.0 * range_x et mod_h = 2.0 * range_y
+                        // C'est pour ça que les images du D-pad se chevauchent pour former un D-pad compact!
+                        
+                        // Position mod_x et mod_y (top-left corner de l'image)
+                        val modXPx = button.modX * screenSize.width
+                        val modYPx = button.modY * screenSize.height
+                        
                         val topLeft = Offset(
-                            x = xPx - widthPx / 2,
-                            y = yPx - heightPx / 2
+                            x = modXPx,
+                            y = modYPx
                         )
                         
                         drawImage(
@@ -134,15 +147,15 @@ fun RetroArchOverlayScreen(
                                 y = topLeft.y.toInt()
                             ),
                             dstSize = androidx.compose.ui.unit.IntSize(
-                                width = widthPx.toInt(),
-                                height = heightPx.toInt()
+                                width = displayWidthPx.toInt(),
+                                height = displayHeightPx.toInt()
                             ),
                             alpha = alpha
                         )
                     }
                 }
                 
-                // MODE DEBUG: Afficher les hitboxes
+                // MODE DEBUG: Afficher les hitboxes (utiliser hitboxWidthPx/hitboxHeightPx, PAS displayWidthPx!)
                 if (showDebug) {
                     val debugColor = when (button.type) {
                         OverlayButtonType.ANALOG_LEFT, OverlayButtonType.ANALOG_RIGHT -> Color.Green
@@ -153,7 +166,7 @@ fun RetroArchOverlayScreen(
                         ButtonShape.RADIAL -> {
                             drawCircle(
                                 color = debugColor,
-                                radius = (widthPx / 2).coerceAtLeast(heightPx / 2),
+                                radius = (hitboxWidthPx / 2).coerceAtLeast(hitboxHeightPx / 2),
                                 center = Offset(xPx, yPx),
                                 alpha = 0.5f
                             )
@@ -161,8 +174,8 @@ fun RetroArchOverlayScreen(
                         ButtonShape.RECT -> {
                             drawRect(
                                 color = Color.Blue,
-                                topLeft = Offset(xPx - widthPx / 2, yPx - heightPx / 2),
-                                size = Size(widthPx, heightPx),
+                                topLeft = Offset(xPx - hitboxWidthPx / 2, yPx - hitboxHeightPx / 2),
+                                size = Size(hitboxWidthPx, hitboxHeightPx),
                                 alpha = 0.5f
                             )
                         }

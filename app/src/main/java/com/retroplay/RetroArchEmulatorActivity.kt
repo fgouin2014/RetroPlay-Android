@@ -2285,7 +2285,8 @@ private fun MainMenuDialog(
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
-                    .wrapContentHeight(),
+                    .fillMaxHeight(0.85f)
+                    .verticalScroll(rememberScrollState()),
                 colors = CardDefaults.cardColors(containerColor = Color(0xDD000000))
             ) {
                 Column(

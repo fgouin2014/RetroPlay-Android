@@ -248,10 +248,6 @@ fun RetroArchSettingsDialog(
                                         width = 1.dp,
                                         color = if (isSelected) Color(0xFFFF9800) else Color(0xFF444444)
                                     )
-                                    .clickable { 
-                                        selectedCustomPath = customPath
-                                        selectedOverlay = customOverlayName
-                                    }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -267,7 +263,14 @@ fun RetroArchSettingsDialog(
                                     )
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Column {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { 
+                                            selectedCustomPath = customPath
+                                            selectedOverlay = customOverlayName
+                                        }
+                                ) {
                                     Text(
                                         customPath,
                                         color = if (isSelected) Color.White else Color(0xFFBBBBBB),
@@ -277,6 +280,30 @@ fun RetroArchSettingsDialog(
                                         "via File Picker",
                                         color = Color(0xFF888888),
                                         fontSize = 11.sp
+                                    )
+                                }
+                                
+                                // Bouton X pour enlever
+                                IconButton(
+                                    onClick = {
+                                        // Enlever ce custom overlay de la liste
+                                        com.retroplay.overlay.models.OverlayPreferenceManager.removeCustomBrowsed(prefs, console, customPath)
+                                        
+                                        // Si c'était l'overlay sélectionné, revenir au premier standard
+                                        if (selectedCustomPath == customPath) {
+                                            selectedCustomPath = null
+                                            selectedOverlay = if (availableOverlays.isNotEmpty()) availableOverlays[0] else ""
+                                            selectedLandscapeLayout = "landscape-A"
+                                            selectedPortraitLayout = "portrait-A"
+                                        }
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Text(
+                                        "✕",
+                                        color = Color(0xFFFF5555),
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }

@@ -169,15 +169,30 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             // Sauvegarder dans la liste des customs browsés
             com.retroplay.overlay.models.OverlayPreferenceManager.saveCustomBrowsed(prefs, console, customPath)
             
-            // Sauvegarder aussi comme preference active
+            // Parser le .cfg pour détecter les layouts disponibles
+            val assetManager = com.retroplay.overlay.assets.OverlayAssetManager(this)
+            val overlayConfig = assetManager.loadOverlayConfig(overlayName, console)
+            
+            // Auto-détecter les noms de layouts (par aspect ratio si pas de noms)
+            val landscapeLayout = overlayConfig?.layouts?.entries?.firstOrNull { (name, layout) ->
+                name.contains("landscape", ignoreCase = true) || (layout.aspectRatio ?: 1.0f) > 1.0f
+            }?.key ?: "overlay0"  // Fallback overlay0
+            
+            val portraitLayout = overlayConfig?.layouts?.entries?.firstOrNull { (name, layout) ->
+                name.contains("portrait", ignoreCase = true) || (layout.aspectRatio ?: 1.0f) < 1.0f
+            }?.key ?: overlayConfig?.layouts?.keys?.firstOrNull() ?: "overlay0"  // Fallback premier layout
+            
+            // Sauvegarder comme preference active
             val pref = com.retroplay.overlay.models.OverlayPreference(
                 enabled = true,
                 overlayName = overlayName,
-                landscapeLayout = "landscape-A",  // Conforme au git RetroArch officiel
-                portraitLayout = "portrait-A",
+                landscapeLayout = landscapeLayout,
+                portraitLayout = portraitLayout,
                 autoRotate = true
             )
             com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
+            
+            Log.i(TAG, "Auto-detected layouts: landscape='$landscapeLayout' portrait='$portraitLayout'")
             
             Log.i(TAG, "Saved custom overlay: $customPath for console: $console")
             Toast.makeText(this, "Custom '$customPath' loaded!", Toast.LENGTH_LONG).show()
@@ -1684,7 +1699,7 @@ private fun ComposeEmulatorScreen(
                                 }
                             }
                             
-                            // Trouver le layout (avec fallback intelligent)
+                            // Trouver le layout (avec fallback intelligent basé sur aspect ratio)
                             val layoutName = overlayConfig?.layouts?.get(requestedLayoutName)?.let { 
                                 android.util.Log.d("ComposeEmulator", "Using requested layout: '$requestedLayoutName'")
                                 requestedLayoutName 
@@ -1694,17 +1709,25 @@ private fun ComposeEmulatorScreen(
                                     val orientation = if (isLandscape) "landscape" else "portrait"
                                     var fallback = overlayConfig?.layouts?.keys?.firstOrNull { it.contains(orientation, ignoreCase = true) }
                                     
-                                    // Fallback 2 : Si toujours pas trouvé, prendre overlay0 (standard RetroArch)
+                                    // Fallback 2 : Chercher par aspect ratio (>1.0 = landscape, <1.0 = portrait)
+                                    if (fallback == null && overlayConfig != null) {
+                                        fallback = overlayConfig.layouts.entries.firstOrNull { (_, layout) ->
+                                            val aspectRatio = layout.aspectRatio ?: 1.0f
+                                            if (isLandscape) aspectRatio > 1.0f else aspectRatio < 1.0f
+                                        }?.key
+                                    }
+                                    
+                                    // Fallback 3 : overlay0 (standard RetroArch)
                                     if (fallback == null) {
                                         fallback = overlayConfig?.layouts?.keys?.firstOrNull { it.startsWith("overlay") }
                                     }
                                     
-                                    // Fallback 3 : En dernier recours, prendre le premier layout disponible
+                                    // Fallback 4 : Premier layout disponible
                                     if (fallback == null) {
                                         fallback = overlayConfig?.layouts?.keys?.firstOrNull()
                                     }
                                     
-                                    android.util.Log.w("ComposeEmulator", "Layout '$requestedLayoutName' not found, using fallback: '$fallback'")
+                                    android.util.Log.w("ComposeEmulator", "Layout '$requestedLayoutName' not found, using fallback: '$fallback' (orientation=${if (isLandscape) "landscape" else "portrait"})")
                                     fallback
                                 }
                             

@@ -52,6 +52,9 @@ fun RetroArchSettingsDialog(
     var selectedPortraitLayout by remember { mutableStateOf(currentOverlayPref?.portraitLayout ?: "portrait-A") }
     var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
     
+    // Semi-transparent state for preview (30% transparent for 2 seconds)
+    var isTransparent by remember { mutableStateOf(false) }
+    
     // Available layouts for selected overlay
     val availableLayouts = remember(selectedOverlay, console) {
         if (selectedOverlay.isNotEmpty()) {
@@ -61,7 +64,7 @@ fun RetroArchSettingsDialog(
         }
     }
     
-    // Save preferences when changed
+    // Save preferences when changed + trigger 30% transparency for 2 seconds
     LaunchedEffect(selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate) {
         if (selectedOverlay.isNotEmpty()) {
             val pref = com.retroplay.overlay.models.OverlayPreference(
@@ -73,6 +76,11 @@ fun RetroArchSettingsDialog(
             )
             com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
             android.util.Log.i("RetroArchSettings", "Saved overlay pref for $console: overlay='$selectedOverlay' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate")
+            
+            // Trigger 30% transparency for 2 seconds to preview overlay
+            isTransparent = true
+            kotlinx.coroutines.delay(2000)
+            isTransparent = false
         }
     }
     
@@ -82,7 +90,7 @@ fun RetroArchSettingsDialog(
                 .fillMaxWidth(0.95f)
                 .fillMaxHeight(0.85f),
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xDD000000).copy(alpha = 0.3f)  // 30% transparent en tout temps
+                containerColor = if (isTransparent) Color(0xDD000000).copy(alpha = 0.3f) else Color(0xDD000000)
             )
         ) {
             Column(

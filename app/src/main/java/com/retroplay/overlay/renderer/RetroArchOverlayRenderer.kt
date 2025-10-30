@@ -513,15 +513,16 @@ private fun detectButtonsAtPosition(
             return@forEach
         }
         
-        // Utiliser layout.rangeModifier pour les boutons normaux
+        // Utiliser rangeXHitbox/rangeYHitbox (avec reach_*) ET layout.rangeModifier pour les boutons normaux
+        // Identique à RetroArch: range_x_mod = range_x_hitbox * range_mod
         if (isTouchInsideButton(x, y, button, layout.rangeModifier, screenSize)) {
             touched.add(button)
             
             // DEBUG: Log détaillé de la détection
             val buttonX = button.x * screenSize.width
             val buttonY = button.y * screenSize.height
-            val buttonWidth = button.width * screenSize.width * layout.rangeModifier
-            val buttonHeight = button.height * screenSize.height * layout.rangeModifier
+            val buttonWidth = button.rangeXHitbox * screenSize.width * layout.rangeModifier
+            val buttonHeight = button.rangeYHitbox * screenSize.height * layout.rangeModifier
             Log.d("TouchHandler", "HIT: ${button.action} | Touch: ($x,$y) | Center: ($buttonX,$buttonY) | Size: ${buttonWidth.toInt()}x${buttonHeight.toInt()} | Shape: ${button.shape}")
         }
     }
@@ -542,8 +543,10 @@ private fun isTouchInsideButton(
     // Convertir coordonnées normalisées → pixels
     val buttonX = button.x * screenSize.width
     val buttonY = button.y * screenSize.height
-    val buttonWidth = button.width * screenSize.width * rangeModifier
-    val buttonHeight = button.height * screenSize.height * rangeModifier
+    // Utiliser rangeXHitbox/rangeYHitbox (avec reach_*) au lieu de width/height brut
+    // Identique à RetroArch: range_x_mod = range_x_hitbox * range_mod
+    val buttonWidth = button.rangeXHitbox * screenSize.width * rangeModifier
+    val buttonHeight = button.rangeYHitbox * screenSize.height * rangeModifier
     
     val isInside = when (button.shape) {
         ButtonShape.RADIAL -> {
@@ -566,7 +569,7 @@ private fun isTouchInsideButton(
     
     // DEBUG: Log détaillé pour les boutons système
     if (isInside && (button.action.startsWith("overlay_next") || button.action == "menu_toggle")) {
-        Log.e("TouchHandler", "🔴 HITBOX: action='${button.action}' | normalized=(${button.x},${button.y}) size=(${button.width},${button.height}) | pixels=($buttonX,$buttonY) size=(${buttonWidth.toInt()}x${buttonHeight.toInt()}) | touch=($touchX,$touchY)")
+        Log.e("TouchHandler", "🔴 HITBOX: action='${button.action}' | normalized=(${button.x},${button.y}) size=(${button.width},${button.height}) | reach=(L:${button.reachLeft} R:${button.reachRight} U:${button.reachUp} D:${button.reachDown}) | hitbox=(${button.rangeXHitbox},${button.rangeYHitbox}) | pixels=($buttonX,$buttonY) size=(${buttonWidth.toInt()}x${buttonHeight.toInt()}) | touch=($touchX,$touchY)")
     }
     
     return isInside

@@ -51,7 +51,19 @@ data class OverlayButton(
     val modY: Float = y - height,
     val modW: Float = 2f * width,
     val modH: Float = 2f * height
-)
+) {
+    /**
+     * Calcul de la hitbox réelle (range_x_hitbox) en appliquant reach_*
+     * Identique à RetroArch: range_x_hitbox = (range_x * reach_right + range_x * reach_left) / 2.0
+     */
+    val rangeXHitbox: Float = (width * reachRight + width * reachLeft) / 2.0f
+    
+    /**
+     * Calcul de la hitbox réelle (range_y_hitbox) en appliquant reach_*
+     * Identique à RetroArch: range_y_hitbox = (range_y * reach_down + range_y * reach_up) / 2.0
+     */
+    val rangeYHitbox: Float = (height * reachDown + height * reachUp) / 2.0f
+}
 
 /**
  * Type de hitbox pour un bouton
@@ -115,7 +127,8 @@ object RetroArchButtonMapping {
         // Actions spéciales (non-input)
         if (action.startsWith("overlay_next") || 
             action.startsWith("menu_toggle") ||
-            action.startsWith("nul")) {
+            action.startsWith("nul") ||
+            action.startsWith("null")) {
             return emptyList()
         }
         
@@ -130,7 +143,8 @@ object RetroArchButtonMapping {
     fun isOverlayControlAction(action: String): Boolean {
         return action.startsWith("overlay_next") || 
                action.startsWith("menu_toggle") ||
-               action == "nul"
+               action == "nul" ||
+               action == "null"
     }
     
     /**

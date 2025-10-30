@@ -42,8 +42,8 @@ fun RetroArchSettingsDialog(
     val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
     val availableOverlays = remember { assetManager.getCompatibleOverlays(console) }
     
-    // Load custom browsed overlays
-    val customBrowsed = remember { com.retroplay.overlay.models.OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList() }
+    // Load custom browsed overlays (mutableState pour recomposition)
+    var customBrowsed by remember { mutableStateOf(com.retroplay.overlay.models.OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()) }
     
     // Load current preferences
     val currentOverlayPref = remember { com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console) }
@@ -288,6 +288,9 @@ fun RetroArchSettingsDialog(
                                     onClick = {
                                         // Enlever ce custom overlay de la liste
                                         com.retroplay.overlay.models.OverlayPreferenceManager.removeCustomBrowsed(prefs, console, customPath)
+                                        
+                                        // Recharger la liste pour forcer recomposition
+                                        customBrowsed = com.retroplay.overlay.models.OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()
                                         
                                         // Si c'était l'overlay sélectionné, revenir au premier standard
                                         if (selectedCustomPath == customPath) {

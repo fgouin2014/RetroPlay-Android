@@ -169,18 +169,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             // Sauvegarder dans la liste des customs browsés
             com.retroplay.overlay.models.OverlayPreferenceManager.saveCustomBrowsed(prefs, console, customPath)
             
-            // Parser le .cfg pour détecter les layouts disponibles
-            val assetManager = com.retroplay.overlay.assets.OverlayAssetManager(this)
-            val overlayConfig = assetManager.loadOverlayConfig(overlayName, console)
-            
-            // Auto-détecter les noms de layouts (par aspect ratio si pas de noms)
-            val landscapeLayout = overlayConfig?.layouts?.entries?.firstOrNull { (name, layout) ->
-                name.contains("landscape", ignoreCase = true) || (layout.aspectRatio ?: 1.0f) > 1.0f
-            }?.key ?: "overlay0"  // Fallback overlay0
-            
-            val portraitLayout = overlayConfig?.layouts?.entries?.firstOrNull { (name, layout) ->
-                name.contains("portrait", ignoreCase = true) || (layout.aspectRatio ?: 1.0f) < 1.0f
-            }?.key ?: overlayConfig?.layouts?.keys?.firstOrNull() ?: "overlay0"  // Fallback premier layout
+            // Pour les customs, utiliser overlay0 par défaut
+            // Le fallback intelligent détectera le bon layout par aspect_ratio au runtime
+            val landscapeLayout = "overlay0"
+            val portraitLayout = "overlay0"
             
             // Sauvegarder comme preference active
             val pref = com.retroplay.overlay.models.OverlayPreference(

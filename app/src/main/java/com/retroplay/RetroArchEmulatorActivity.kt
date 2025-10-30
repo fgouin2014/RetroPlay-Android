@@ -41,6 +41,7 @@ import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.Variable
 import com.swordfish.libretrodroid.ShaderConfig
+import com.swordfish.touchinput.radial.settings.TouchControllerSettingsManager
 import gg.padkit.PadKit
 import gg.padkit.inputevents.InputEvent
 import gg.padkit.ids.Id
@@ -1260,7 +1261,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
 private fun handlePadKitEvent(
     events: List<InputEvent>,
     retroView: GLRetroView,
-    showMainMenu: MutableState<Boolean>
+    showMainMenu: MutableState<Boolean>,
+    settings: TouchControllerSettingsManager.Settings? = null
 ) {
     // Intercepter le bouton menu (comme Lemuroid le fait)
     val menuEvent = events.firstOrNull { 
@@ -1297,12 +1299,23 @@ private fun handlePadKitEvent(
             
             is InputEvent.ContinuousDirection -> {
                 // Analog sticks (mouvements continus)
-                val source = when (event.id) {
-                    0 -> GLRetroView.MOTION_SOURCE_ANALOG_LEFT
-                    1 -> GLRetroView.MOTION_SOURCE_ANALOG_RIGHT
-                    else -> GLRetroView.MOTION_SOURCE_ANALOG_LEFT
+                // Note: Dans ComposeTouchLayouts: MOTION_SOURCE_LEFT_STICK = 1, MOTION_SOURCE_RIGHT_STICK = 2
+                var stickId = event.id
+                
+                // Appliquer swap si demandé (1 et 2 seulement, pas le DPAD qui est 0)
+                if (settings != null && settings.swapAnalogSticks && (stickId == 1 || stickId == 2)) {
+                    stickId = if (stickId == 1) 2 else 1
                 }
-                retroView.sendMotionEvent(source, event.direction.x, -event.direction.y)
+                
+                val source = when (stickId) {
+                    1 -> GLRetroView.MOTION_SOURCE_ANALOG_LEFT   // ComposeTouchLayouts.MOTION_SOURCE_LEFT_STICK
+                    2 -> GLRetroView.MOTION_SOURCE_ANALOG_RIGHT  // ComposeTouchLayouts.MOTION_SOURCE_RIGHT_STICK
+                    else -> GLRetroView.MOTION_SOURCE_DPAD       // ID 0 = DPAD
+                }
+                
+                // Appliquer inversion Y si demandé
+                val yAxis = if (settings?.invertAnalogY == true) event.direction.y else -event.direction.y
+                retroView.sendMotionEvent(source, event.direction.x, yAxis)
             }
         }
     }

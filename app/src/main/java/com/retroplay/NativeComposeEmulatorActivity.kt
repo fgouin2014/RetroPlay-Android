@@ -1243,7 +1243,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
 private fun handlePadKitEvent(
     events: List<InputEvent>,
     retroView: GLRetroView,
-    showMainMenu: MutableState<Boolean>
+    showMainMenu: MutableState<Boolean>,
+    settings: TouchControllerSettingsManager.Settings
 ) {
     // Intercepter le bouton menu (comme Lemuroid le fait)
     val menuEvent = events.firstOrNull { 
@@ -1280,12 +1281,23 @@ private fun handlePadKitEvent(
             
             is InputEvent.ContinuousDirection -> {
                 // Analog sticks (mouvements continus)
-                val source = when (event.id) {
-                    0 -> GLRetroView.MOTION_SOURCE_ANALOG_LEFT
-                    1 -> GLRetroView.MOTION_SOURCE_ANALOG_RIGHT
-                    else -> GLRetroView.MOTION_SOURCE_ANALOG_LEFT
+                // Note: Dans ComposeTouchLayouts: MOTION_SOURCE_LEFT_STICK = 1, MOTION_SOURCE_RIGHT_STICK = 2
+                var stickId = event.id
+                
+                // Appliquer swap si demandé (1 et 2 seulement, pas le DPAD qui est 0)
+                if (settings.swapAnalogSticks && (stickId == 1 || stickId == 2)) {
+                    stickId = if (stickId == 1) 2 else 1
                 }
-                retroView.sendMotionEvent(source, event.direction.x, -event.direction.y)
+                
+                val source = when (stickId) {
+                    1 -> GLRetroView.MOTION_SOURCE_ANALOG_LEFT   // ComposeTouchLayouts.MOTION_SOURCE_LEFT_STICK
+                    2 -> GLRetroView.MOTION_SOURCE_ANALOG_RIGHT  // ComposeTouchLayouts.MOTION_SOURCE_RIGHT_STICK
+                    else -> GLRetroView.MOTION_SOURCE_DPAD       // ID 0 = DPAD
+                }
+                
+                // Appliquer inversion Y si demandé
+                val yAxis = if (settings.invertAnalogY) event.direction.y else -event.direction.y
+                retroView.sendMotionEvent(source, event.direction.x, yAxis)
             }
         }
     }
@@ -1701,7 +1713,7 @@ private fun ComposeEmulatorScreen(
                     // Mode Lemuroid : Layout gauche/droite standard
                     PadKit(
                         onInputEvents = { event ->
-                            handlePadKitEvent(event, retroView, showMainMenu)
+                            handlePadKitEvent(event, retroView, showMainMenu, settings)
                         }
                     ) {
                         ConstraintLayout(
@@ -2411,6 +2423,10 @@ private fun GamePadSettingsDialog(
     var marginY by remember { mutableFloatStateOf(currentSettings.marginY) }
     var selectedVariant by remember { mutableStateOf(currentVariant) }
     
+    // Charger les paramètres d'inversion depuis currentSettings pour Lemuroid/Radial
+    var swapAnalogSticksLemuroid by remember { mutableStateOf<Boolean>(currentSettings.swapAnalogSticks) }
+    var invertAnalogYLemuroid by remember { mutableStateOf<Boolean>(currentSettings.invertAnalogY) }
+    
     // État pour l'overlay RetroArch
     val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
     val availableOverlays = remember { assetManager.getCompatibleOverlays(console) }
@@ -2421,6 +2437,8 @@ private fun GamePadSettingsDialog(
     var selectedLandscapeLayout by remember { mutableStateOf(currentOverlayPref?.landscapeLayout ?: "landscape-A") }
     var selectedPortraitLayout by remember { mutableStateOf(currentOverlayPref?.portraitLayout ?: "portrait-A") }
     var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
+    var swapAnalogSticks by remember { mutableStateOf(currentOverlayPref?.swapAnalogSticks ?: false) }
+    var invertAnalogY by remember { mutableStateOf(currentOverlayPref?.invertAnalogY ?: false) }
     
     // État pour détecter si un slider est en train d'être bougé
     var isAdjusting by remember { mutableStateOf(false) }
@@ -2440,17 +2458,19 @@ private fun GamePadSettingsDialog(
     }
     
     // Sauvegarder la préférence overlay quand modifiée
-    LaunchedEffect(selectedVariant, selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate) {
+    LaunchedEffect(selectedVariant, selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate, swapAnalogSticks, invertAnalogY) {
         if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH && selectedOverlay.isNotEmpty()) {
             val pref = com.retroplay.overlay.models.OverlayPreference(
                 enabled = true,
                 overlayName = selectedOverlay,
                 landscapeLayout = selectedLandscapeLayout,
                 portraitLayout = selectedPortraitLayout,
-                autoRotate = autoRotate
+                autoRotate = autoRotate,
+                swapAnalogSticks = swapAnalogSticks,
+                invertAnalogY = invertAnalogY
             )
             com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
-            android.util.Log.i("GamePadSettings", "✅ SAVED overlay pref for $console: overlay='$selectedOverlay' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate")
+            android.util.Log.i("GamePadSettings", "✅ SAVED overlay pref for $console: overlay='$selectedOverlay' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate swap=$swapAnalogSticks invertY=$invertAnalogY")
         } else if (selectedVariant != GamePadLayoutManager.LayoutVariant.RETROARCH) {
             // Désactiver RetroArch si autre variante choisie
             com.retroplay.overlay.models.OverlayPreferenceManager.disable(prefs, console)
@@ -2461,13 +2481,15 @@ private fun GamePadSettingsDialog(
     val dialogAlpha = if (isAdjusting) 0x33000000 else 0x99000000
     
     // LIVE PREVIEW : Appliquer les changements instantanément
-    LaunchedEffect(scale, rotation, marginX, marginY) {
+    LaunchedEffect(scale, rotation, marginX, marginY, swapAnalogSticksLemuroid, invertAnalogYLemuroid) {
         onApply(
             TouchControllerSettingsManager.Settings(
                 scale = scale,
                 rotation = rotation,
                 marginX = marginX,
-                marginY = marginY
+                marginY = marginY,
+                swapAnalogSticks = swapAnalogSticksLemuroid,
+                invertAnalogY = invertAnalogYLemuroid
             )
         )
     }
@@ -2705,6 +2727,71 @@ private fun GamePadSettingsDialog(
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
+                            
+                            Spacer(Modifier.height(12.dp))
+                            
+                            // Analog Stick Options
+                            Text("Analog Stick Options", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+                            
+                            // Swap Analog Sticks
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.Switch(
+                                    checked = swapAnalogSticks,
+                                    onCheckedChange = { swapAnalogSticks = it },
+                                    colors = androidx.compose.material3.SwitchDefaults.colors(
+                                        checkedThumbColor = Color(0xFF2196F3),
+                                        checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
+                                        uncheckedThumbColor = Color.Gray,
+                                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
+                                    )
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        "Swap Left/Right Sticks",
+                                        color = Color.LightGray,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "Swap L and R analog positions",
+                                        color = Color.Gray,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                            
+                            // Invert Y Axis
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.Switch(
+                                    checked = invertAnalogY,
+                                    onCheckedChange = { invertAnalogY = it },
+                                    colors = androidx.compose.material3.SwitchDefaults.colors(
+                                        checkedThumbColor = Color(0xFFE91E63),
+                                        checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
+                                        uncheckedThumbColor = Color.Gray,
+                                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
+                                    )
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        "Invert Y Axis",
+                                        color = Color.LightGray,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "Invert up/down for analog sticks",
+                                        color = Color.Gray,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
                         }
                     } else {
                         Text(
@@ -2773,6 +2860,72 @@ private fun GamePadSettingsDialog(
                         valueRange = 0f..1f,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    // Analog Stick Options (Radial/Lemuroid)
+                    Text("Analog Stick Options", color = Color(0xFF4CAF50), style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(8.dp))
+                    
+                    // Swap Analog Sticks
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.Switch(
+                            checked = swapAnalogSticksLemuroid,
+                            onCheckedChange = { swapAnalogSticksLemuroid = it },
+                            colors = androidx.compose.material3.SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF2196F3),
+                                checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
+                                uncheckedThumbColor = Color.Gray,
+                                uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
+                            )
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "Swap Left/Right Sticks",
+                                color = Color.LightGray,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                "Swap L and R analog positions",
+                                color = Color.Gray,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    
+                    // Invert Y Axis
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.Switch(
+                            checked = invertAnalogYLemuroid,
+                            onCheckedChange = { invertAnalogYLemuroid = it },
+                            colors = androidx.compose.material3.SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFFE91E63),
+                                checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
+                                uncheckedThumbColor = Color.Gray,
+                                uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
+                            )
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "Invert Y Axis",
+                                color = Color.LightGray,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                "Invert up/down for analog sticks",
+                                color = Color.Gray,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
                     
                     Spacer(Modifier.height(8.dp))
                 }

@@ -998,50 +998,50 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
         // Si pas d'override, utiliser la logique par défaut basée sur la console
         if (coreFileName == null) {
-            // Pour les sous-consoles (ex: fbneo/sega), utiliser le parent (fbneo)
-            val consoleKey = if (console.contains("/")) {
-                console.substringBefore("/").lowercase()
-            } else {
-                console.lowercase()
-            }
-            
+        // Pour les sous-consoles (ex: fbneo/sega), utiliser le parent (fbneo)
+        val consoleKey = if (console.contains("/")) {
+            console.substringBefore("/").lowercase()
+        } else {
+            console.lowercase()
+        }
+        
             coreFileName = when (consoleKey) {
-                // Nintendo
-                "nes" -> "fceumm_libretro_android.so"
-                "snes" -> "snes9x_libretro_android.so"
-                "n64" -> "parallel_n64_libretro_android.so"
-                "gb", "gbc" -> "gambatte_libretro_android.so"
-                "gba" -> "libmgba_libretro_android.so"
-                
-                // Sony
-                "psx", "ps1", "playstation" -> "pcsx_rearmed_libretro_android.so"
-                "psp" -> "ppsspp_libretro_android.so"
-                
-                // Sega
-                "genesis", "megadrive", "md" -> "genesis_plus_gx_libretro_android.so"
-                "scd", "segacd" -> "genesis_plus_gx_libretro_android.so"
-                "mastersystem", "sms", "segasms" -> "genesis_plus_gx_libretro_android.so"
-                "gamegear", "gg", "segagg" -> "genesis_plus_gx_libretro_android.so"
-                "32x", "sega32x" -> "picodrive_libretro_android.so"
-                
-                // Atari
-                "atari2600", "atari", "a2600" -> "stella2014_libretro_android.so"
-                "atari5200", "a5200" -> "a5200_libretro_android.so"
-                "atari7800", "a7800" -> "prosystem_libretro_android.so"
+            // Nintendo
+            "nes" -> "fceumm_libretro_android.so"
+            "snes" -> "snes9x_libretro_android.so"
+            "n64" -> "parallel_n64_libretro_android.so"
+            "gb", "gbc" -> "gambatte_libretro_android.so"
+            "gba" -> "libmgba_libretro_android.so"
+            
+            // Sony
+            "psx", "ps1", "playstation" -> "pcsx_rearmed_libretro_android.so"
+            "psp" -> "ppsspp_libretro_android.so"
+            
+            // Sega
+            "genesis", "megadrive", "md" -> "genesis_plus_gx_libretro_android.so"
+            "scd", "segacd" -> "genesis_plus_gx_libretro_android.so"
+            "mastersystem", "sms", "segasms" -> "genesis_plus_gx_libretro_android.so"
+            "gamegear", "gg", "segagg" -> "genesis_plus_gx_libretro_android.so"
+            "32x", "sega32x" -> "picodrive_libretro_android.so"
+            
+            // Atari
+            "atari2600", "atari", "a2600" -> "stella2014_libretro_android.so"
+            "atari5200", "a5200" -> "a5200_libretro_android.so"
+            "atari7800", "a7800" -> "prosystem_libretro_android.so"
                 "lynx", "atarilynx" -> "mednafen_lynx_libretro_android.so"
-                
-                // Other
-                "ngp", "ngc", "neogeopocket" -> "mednafen_ngp_libretro_android.so"
-                "ws", "wsc", "wonderswan" -> "mednafen_wswan_libretro_android.so"
-                "pce", "turbografx", "pcengine" -> "mednafen_pce_libretro_android.so"
-                "arcade" -> "mame2003_plus_libretro_android.so"
-                "mame" -> "mame2010_libretro_android.so"
-                "fbneo", "neogeo", "cps1", "cps2" -> "fbneo_libretro_android.so"
-                
-                else -> {
+            
+            // Other
+            "ngp", "ngc", "neogeopocket" -> "mednafen_ngp_libretro_android.so"
+            "ws", "wsc", "wonderswan" -> "mednafen_wswan_libretro_android.so"
+            "pce", "turbografx", "pcengine" -> "mednafen_pce_libretro_android.so"
+            "arcade" -> "mame2003_plus_libretro_android.so"
+            "mame" -> "mame2010_libretro_android.so"
+            "fbneo", "neogeo", "cps1", "cps2" -> "fbneo_libretro_android.so"
+            
+            else -> {
                     Log.w(TAG, "No native core for console: $console, using fceumm fallback")
-                    "fceumm_libretro_android.so"
-                }
+                "fceumm_libretro_android.so"
+            }
             }
         }
         

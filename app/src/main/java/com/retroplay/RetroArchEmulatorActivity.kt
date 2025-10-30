@@ -1362,12 +1362,12 @@ private fun ComposeEmulatorScreen(
     }
     
     // NO Lemuroid theme needed - RetroArch overlays only!
-    MaterialTheme {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-        ) {
+        MaterialTheme {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
                 if (layoutVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
                     // Mode RetroArch : Overlay fullscreen par-dessus le gameView
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -1895,10 +1895,10 @@ private fun ComposeEmulatorScreen(
                                 handled
                             }
                     )
-                }
             }
         }
     }
+}
 
 // Build ConstraintSet pour mode Portrait
 private fun buildPortraitConstraints(): ConstraintSet {

@@ -2794,21 +2794,25 @@ private fun QuickMenuDialog(
     overlaysVisible: Boolean
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .width(300.dp)
-                .wrapContentHeight(),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF1E1E1E)
-            )
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Card(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .width(300.dp)
+                    .fillMaxHeight(0.85f)
+                    .verticalScroll(rememberScrollState()),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF1E1E1E)
+                )
             ) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                 // Titre
                 Text(
                     "MENU RAPIDE",
@@ -2887,6 +2891,7 @@ private fun QuickMenuDialog(
                     )
                 ) {
                     Text("QUIT GAME", color = Color.White)
+                }
                 }
             }
         }

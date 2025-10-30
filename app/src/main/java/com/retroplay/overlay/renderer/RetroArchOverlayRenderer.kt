@@ -144,25 +144,28 @@ fun RetroArchOverlayScreen(
                 true
             }
     ) {
+        // Calculer le viewport basé sur aspect_ratio
+        val viewport = calculateOverlayViewport(screenSize, scaledLayout.aspectRatio)
+        
         // Canvas unique pour afficher TOUS les boutons
         Canvas(modifier = Modifier.fillMaxSize()) {
             scaledLayout.buttons.forEach { button ->
-                // Convertir coordonnées normalisées → pixels
+                // Convertir coordonnées normalisées → pixels (avec viewport aspect_ratio)
                 // Scale/offset déjà appliqués dans scaledLayout!
-                val xPx = button.x * screenSize.width
-                val yPx = button.y * screenSize.height
+                val (xPx, yPx) = normalizedToPixels(button.x, button.y, viewport)
                 
                 // CRITIQUE: Utiliser button.modW et button.modH pour l'affichage des IMAGES!
                 // RetroArch utilise mod_w = 2.0 * range_x et mod_h = 2.0 * range_y
                 // C'est pour ça que les images du D-pad se chevauchent et forment un D-pad compact!
-                val displayWidthPx = button.modW * screenSize.width * overlayScale
-                val displayHeightPx = button.modH * screenSize.height * overlayScale
+                // IMPORTANT: Utiliser viewport.width() et height() (pas screenSize) pour respecter aspect_ratio!
+                val displayWidthPx = button.modW * viewport.width() * overlayScale
+                val displayHeightPx = button.modH * viewport.height() * overlayScale
                 
                 // Utiliser button.width/height (range_x/y) pour les HITBOXES uniquement
                 // IMPORTANT: Utiliser button.rangeModifier si != 1.0, sinon layout.rangeModifier
                 val effectiveRangeMod = if (button.rangeModifier != 1.0f) button.rangeModifier else scaledLayout.rangeModifier
-                val hitboxWidthPx = button.width * screenSize.width * effectiveRangeMod * overlayScale
-                val hitboxHeightPx = button.height * screenSize.height * effectiveRangeMod * overlayScale
+                val hitboxWidthPx = button.width * viewport.width() * effectiveRangeMod * overlayScale
+                val hitboxHeightPx = button.height * viewport.height() * effectiveRangeMod * overlayScale
                 
                 // Charger et afficher l'image du bouton
                 button.imagePath?.let { path ->
@@ -222,8 +225,7 @@ fun RetroArchOverlayScreen(
                 if (showDebug) {
                     // CRITIQUE: Utiliser xHitbox/yHitbox pour la POSITION (pas x/y!)
                     // Les hitboxes peuvent être décalées si reach asymétrique
-                    val hitboxX = button.xHitbox * screenSize.width
-                    val hitboxY = button.yHitbox * screenSize.height
+                    val (hitboxX, hitboxY) = normalizedToPixels(button.xHitbox, button.yHitbox, viewport)
                     
                     // Couleur debug selon type:
                     // - ROUGE: range_mod_exclusive = true (zone exclusive, bloque autres touches)
@@ -366,6 +368,9 @@ private fun handleTouchEvent(
     val TAG = "TouchHandler"
     val ANALOG_DEADZONE = 0.15f  // 15% dead zone (zone morte)
     
+    // Calculer le viewport basé sur aspect_ratio (pour tout le touch handling)
+    val viewport = calculateOverlayViewport(screenSize, layout.aspectRatio)
+    
     when (event.actionMasked) {
         MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
             val pointerIndex = event.actionIndex
@@ -377,7 +382,7 @@ private fun handleTouchEvent(
             // Pour analog sticks : utiliser button.rangeModifier même pour détection initiale (large zone tactile)
             val analogStick = layout.buttons.find { button ->
                 (button.type == OverlayButtonType.ANALOG_LEFT || button.type == OverlayButtonType.ANALOG_RIGHT) &&
-                isTouchInsideButton(x, y, button, button.rangeModifier, screenSize)
+                isTouchInsideButton(x, y, button, button.rangeModifier, viewport)
             }
             
             // DEBUG: Log pour comprendre pourquoi les analog sticks ne sont pas détectés
@@ -397,7 +402,7 @@ private fun handleTouchEvent(
             
             if (analogStick != null) {
                 // C'est un analog stick
-                val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
+                val values = calculateAnalogValues(x, y, analogStick, viewport, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                 if (values != null) {
                     // Calculer l'offset visuel pour movable buttons
                     val (visualOffsetX, visualOffsetY) = if (analogStick.movable) {
@@ -441,7 +446,7 @@ private fun handleTouchEvent(
             
             // Si ce n'est pas un analog stick, traiter comme bouton normal
             val touchedButtons = detectButtonsAtPosition(
-                x, y, layout, screenSize, dpadDiagonalSensitivity, abxyDiagonalSensitivity
+                x, y, layout, screenSize, viewport, dpadDiagonalSensitivity, abxyDiagonalSensitivity
             )
             
             // DEBUG: Log si plusieurs boutons détectés (chevauchement potentiel)
@@ -490,7 +495,7 @@ private fun handleTouchEvent(
                     // Ce doigt contrôle le stick gauche
                     val leftStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
                     if (leftStick != null) {
-                        val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
+                        val values = calculateAnalogValues(x, y, leftStick, viewport, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                         if (values != null) {
                             // Calculer l'offset visuel pour movable buttons
                             val (visualOffsetX, visualOffsetY) = if (leftStick.movable) {
@@ -519,7 +524,7 @@ private fun handleTouchEvent(
                     // Ce doigt contrôle le stick droit
                     val rightStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
                     if (rightStick != null) {
-                        val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
+                        val values = calculateAnalogValues(x, y, rightStick, viewport, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                         if (values != null) {
                             // Calculer l'offset visuel pour movable buttons
                             val (visualOffsetX, visualOffsetY) = if (rightStick.movable) {
@@ -546,7 +551,7 @@ private fun handleTouchEvent(
                 
                 // Si pas géré par analog, traiter comme bouton normal
                 if (!handledByAnalog) {
-                    val currentButtons = detectButtonsAtPosition(x, y, layout, screenSize, dpadDiagonalSensitivity, abxyDiagonalSensitivity)
+                    val currentButtons = detectButtonsAtPosition(x, y, layout, screenSize, viewport, dpadDiagonalSensitivity, abxyDiagonalSensitivity)
                     val previousButtons = pressedButtons[pointerId] ?: emptySet()
                     
                     // Boutons nouvellement pressés
@@ -643,19 +648,18 @@ private fun calculateAnalogValues(
     touchX: Float,
     touchY: Float,
     button: OverlayButton,
-    screenSize: IntSize,
+    viewport: android.graphics.RectF,
     deadzone: Float,
     layoutRangeMod: Float = 1.5f,
     invertY: Boolean = false
 ): Pair<Float, Float>? {
     // Centre du stick en pixels (x_shift, y_shift dans RetroArch)
-    val centerX = button.x * screenSize.width
-    val centerY = button.y * screenSize.height
+    val (centerX, centerY) = normalizedToPixels(button.x, button.y, viewport)
     
     // Range (rayon) en pixels pour le calcul des valeurs
     // Utiliser layout.rangeModifier (même que le rendu visuel) pour cohérence
-    val rangeX = button.width * screenSize.width * layoutRangeMod
-    val rangeY = button.height * screenSize.height * layoutRangeMod
+    val rangeX = button.width * viewport.width() * layoutRangeMod
+    val rangeY = button.height * viewport.height() * layoutRangeMod
     
     // Distance depuis le centre (x_dist, y_dist dans RetroArch)
     val xDist = touchX - centerX
@@ -698,6 +702,7 @@ private fun detectButtonsAtPosition(
     y: Float,
     layout: OverlayLayout,
     screenSize: IntSize,
+    viewport: android.graphics.RectF,
     dpadDiagonalSensitivity: Int = 50,
     abxyDiagonalSensitivity: Int = 50
 ): Set<OverlayButton> {
@@ -712,12 +717,11 @@ private fun detectButtonsAtPosition(
         // Traiter les zones 8-way (dpad_area, abxy_area)
         if (button.type == OverlayButtonType.DPAD_AREA || button.type == OverlayButtonType.ABXY_AREA) {
             // Vérifier si le touch est dans la zone
-            if (isTouchInsideButton(x, y, button, layout.rangeModifier, screenSize)) {
+            if (isTouchInsideButton(x, y, button, layout.rangeModifier, viewport)) {
                 // Calculer l'offset depuis le centre
-                val centerX = button.x * screenSize.width
-                val centerY = button.y * screenSize.height
-                val xDist = (x - centerX) / (button.width * screenSize.width)  // Normalisé
-                val yDist = (y - centerY) / (button.height * screenSize.height)  // Normalisé
+                val (centerX, centerY) = normalizedToPixels(button.x, button.y, viewport)
+                val xDist = (x - centerX) / (button.width * viewport.width())  // Normalisé
+                val yDist = (y - centerY) / (button.height * viewport.height())  // Normalisé
                 
                 // Obtenir les directions 8-way avec la bonne sensitivity
                 val sensitivity = if (button.type == OverlayButtonType.DPAD_AREA) {
@@ -757,7 +761,7 @@ private fun detectButtonsAtPosition(
         
         // Utiliser rangeXHitbox/rangeYHitbox (avec reach_*) ET layout.rangeModifier pour les boutons normaux
         // Identique à RetroArch: range_x_mod = range_x_hitbox * range_mod
-        if (isTouchInsideButton(x, y, button, layout.rangeModifier, screenSize)) {
+        if (isTouchInsideButton(x, y, button, layout.rangeModifier, viewport)) {
             touched.add(button)
             
             // DEBUG: Log détaillé de la détection
@@ -780,18 +784,17 @@ private fun isTouchInsideButton(
     touchY: Float,
     button: OverlayButton,
     rangeModifier: Float,
-    screenSize: IntSize
+    viewport: android.graphics.RectF
 ): Boolean {
     // CRITIQUE: Utiliser x_hitbox et y_hitbox (PAS x et y!) pour la position de la hitbox
     // La hitbox peut être décalée si reach_left != reach_right ou reach_up != reach_down
     // Identique à RetroArch input_overlay_desc_init_hitbox() lignes 2641-2655
-    val buttonX = button.xHitbox * screenSize.width
-    val buttonY = button.yHitbox * screenSize.height
+    val (buttonX, buttonY) = normalizedToPixels(button.xHitbox, button.yHitbox, viewport)
     
     // Utiliser rangeXHitbox/rangeYHitbox (avec reach_*) pour la TAILLE
     // Identique à RetroArch: range_x_mod = range_x_hitbox * range_mod
-    val buttonWidth = button.rangeXHitbox * screenSize.width * rangeModifier
-    val buttonHeight = button.rangeYHitbox * screenSize.height * rangeModifier
+    val buttonWidth = button.rangeXHitbox * viewport.width() * rangeModifier
+    val buttonHeight = button.rangeYHitbox * viewport.height() * rangeModifier
     
     val isInside = when (button.shape) {
         ButtonShape.RADIAL -> {
@@ -953,6 +956,58 @@ fun RetroArchOverlayDebug(
             // Note: drawText nécessite TextMeasurer (Material3)
         }
     }
+}
+
+/**
+ * Calculer le viewport rect basé sur aspect_ratio
+ * Si aspect_ratio est défini, on contraindra l'overlay dans un rectangle respectant ce ratio
+ * 
+ * RetroArch comportement:
+ * - En landscape: viewport prend toute la largeur, hauteur ajustée selon ratio
+ * - En portrait: viewport prend toute la largeur, hauteur ajustée, puis collé sous l'écran
+ * 
+ * @param screenSize Taille de l'écran en pixels
+ * @param aspectRatio Ratio souhaité (ex: 1.77778 pour 16:9), ou null si pas de contrainte
+ * @return Rect(x, y, width, height) en pixels du viewport overlay
+ */
+private fun calculateOverlayViewport(
+    screenSize: IntSize,
+    aspectRatio: Float?
+): android.graphics.RectF {
+    if (aspectRatio == null || aspectRatio <= 0f) {
+        // Pas de contrainte: utiliser tout l'écran
+        return android.graphics.RectF(0f, 0f, screenSize.width.toFloat(), screenSize.height.toFloat())
+    }
+    
+    val screenAspect = screenSize.width.toFloat() / screenSize.height.toFloat()
+    
+    return if (screenAspect > aspectRatio) {
+        // Écran plus large que l'overlay aspect → limiter la largeur
+        // Ex: overlay 16:9 sur écran ultra-wide
+        val viewportWidth = screenSize.height * aspectRatio
+        val xOffset = (screenSize.width - viewportWidth) / 2f  // Centrer horizontalement
+        android.graphics.RectF(xOffset, 0f, xOffset + viewportWidth, screenSize.height.toFloat())
+    } else {
+        // Écran plus haut que l'overlay aspect → limiter la hauteur
+        // Ex: overlay 16:9 landscape (1.77778) sur écran portrait (0.5625)
+        // Les contrôles seront compressés verticalement
+        val viewportHeight = screenSize.width / aspectRatio
+        val yOffset = 0f  // Collé en haut (sous l'écran de jeu)
+        android.graphics.RectF(0f, yOffset, screenSize.width.toFloat(), yOffset + viewportHeight)
+    }
+}
+
+/**
+ * Convertir coordonnée normalisée (0.0-1.0) vers pixels en tenant compte du viewport
+ */
+private fun normalizedToPixels(
+    normalizedX: Float,
+    normalizedY: Float,
+    viewport: android.graphics.RectF
+): Pair<Float, Float> {
+    val x = viewport.left + normalizedX * viewport.width()
+    val y = viewport.top + normalizedY * viewport.height()
+    return Pair(x, y)
 }
 
 /**

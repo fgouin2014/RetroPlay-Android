@@ -165,7 +165,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
      * 
      * Filtre les touches pour ne capturer QUE la zone centrale (35%-65% de largeur)
      */
-    private fun handleZapperTouch(event: android.view.MotionEvent): Boolean {
+    private fun handleZapperTouch(event: android.view.MotionEvent, triggerOnTouch: Boolean = false, allowOffscreen: Boolean = true): Boolean {
         if (!isZapperGame) {
             return false
         }
@@ -183,6 +183,15 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             return false  // Laisser passer au gamepad
         }
         
+        // Si allowOffscreen=false, vérifier aussi que le touch est dans la zone de jeu (retroView bounds)
+        // Note: Pour l'instant, on considère que la zone centrale EST la zone de jeu
+        // Une implémentation plus précise nécessiterait les bounds exacts du GLRetroView
+        if (!allowOffscreen) {
+            // TODO: Implémenter bounds check exact du GLRetroView
+            // Pour l'instant, le filtre zone centrale suffit
+            Log.d(TAG, "[ZAPPER] allowOffscreen=false, using zone centrale as game bounds")
+        }
+        
         when (event.actionMasked) {
             android.view.MotionEvent.ACTION_DOWN -> {
                 Log.d(TAG, "[ZAPPER] Touch DOWN in zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - Button A pressed (port 2)")
@@ -192,10 +201,26 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     android.view.KeyEvent.KEYCODE_BUTTON_A,
                     1  // Port 2 (index 1)
                 )
+                
+                // Si triggerOnTouch, envoyer immédiatement le release aussi (tir instantané)
+                if (triggerOnTouch) {
+                    retroView.sendKeyEvent(
+                        android.view.KeyEvent.ACTION_UP,
+                        android.view.KeyEvent.KEYCODE_BUTTON_A,
+                        1  // Port 2 (index 1)
+                    )
+                    Log.d(TAG, "[ZAPPER] Trigger on touch: immediate release sent")
+                }
                 return true
             }
             
             android.view.MotionEvent.ACTION_UP -> {
+                // Si triggerOnTouch, le release a déjà été envoyé, donc skip
+                if (triggerOnTouch) {
+                    Log.d(TAG, "[ZAPPER] Touch UP ignored (triggerOnTouch=true)")
+                    return true
+                }
+                
                 Log.d(TAG, "[ZAPPER] Touch UP in zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - Button A released (port 2)")
                 // Envoyer au port 1 (Player 2 / Zapper port)
                 retroView.sendKeyEvent(
@@ -740,7 +765,9 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 },
                 isZapperGame = isZapperGame,
                 onZapperTouch = { event ->
-                    handleZapperTouch(event)
+                    // Charger advancedSettings pour lightgun options
+                    val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+                    handleZapperTouch(event, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)
                 },
                 onLoadState = { slot ->
                     loadGameState(slot)
@@ -1296,6 +1323,11 @@ private fun ComposeEmulatorScreen(
     // Variante de layout (state mutable)
     var layoutVariant by remember {
         mutableStateOf(initialVariant)
+    }
+    
+    // Charger advanced settings pour lightgun options
+    val advancedSettings = remember(console) {
+        com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
     }
     
     // État pour le switch de layout RetroArch (overrides la préférence)

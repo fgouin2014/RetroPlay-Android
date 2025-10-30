@@ -1684,15 +1684,26 @@ private fun ComposeEmulatorScreen(
                                 }
                             }
                             
-                            // Trouver le layout (avec fallback si le nom exact n'existe pas)
+                            // Trouver le layout (avec fallback intelligent)
                             val layoutName = overlayConfig?.layouts?.get(requestedLayoutName)?.let { 
                                 android.util.Log.d("ComposeEmulator", "Using requested layout: '$requestedLayoutName'")
                                 requestedLayoutName 
                             }
                                 ?: run {
-                                    // Fallback : chercher le premier layout correspondant à l'orientation
+                                    // Fallback 1 : chercher layout contenant "landscape" ou "portrait"
                                     val orientation = if (isLandscape) "landscape" else "portrait"
-                                    val fallback = overlayConfig?.layouts?.keys?.firstOrNull { it.contains(orientation) }
+                                    var fallback = overlayConfig?.layouts?.keys?.firstOrNull { it.contains(orientation, ignoreCase = true) }
+                                    
+                                    // Fallback 2 : Si toujours pas trouvé, prendre overlay0 (standard RetroArch)
+                                    if (fallback == null) {
+                                        fallback = overlayConfig?.layouts?.keys?.firstOrNull { it.startsWith("overlay") }
+                                    }
+                                    
+                                    // Fallback 3 : En dernier recours, prendre le premier layout disponible
+                                    if (fallback == null) {
+                                        fallback = overlayConfig?.layouts?.keys?.firstOrNull()
+                                    }
+                                    
                                     android.util.Log.w("ComposeEmulator", "Layout '$requestedLayoutName' not found, using fallback: '$fallback'")
                                     fallback
                                 }

@@ -1246,8 +1246,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
     }
     
-    // État pour fast forward
+    // État pour fast forward et pause
     private var isFastForwardActive = false
+    private var isPaused = false
     private val currentSaveSlot = 0  // Slot par défaut (0-9)
     
     // Gérer les hotkeys RetroArch
@@ -1311,10 +1312,19 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             
             // Pause toggle
             "pause_toggle" -> {
-                // LibretroDroid ne supporte pas le pause/resume direct
-                Log.i(TAG, "Pause toggle (not supported by LibretroDroid)")
-                runOnUiThread {
-                    Toast.makeText(this, "Pause not supported", Toast.LENGTH_SHORT).show()
+                isPaused = !isPaused
+                if (isPaused) {
+                    retroView.onPause()
+                    Log.i(TAG, "Game paused")
+                    runOnUiThread {
+                        Toast.makeText(this, "Game Paused", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    retroView.onResume()
+                    Log.i(TAG, "Game resumed")
+                    runOnUiThread {
+                        Toast.makeText(this, "Game Resumed", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
             
@@ -1336,18 +1346,29 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             
             // Slow motion
             "toggle_slowmotion" -> {
-                // TODO: Implémenter slow motion
-                Log.i(TAG, "Slow motion (not implemented yet)")
+                // LibretroDroid frameSpeed est un Int (pas de valeurs < 1)
+                Log.i(TAG, "Slow motion (not supported - frameSpeed must be >= 1)")
                 runOnUiThread {
-                    Toast.makeText(this, "Slow motion not implemented", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Slow motion not supported", Toast.LENGTH_SHORT).show()
                 }
             }
             
             // Frame advance
             "frame_advance" -> {
-                Log.i(TAG, "Frame advance (not supported by LibretroDroid)")
+                // Frame advance = pause + resume (1 frame) + pause
+                // LibretroDroid va rendre 1 frame puis se re-pauser
+                if (!isPaused) {
+                    retroView.onPause()
+                    isPaused = true
+                }
+                // Resume pour 1 frame, puis re-pause via handler
+                retroView.onResume()
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    retroView.onPause()
+                }, 16)  // ~1 frame à 60fps
+                Log.i(TAG, "Frame advance (1 frame)")
                 runOnUiThread {
-                    Toast.makeText(this, "Frame advance not supported", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Frame +1", Toast.LENGTH_SHORT).show()
                 }
             }
             

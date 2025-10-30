@@ -231,7 +231,13 @@ data class AdvancedOverlaySettings(
     val lightgunAllowOffscreen: Boolean = true,   // Permettre tir hors écran
     val lightgunTwoTouchInput: Int = 0,        // Action pour 2 doigts (0=none, 1=start, 2=select, etc.)
     val lightgunThreeTouchInput: Int = 0,      // Action pour 3 doigts
-    val lightgunFourTouchInput: Int = 0        // Action pour 4 doigts
+    val lightgunFourTouchInput: Int = 0,       // Action pour 4 doigts
+    // Mouse options
+    val mouseSpeed: Float = 1.0f,              // Vitesse souris (0.1-5.0)
+    val mouseSwipeThreshold: Int = 10,         // Seuil swipe (pixels)
+    val mouseHoldToDrag: Boolean = false,      // Maintenir pour drag
+    val mouseDoubleTapToDrag: Boolean = false, // Double-tap pour drag
+    val showMouseCursor: Boolean = true        // Afficher curseur souris
 )
 
 /**
@@ -343,7 +349,12 @@ object OverlayPreferenceManager {
             lightgunAllowOffscreen = prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true),
             lightgunTwoTouchInput = prefs.getInt("overlay_${console}_lightgun_two_touch", 0),
             lightgunThreeTouchInput = prefs.getInt("overlay_${console}_lightgun_three_touch", 0),
-            lightgunFourTouchInput = prefs.getInt("overlay_${console}_lightgun_four_touch", 0)
+            lightgunFourTouchInput = prefs.getInt("overlay_${console}_lightgun_four_touch", 0),
+            mouseSpeed = prefs.getFloat("overlay_${console}_mouse_speed", 1.0f),
+            mouseSwipeThreshold = prefs.getInt("overlay_${console}_mouse_swipe_threshold", 10),
+            mouseHoldToDrag = prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", false),
+            mouseDoubleTapToDrag = prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false),
+            showMouseCursor = prefs.getBoolean("overlay_${console}_show_mouse_cursor", true)
         )
     }
     

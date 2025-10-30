@@ -52,8 +52,15 @@ fun AdvancedOverlaySettingsDialog(
     var lightgunTriggerOnTouch by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", false)) }
     var lightgunAllowOffscreen by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true)) }
     
+    // Mouse options
+    var mouseSpeed by remember { mutableStateOf(prefs.getFloat("overlay_${console}_mouse_speed", 1.0f)) }
+    var mouseSwipeThreshold by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_swipe_threshold", 10)) }
+    var mouseHoldToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", false)) }
+    var mouseDoubleTapToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false)) }
+    var showMouseCursor by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_show_mouse_cursor", true)) }
+    
     // Save when changed
-    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort, lightgunTriggerOnTouch, lightgunAllowOffscreen) {
+    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort, lightgunTriggerOnTouch, lightgunAllowOffscreen, mouseSpeed, mouseSwipeThreshold, mouseHoldToDrag, mouseDoubleTapToDrag, showMouseCursor) {
         prefs.edit()
             .putInt("overlay_${console}_dpad_diagonal_sensitivity", dpadDiagonalSensitivity)
             .putInt("overlay_${console}_abxy_diagonal_sensitivity", abxyDiagonalSensitivity)
@@ -67,6 +74,11 @@ fun AdvancedOverlaySettingsDialog(
             .putInt("overlay_${console}_show_inputs_port", showInputsPort)
             .putBoolean("overlay_${console}_lightgun_trigger_on_touch", lightgunTriggerOnTouch)
             .putBoolean("overlay_${console}_lightgun_allow_offscreen", lightgunAllowOffscreen)
+            .putFloat("overlay_${console}_mouse_speed", mouseSpeed)
+            .putInt("overlay_${console}_mouse_swipe_threshold", mouseSwipeThreshold)
+            .putBoolean("overlay_${console}_mouse_hold_to_drag", mouseHoldToDrag)
+            .putBoolean("overlay_${console}_mouse_dtap_to_drag", mouseDoubleTapToDrag)
+            .putBoolean("overlay_${console}_show_mouse_cursor", showMouseCursor)
             .commit()
         android.util.Log.i("AdvancedOverlaySettings", "Saved for $console: dpadSens=$dpadDiagonalSensitivity abxySens=$abxyDiagonalSensitivity recenter=$analogRecenterZone opacity=$opacity")
     }
@@ -476,6 +488,167 @@ fun AdvancedOverlaySettingsDialog(
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color(0xFF9C27B0),
                             checkedTrackColor = Color(0xFF9C27B0).copy(alpha = 0.5f),
+                            uncheckedThumbColor = Color(0xFF888888),
+                            uncheckedTrackColor = Color(0xFF444444)
+                        )
+                    )
+                }
+                
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
+                Spacer(Modifier.height(16.dp))
+                
+                // === MOUSE ===
+                Text(
+                    "Mouse",
+                    color = Color(0xFFFF9800),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                // Mouse Speed
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Mouse Speed", color = Color.White, fontSize = 14.sp)
+                        Text(String.format("%.1fx", mouseSpeed), color = Color(0xFF00BCD4), fontSize = 14.sp)
+                    }
+                    Slider(
+                        value = mouseSpeed,
+                        onValueChange = { mouseSpeed = it },
+                        valueRange = 0.1f..5.0f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFF00BCD4),
+                            activeTrackColor = Color(0xFF00BCD4),
+                            inactiveTrackColor = Color(0xFF444444)
+                        )
+                    )
+                    Text(
+                        "Mouse movement speed multiplier",
+                        color = Color(0xFF888888),
+                        fontSize = 11.sp
+                    )
+                }
+                
+                // Swipe Threshold
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Swipe Threshold", color = Color.White, fontSize = 14.sp)
+                        Text("${mouseSwipeThreshold}px", color = Color(0xFFFFEB3B), fontSize = 14.sp)
+                    }
+                    Slider(
+                        value = mouseSwipeThreshold.toFloat(),
+                        onValueChange = { mouseSwipeThreshold = it.toInt() },
+                        valueRange = 1f..50f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFFFFEB3B),
+                            activeTrackColor = Color(0xFFFFEB3B),
+                            inactiveTrackColor = Color(0xFF444444)
+                        )
+                    )
+                    Text(
+                        "Minimum distance to register as swipe",
+                        color = Color(0xFF888888),
+                        fontSize = 11.sp
+                    )
+                }
+                
+                // Hold to Drag
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Hold to Drag",
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            "Hold finger to activate drag mode",
+                            color = Color(0xFF888888),
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = mouseHoldToDrag,
+                        onCheckedChange = { mouseHoldToDrag = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF4CAF50),
+                            checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
+                            uncheckedThumbColor = Color(0xFF888888),
+                            uncheckedTrackColor = Color(0xFF444444)
+                        )
+                    )
+                }
+                
+                // Double-Tap to Drag
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Double-Tap to Drag",
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            "Double-tap to toggle drag mode",
+                            color = Color(0xFF888888),
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = mouseDoubleTapToDrag,
+                        onCheckedChange = { mouseDoubleTapToDrag = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF2196F3),
+                            checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
+                            uncheckedThumbColor = Color(0xFF888888),
+                            uncheckedTrackColor = Color(0xFF444444)
+                        )
+                    )
+                }
+                
+                // Show Mouse Cursor
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Show Mouse Cursor",
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            "Display cursor for mouse emulation",
+                            color = Color(0xFF888888),
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = showMouseCursor,
+                        onCheckedChange = { showMouseCursor = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFFFF9800),
+                            checkedTrackColor = Color(0xFFFF9800).copy(alpha = 0.5f),
                             uncheckedThumbColor = Color(0xFF888888),
                             uncheckedTrackColor = Color(0xFF444444)
                         )

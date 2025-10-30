@@ -49,18 +49,22 @@ fun AdvancedOverlaySettingsDialog(
     var showInputsPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_show_inputs_port", 0)) }
     
     // Lightgun options
+    var lightgunPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_lightgun_port", 0)) }
     var lightgunTriggerOnTouch by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", false)) }
+    var lightgunTriggerDelay by remember { mutableStateOf(prefs.getInt("overlay_${console}_lightgun_trigger_delay", 0)) }
     var lightgunAllowOffscreen by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true)) }
     
     // Mouse options
     var mouseSpeed by remember { mutableStateOf(prefs.getFloat("overlay_${console}_mouse_speed", 1.0f)) }
     var mouseSwipeThreshold by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_swipe_threshold", 10)) }
     var mouseHoldToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", false)) }
+    var mouseHoldMsec by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_hold_msec", 500)) }
     var mouseDoubleTapToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false)) }
+    var mouseDtapMsec by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_dtap_msec", 300)) }
     var showMouseCursor by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_show_mouse_cursor", true)) }
     
     // Save when changed
-    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort, lightgunTriggerOnTouch, lightgunAllowOffscreen, mouseSpeed, mouseSwipeThreshold, mouseHoldToDrag, mouseDoubleTapToDrag, showMouseCursor) {
+    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort, lightgunPort, lightgunTriggerOnTouch, lightgunTriggerDelay, lightgunAllowOffscreen, mouseSpeed, mouseSwipeThreshold, mouseHoldToDrag, mouseHoldMsec, mouseDoubleTapToDrag, mouseDtapMsec, showMouseCursor) {
         prefs.edit()
             .putInt("overlay_${console}_dpad_diagonal_sensitivity", dpadDiagonalSensitivity)
             .putInt("overlay_${console}_abxy_diagonal_sensitivity", abxyDiagonalSensitivity)
@@ -72,12 +76,16 @@ fun AdvancedOverlaySettingsDialog(
             .putBoolean("overlay_${console}_hide_when_gamepad", hideWhenGamepad)
             .putString("overlay_${console}_show_inputs", showInputs.name)
             .putInt("overlay_${console}_show_inputs_port", showInputsPort)
+            .putInt("overlay_${console}_lightgun_port", lightgunPort)
             .putBoolean("overlay_${console}_lightgun_trigger_on_touch", lightgunTriggerOnTouch)
+            .putInt("overlay_${console}_lightgun_trigger_delay", lightgunTriggerDelay)
             .putBoolean("overlay_${console}_lightgun_allow_offscreen", lightgunAllowOffscreen)
             .putFloat("overlay_${console}_mouse_speed", mouseSpeed)
             .putInt("overlay_${console}_mouse_swipe_threshold", mouseSwipeThreshold)
             .putBoolean("overlay_${console}_mouse_hold_to_drag", mouseHoldToDrag)
+            .putInt("overlay_${console}_mouse_hold_msec", mouseHoldMsec)
             .putBoolean("overlay_${console}_mouse_dtap_to_drag", mouseDoubleTapToDrag)
+            .putInt("overlay_${console}_mouse_dtap_msec", mouseDtapMsec)
             .putBoolean("overlay_${console}_show_mouse_cursor", showMouseCursor)
             .commit()
         android.util.Log.i("AdvancedOverlaySettings", "Saved for $console: dpadSens=$dpadDiagonalSensitivity abxySens=$abxyDiagonalSensitivity recenter=$analogRecenterZone opacity=$opacity")
@@ -109,6 +117,7 @@ fun AdvancedOverlaySettingsDialog(
                 // Scrollable content
                 Column(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
                 ) {
@@ -494,6 +503,59 @@ fun AdvancedOverlaySettingsDialog(
                     )
                 }
                 
+                // Lightgun Port
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Lightgun Port", color = Color.White, fontSize = 14.sp)
+                        Text("Port $lightgunPort", color = Color(0xFF00BCD4), fontSize = 14.sp)
+                    }
+                    Slider(
+                        value = lightgunPort.toFloat(),
+                        onValueChange = { lightgunPort = it.toInt() },
+                        valueRange = 0f..3f,
+                        steps = 2,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFF00BCD4),
+                            activeTrackColor = Color(0xFF00BCD4),
+                            inactiveTrackColor = Color(0xFF444444)
+                        )
+                    )
+                    Text(
+                        "Controller port for lightgun (0-3)",
+                        color = Color(0xFF888888),
+                        fontSize = 11.sp
+                    )
+                }
+                
+                // Trigger Delay
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Trigger Delay", color = Color.White, fontSize = 14.sp)
+                        Text("${lightgunTriggerDelay}ms", color = Color(0xFFFFEB3B), fontSize = 14.sp)
+                    }
+                    Slider(
+                        value = lightgunTriggerDelay.toFloat(),
+                        onValueChange = { lightgunTriggerDelay = it.toInt() },
+                        valueRange = 0f..500f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFFFFEB3B),
+                            activeTrackColor = Color(0xFFFFEB3B),
+                            inactiveTrackColor = Color(0xFF444444)
+                        )
+                    )
+                    Text(
+                        "Delay before trigger fires (milliseconds)",
+                        color = Color(0xFF888888),
+                        fontSize = 11.sp
+                    )
+                }
+                
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
                 Spacer(Modifier.height(16.dp))
@@ -591,6 +653,34 @@ fun AdvancedOverlaySettingsDialog(
                     )
                 }
                 
+                // Hold Duration
+                if (mouseHoldToDrag) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Hold Duration", color = Color(0xFFBBBBBB), fontSize = 13.sp)
+                            Text("${mouseHoldMsec}ms", color = Color(0xFF4CAF50), fontSize = 13.sp)
+                        }
+                        Slider(
+                            value = mouseHoldMsec.toFloat(),
+                            onValueChange = { mouseHoldMsec = it.toInt() },
+                            valueRange = 100f..2000f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF4CAF50),
+                                activeTrackColor = Color(0xFF4CAF50),
+                                inactiveTrackColor = Color(0xFF444444)
+                            )
+                        )
+                        Text(
+                            "Time to hold before activating drag (ms)",
+                            color = Color(0xFF888888),
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+                
                 // Double-Tap to Drag
                 Row(
                     modifier = Modifier
@@ -621,6 +711,34 @@ fun AdvancedOverlaySettingsDialog(
                             uncheckedTrackColor = Color(0xFF444444)
                         )
                     )
+                }
+                
+                // Double-Tap Timing
+                if (mouseDoubleTapToDrag) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Double-Tap Timing", color = Color(0xFFBBBBBB), fontSize = 13.sp)
+                            Text("${mouseDtapMsec}ms", color = Color(0xFF2196F3), fontSize = 13.sp)
+                        }
+                        Slider(
+                            value = mouseDtapMsec.toFloat(),
+                            onValueChange = { mouseDtapMsec = it.toInt() },
+                            valueRange = 100f..1000f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF2196F3),
+                                activeTrackColor = Color(0xFF2196F3),
+                                inactiveTrackColor = Color(0xFF444444)
+                            )
+                        )
+                        Text(
+                            "Max time between taps to register as double-tap (ms)",
+                            color = Color(0xFF888888),
+                            fontSize = 10.sp
+                        )
+                    }
                 }
                 
                 // Show Mouse Cursor

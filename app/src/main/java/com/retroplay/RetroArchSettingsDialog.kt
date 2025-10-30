@@ -151,6 +151,7 @@ fun RetroArchSettingsDialog(
                 // Scrollable content
                 Column(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
                 ) {

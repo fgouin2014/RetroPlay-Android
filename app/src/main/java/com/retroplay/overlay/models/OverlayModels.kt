@@ -236,7 +236,9 @@ data class AdvancedOverlaySettings(
     val mouseSpeed: Float = 1.0f,              // Vitesse souris (0.1-5.0)
     val mouseSwipeThreshold: Int = 10,         // Seuil swipe (pixels)
     val mouseHoldToDrag: Boolean = false,      // Maintenir pour drag
+    val mouseHoldMsec: Int = 500,              // Durée hold (ms)
     val mouseDoubleTapToDrag: Boolean = false, // Double-tap pour drag
+    val mouseDtapMsec: Int = 300,              // Délai double-tap (ms)
     val showMouseCursor: Boolean = true        // Afficher curseur souris
 )
 
@@ -353,7 +355,9 @@ object OverlayPreferenceManager {
             mouseSpeed = prefs.getFloat("overlay_${console}_mouse_speed", 1.0f),
             mouseSwipeThreshold = prefs.getInt("overlay_${console}_mouse_swipe_threshold", 10),
             mouseHoldToDrag = prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", false),
+            mouseHoldMsec = prefs.getInt("overlay_${console}_mouse_hold_msec", 500),
             mouseDoubleTapToDrag = prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false),
+            mouseDtapMsec = prefs.getInt("overlay_${console}_mouse_dtap_msec", 300),
             showMouseCursor = prefs.getBoolean("overlay_${console}_show_mouse_cursor", true)
         )
     }

@@ -105,9 +105,17 @@
                    android:screenOrientation="portrait"
                    android:configChanges="orientation|screenSize" />
 
-               <!-- Native Compose Emulator Activity (LibretroDroid cores + Lemuroid gamepads) -->
+               <!-- Native Compose Emulator Activity (LibretroDroid cores + Radial/Lemuroid gamepads) -->
             <activity
                 android:name=".NativeComposeEmulatorActivity"
+                android:exported="false"
+                android:screenOrientation="sensor"
+                android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+                android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
+
+            <!-- RetroArch Emulator Activity (LibretroDroid cores + Pure RetroArch overlays) -->
+            <activity
+                android:name=".RetroArchEmulatorActivity"
                 android:exported="false"
                 android:screenOrientation="sensor"
                 android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"

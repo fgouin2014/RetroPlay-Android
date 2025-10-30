@@ -9,6 +9,7 @@ import android.widget.ArrayAdapter;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import com.google.android.material.button.MaterialButton;
@@ -59,6 +60,12 @@ public class ConsoleConfigActivity extends AppCompatActivity {
     private MaterialButton saveButton;
     private MaterialButton editHtmlButton;
     private MaterialButton resetNativeGamePadButton;
+    
+    // Emulator mode settings
+    private android.widget.RadioGroup emulatorModeRadioGroup;
+    private android.widget.RadioButton radioNativeMode;
+    private android.widget.RadioButton radioRetroArchMode;
+    private MaterialButton resetEmulatorModeButton;
     
     // Available cores per console
     private static final String[] NES_CORES = {"fceumm", "nestopia"};
@@ -228,6 +235,31 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         // Reset Native GamePad button
         resetNativeGamePadButton = findViewById(R.id.resetNativeGamePadButton);
         resetNativeGamePadButton.setOnClickListener(v -> resetNativeGamePad());
+        
+        // Emulator mode controls
+        emulatorModeRadioGroup = findViewById(R.id.emulatorModeRadioGroup);
+        radioNativeMode = findViewById(R.id.radioNativeMode);
+        radioRetroArchMode = findViewById(R.id.radioRetroArchMode);
+        resetEmulatorModeButton = findViewById(R.id.resetEmulatorModeButton);
+        
+        // Emulator mode radio group listener
+        emulatorModeRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            if (checkedId == R.id.radioNativeMode) {
+                GamepadPreferenceManager.INSTANCE.saveMode(this, currentConsole, GamepadPreferenceManager.EmulatorMode.NATIVE);
+                android.util.Log.i("ConsoleConfig", "Emulator mode changed to NATIVE for " + currentConsole);
+            } else if (checkedId == R.id.radioRetroArchMode) {
+                GamepadPreferenceManager.INSTANCE.saveMode(this, currentConsole, GamepadPreferenceManager.EmulatorMode.RETROARCH);
+                android.util.Log.i("ConsoleConfig", "Emulator mode changed to RETROARCH for " + currentConsole);
+            }
+        });
+        
+        // Reset emulator mode button
+        resetEmulatorModeButton.setOnClickListener(v -> {
+            GamepadPreferenceManager.INSTANCE.resetToDefault(this, currentConsole);
+            radioNativeMode.setChecked(true);
+            Toast.makeText(this, "Emulator mode reset to default (NATIVE)", Toast.LENGTH_SHORT).show();
+            android.util.Log.i("ConsoleConfig", "Emulator mode reset to NATIVE for " + currentConsole);
+        });
     }
     
     
@@ -253,6 +285,14 @@ public class ConsoleConfigActivity extends AppCompatActivity {
     private void loadConfiguration() {
         String prefix = currentConsole + "_";
         
+        // Load emulator mode
+        GamepadPreferenceManager.EmulatorMode currentMode = GamepadPreferenceManager.INSTANCE.loadMode(this, currentConsole);
+        if (currentMode == GamepadPreferenceManager.EmulatorMode.NATIVE) {
+            radioNativeMode.setChecked(true);
+        } else {
+            radioRetroArchMode.setChecked(true);
+        }
+        android.util.Log.i("ConsoleConfig", "Loaded emulator mode for " + currentConsole + ": " + currentMode);
         
         // Load performance settings (default threads for heavy consoles)
         boolean defaultThreads = currentConsole.equals("psp") || currentConsole.equals("n64");

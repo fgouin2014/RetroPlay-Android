@@ -20,38 +20,11 @@ class OverlayAssetManager(private val context: Context) {
     companion object {
         private const val TAG = "OverlayAssetManager"
         
-        // Répertoire de stockage des overlays sur le device
-        const val OVERLAY_DIR = "/storage/emulated/0/RetroPlay-Data/overlays"
+        // Répertoire de stockage des overlays sur le device (structure RetroArch officielle)
+        const val OVERLAY_DIR = "/storage/emulated/0/RetroPlay-Data/overlays/gamepads"
         
-        // Packages d'overlays disponibles (à copier depuis assets)
-        val AVAILABLE_PACKAGES = listOf(
-            "dual-shock",
-            "flat-arcade",
-            "flat-atari2600",
-            "flat-atari7800",
-            "flat-atarilynx",
-            "flat-dreamcast",
-            "flat-gameboy",
-            "flat-gamecube",
-            "flat-gba",
-            "flat-genesis",
-            "flat-n64",
-            "flat-neogeo",
-            "flat-nes",
-            "flat-ngp",
-            "flat-pce",
-            "flat-pcfx",
-            "flat-pokemini",
-            "flat-psp",
-            "flat-psx",
-            "flat-retropad",
-            "flat-saturn",
-            "flat-sms",
-            "flat-snes",
-            "flat-virtualboy",
-            "flat-wonderswan",
-            "retropad"
-        )
+        // Racine des overlays dans les assets (structure identique aux repos RetroArch)
+        private const val ASSETS_OVERLAYS_ROOT = "overlays/gamepads"
     }
     
     private val parser = RetroArchOverlayParser()
@@ -85,17 +58,23 @@ class OverlayAssetManager(private val context: Context) {
             return false
         }
         
-        // Installer chaque package
-        var successCount = 0
-        AVAILABLE_PACKAGES.forEachIndexed { index, packageName ->
-            progressCallback?.onProgress(index + 1, AVAILABLE_PACKAGES.size, packageName)
-            if (installOverlayPackage(packageName)) {
-                successCount++
-            }
+        // Lister dynamiquement les packages disponibles dans assets/overlays
+        val packages = try {
+            context.assets.list(ASSETS_OVERLAYS_ROOT)?.toList() ?: emptyList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to list assets overlays", e)
+            emptyList()
         }
-        
-        progressCallback?.onComplete(successCount, AVAILABLE_PACKAGES.size)
-        Log.i(TAG, "Installed $successCount/${AVAILABLE_PACKAGES.size} overlay packages")
+
+        // Installer chaque package (copie récursive complète pour préserver la structure officielle)
+        var successCount = 0
+        packages.forEachIndexed { index, packageName ->
+            progressCallback?.onProgress(index + 1, packages.size, packageName)
+            if (installOverlayPackage(packageName)) successCount++
+        }
+
+        progressCallback?.onComplete(successCount, packages.size)
+        Log.i(TAG, "Installed $successCount/${packages.size} overlay packages")
         return successCount > 0
     }
     
@@ -112,54 +91,28 @@ class OverlayAssetManager(private val context: Context) {
                 return false
             }
             
-            // Copier le fichier .cfg
-            val cfgPath = "overlays/$packageName/$packageName.cfg"
-            val cfgExists = try {
-                context.assets.open(cfgPath).close()
-                true
-            } catch (e: Exception) {
-                false
-            }
-            
-            if (!cfgExists) {
-                Log.w(TAG, "No .cfg file found for $packageName at $cfgPath")
-                return false
-            }
-            
-            context.assets.open(cfgPath).use { input ->
-                File(targetDir, "$packageName.cfg").outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            
-            // Copier les images
-            val imgDir = File(targetDir, "img")
-            if (!imgDir.mkdirs() && !imgDir.exists()) {
-                Log.e(TAG, "Failed to create img directory for $packageName")
-                return false
-            }
-            
-            val imgPath = "overlays/$packageName/img"
-            val imageFiles = try {
-                context.assets.list(imgPath) ?: emptyArray()
-            } catch (e: Exception) {
-                Log.w(TAG, "No images found for $packageName")
-                emptyArray()
-            }
-            
-            imageFiles.forEach { imageFile ->
-                try {
-                    context.assets.open("$imgPath/$imageFile").use { input ->
-                        File(imgDir, imageFile).outputStream().use { output ->
-                            input.copyTo(output)
-                        }
+            // Copie récursive complète du dossier assets/overlays/<packageName> vers storage
+            fun copyAssetDirRecursively(assetPath: String, dest: File) {
+                val list = context.assets.list(assetPath) ?: emptyArray()
+                if (list.isEmpty()) {
+                    // Fichier
+                    context.assets.open(assetPath).use { input ->
+                        dest.outputStream().use { output -> input.copyTo(output) }
                     }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to copy image $imageFile for $packageName", e)
+                } else {
+                    // Dossier
+                    if (!dest.exists()) dest.mkdirs()
+                    list.forEach { child ->
+                        copyAssetDirRecursively(
+                            "$assetPath/$child",
+                            File(dest, child)
+                        )
+                    }
                 }
             }
-            
-            Log.i(TAG, "Successfully installed $packageName (${imageFiles.size} images)")
+
+            copyAssetDirRecursively("$ASSETS_OVERLAYS_ROOT/$packageName", targetDir)
+            Log.i(TAG, "Successfully installed $packageName (recursive copy)")
             return true
             
         } catch (e: Exception) {
@@ -173,11 +126,29 @@ class OverlayAssetManager(private val context: Context) {
      * @param overlayName Nom de l'overlay (ex: "flat-nes")
      * @return Configuration parsée, ou null si erreur
      */
-    fun loadOverlayConfig(overlayName: String): RetroArchOverlayConfig? {
-        val cfgFile = File(OVERLAY_DIR, "$overlayName/$overlayName.cfg")
+    fun loadOverlayConfig(overlayName: String, console: String): RetroArchOverlayConfig? {
+        // 1) Essayer <overlay>/<overlay>.cfg (packages avec cfg unique)
+        var cfgFile = File(OVERLAY_DIR, "$overlayName/$overlayName.cfg")
+        
+        // 2) Sinon, essayer <overlay>/<console>.cfg (ex: flat/nes.cfg)
+        if (!cfgFile.exists()) {
+            val consoleCfg = mapConsoleToCfg(console)
+            val alt = File(OVERLAY_DIR, "$overlayName/$consoleCfg.cfg")
+            if (alt.exists()) cfgFile = alt
+        }
+        
+        // 3) Sinon, prendre le PREMIER .cfg trouvé (ex: nes-small/nes-small-ab.cfg)
+        if (!cfgFile.exists()) {
+            val overlayDir = File(OVERLAY_DIR, overlayName)
+            val cfgFiles = overlayDir.listFiles { file -> file.extension == "cfg" }
+            if (!cfgFiles.isNullOrEmpty()) {
+                cfgFile = cfgFiles.first()
+                Log.i(TAG, "Using first .cfg found: ${cfgFile.name}")
+            }
+        }
         
         if (!cfgFile.exists()) {
-            Log.e(TAG, "Config file not found: ${cfgFile.absolutePath}")
+            Log.e(TAG, "Config file not found for overlay='$overlayName' console='$console' in ${File(OVERLAY_DIR, overlayName).absolutePath}")
             return null
         }
         
@@ -237,8 +208,8 @@ class OverlayAssetManager(private val context: Context) {
      * @param overlayName Nom de l'overlay
      * @return Liste des noms de layouts (ex: ["landscape-A", "portrait-B"])
      */
-    fun getAvailableLayouts(overlayName: String): List<String> {
-        val config = loadOverlayConfig(overlayName) ?: return emptyList()
+    fun getAvailableLayouts(overlayName: String, console: String): List<String> {
+        val config = loadOverlayConfig(overlayName, console) ?: return emptyList()
         val layouts = config.layouts.keys.toList().sorted()
         Log.d(TAG, "getAvailableLayouts for '$overlayName': ${layouts.size} layouts found: ${layouts.joinToString()}")
         return layouts
@@ -254,8 +225,10 @@ class OverlayAssetManager(private val context: Context) {
         Log.d(TAG, "getCompatibleOverlays for console='$console': found ${allOverlays.size} total overlays")
         Log.d(TAG, "Available overlays: ${allOverlays.joinToString()}")
         
-        // Les retropads universels (compatibles avec TOUTES les consoles)
-        val universalOverlays = allOverlays.filter { it.contains("retropad") }
+        // Les overlays universels (compatibles avec TOUTES les consoles)
+        val universalOverlays = allOverlays.filter { 
+            it.contains("retropad") || it == "flat"
+        }
         
         // Correspondances console -> overlays spécifiques
         val specificOverlays = allOverlays.filter { overlay ->
@@ -301,7 +274,17 @@ class OverlayAssetManager(private val context: Context) {
      * @return Informations du package, ou null si non trouvé
      */
     fun getPackageInfo(overlayName: String): OverlayPackageInfo? {
-        val config = loadOverlayConfig(overlayName) ?: return null
+        // Essayer de charger une config représentative: d'abord <name>.cfg, sinon première *.cfg trouvée
+        val dir = File(OVERLAY_DIR, overlayName)
+        val preferred = File(dir, "$overlayName.cfg")
+        val cfgForInfo: RetroArchOverlayConfig? = when {
+            preferred.exists() -> parser.parseConfig(preferred)
+            else -> {
+                val firstCfg = dir.listFiles { f -> f.isFile && f.name.endsWith(".cfg", true) }?.firstOrNull()
+                if (firstCfg != null) parser.parseConfig(firstCfg) else null
+            }
+        }
+        val config = cfgForInfo ?: return null
         
         // Déterminer les consoles compatibles depuis le nom
         val compatibleConsoles = mutableListOf<String>()
@@ -367,10 +350,35 @@ class OverlayAssetManager(private val context: Context) {
      * @return true si installé et valide
      */
     fun isOverlayInstalled(overlayName: String): Boolean {
-        val cfgFile = File(OVERLAY_DIR, "$overlayName/$overlayName.cfg")
-        val imgDir = File(OVERLAY_DIR, "$overlayName/img")
-        
-        return cfgFile.exists() && imgDir.exists() && (imgDir.listFiles()?.isNotEmpty() == true)
+        val dir = File(OVERLAY_DIR, overlayName)
+        return dir.exists() && dir.isDirectory && dir.listFiles()?.isNotEmpty() == true
+    }
+
+    private fun mapConsoleToCfg(console: String): String {
+        return when (console.lowercase()) {
+            "nes", "famicom" -> "nes"
+            "snes", "superfamicom" -> "snes"
+            "psx", "ps1", "playstation" -> "psx"
+            "n64", "nintendo64" -> "nintendo64"
+            "genesis", "megadrive", "md" -> "genesis"
+            "sms", "mastersystem" -> "sms"
+            "gb", "gameboy" -> "gameboy"
+            "gbc", "gameboycolor" -> "gameboy" // souvent partagé
+            "gba", "gameboyadvance" -> "gba"
+            "psp" -> "psp"
+            "pce", "pcengine", "turbografx", "tg16" -> "pc-fx" // selon packages
+            "saturn" -> "saturn"
+            "dreamcast", "dc" -> "dreamcast"
+            "arcade", "mame", "fbneo" -> "arcade"
+            "neogeo" -> "neogeo"
+            "virtualboy" -> "virtualboy"
+            "pokemini" -> "pokemini"
+            "atarilynx", "lynx" -> "atari_lynx"
+            "atari2600" -> "atari2600"
+            "atari7800" -> "atari7800"
+            "ngp", "ngpc" -> "neogeo_pocket"
+            else -> console.lowercase()
+        }
     }
     
     /**

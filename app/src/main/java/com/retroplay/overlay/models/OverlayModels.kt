@@ -20,7 +20,25 @@ data class OverlayLayout(
     val normalized: Boolean = true,       // Coordonnées 0.0-1.0
     val rangeModifier: Float = 1.0f,      // Multiplier pour hit zones
     val alphaModifier: Float = 1.0f,      // Transparence
-    val buttons: List<OverlayButton>
+    val buttons: List<OverlayButton>,
+    val rect: OverlayRect? = null,        // overlay0_rect (custom positioning)
+    val backgroundImage: String? = null,  // overlay0_overlay (image de fond)
+    val aspectRatio: Float? = null,       // overlay0_aspect_ratio
+    val blockXSeparation: Boolean = false, // overlay0_block_x_separation
+    val blockYSeparation: Boolean = false, // overlay0_block_y_separation
+    val autoXSeparation: Boolean = true,   // overlay0_auto_x_separation (défaut true)
+    val autoYSeparation: Boolean = true    // overlay0_auto_y_separation (défaut true)
+)
+
+/**
+ * Rectangle de positionnement custom pour un overlay
+ * overlay0_rect = "x,y,width,height" (normalized 0.0-1.0)
+ */
+data class OverlayRect(
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float
 )
 
 /**
@@ -31,13 +49,66 @@ data class OverlayButton(
     val x: Float,                         // Position X (0.0-1.0 if normalized)
     val y: Float,                         // Position Y (0.0-1.0 if normalized)
     val shape: ButtonShape,               // RADIAL or RECT
-    val width: Float,                     // Width (0.0-1.0 if normalized)
-    val height: Float,                    // Height (0.0-1.0 if normalized)
+    val width: Float,                     // Width (range_x) (0.0-1.0 if normalized)
+    val height: Float,                    // Height (range_y) (0.0-1.0 if normalized)
     val imagePath: String? = null,        // "img/A.png"
     val nextTarget: String? = null,       // Pour overlay_next buttons
     val type: OverlayButtonType = OverlayButtonType.BUTTONS,  // Type de bouton
-    val rangeModifier: Float = 1.0f       // Multiplier pour analog sticks (sensibilité)
-)
+    val rangeModifier: Float = 1.0f,      // Multiplier pour analog sticks (sensibilité)
+    // Extensions pour compat 100% RetroArch
+    val alphaModifier: Float? = null,     // overlayN_descM_alpha_mod
+    val exclusive: Boolean = false,       // overlayN_descM_exclusive
+    val rangeModExclusive: Boolean = false, // overlayN_descM_range_mod_exclusive
+    val movable: Boolean = false,         // overlayN_descM_movable
+    val reachUp: Float = 1.0f,            // overlayN_descM_reach_up/_y
+    val reachDown: Float = 1.0f,
+    val reachLeft: Float = 1.0f,
+    val reachRight: Float = 1.0f,
+    val analogSaturatePct: Float = 1.0f,  // overlayN_descM_saturate_pct (analog sticks)
+    // Pré-calculs utiles pour rendu/hitbox (mod_x/w/y/h)
+    val modX: Float = x - width,
+    val modY: Float = y - height,
+    val modW: Float = 2f * width,
+    val modH: Float = 2f * height,
+    // 8-way area custom mappings (pour dpad_area et abxy_area)
+    val eightwayUp: String? = null,           // overlayN_descM_up
+    val eightwayDown: String? = null,         // overlayN_descM_down
+    val eightwayLeft: String? = null,         // overlayN_descM_left
+    val eightwayRight: String? = null,        // overlayN_descM_right
+    val eightwayUpLeft: String? = null,       // overlayN_descM_up_left
+    val eightwayUpRight: String? = null,      // overlayN_descM_up_right
+    val eightwayDownLeft: String? = null,     // overlayN_descM_down_left
+    val eightwayDownRight: String? = null,    // overlayN_descM_down_right
+    // Hitbox position override (recalculée après scale/offset/separation)
+    val xHitboxOverride: Float? = null,
+    val yHitboxOverride: Float? = null
+) {
+    /**
+     * Calcul de la POSITION de la hitbox (peut être décalée si reach asymétrique)
+     * Identique à RetroArch: x_hitbox = ((x + range_x * reach_right) + (x - range_x * reach_left)) / 2.0
+     * Utilise xHitboxOverride si défini (après transformations scale/offset)
+     */
+    val xHitbox: Float = xHitboxOverride ?: ((x + width * reachRight) + (x - width * reachLeft)) / 2.0f
+    
+    /**
+     * Calcul de la POSITION de la hitbox en Y
+     * Identique à RetroArch: y_hitbox = ((y + range_y * reach_down) + (y - range_y * reach_up)) / 2.0
+     * Utilise yHitboxOverride si défini (après transformations scale/offset)
+     */
+    val yHitbox: Float = yHitboxOverride ?: ((y + height * reachDown) + (y - height * reachUp)) / 2.0f
+    
+    /**
+     * Calcul de la TAILLE de la hitbox réelle (range_x_hitbox) en appliquant reach_*
+     * Identique à RetroArch: range_x_hitbox = (range_x * reach_right + range_x * reach_left) / 2.0
+     */
+    val rangeXHitbox: Float = (width * reachRight + width * reachLeft) / 2.0f
+    
+    /**
+     * Calcul de la TAILLE de la hitbox réelle (range_y_hitbox) en appliquant reach_*
+     * Identique à RetroArch: range_y_hitbox = (range_y * reach_down + range_y * reach_up) / 2.0
+     */
+    val rangeYHitbox: Float = (height * reachDown + height * reachUp) / 2.0f
+}
 
 /**
  * Type de hitbox pour un bouton
@@ -101,7 +172,8 @@ object RetroArchButtonMapping {
         // Actions spéciales (non-input)
         if (action.startsWith("overlay_next") || 
             action.startsWith("menu_toggle") ||
-            action.startsWith("nul")) {
+            action.startsWith("nul") ||
+            action.startsWith("null")) {
             return emptyList()
         }
         
@@ -116,7 +188,8 @@ object RetroArchButtonMapping {
     fun isOverlayControlAction(action: String): Boolean {
         return action.startsWith("overlay_next") || 
                action.startsWith("menu_toggle") ||
-               action == "nul"
+               action == "nul" ||
+               action == "null"
     }
     
     /**
@@ -128,6 +201,48 @@ object RetroArchButtonMapping {
 }
 
 /**
+ * Show Inputs mode
+ */
+enum class ShowInputsMode {
+    NONE,      // Pas d'affichage
+    TOUCHED,   // Afficher les touches tactiles
+    PHYSICAL,  // Afficher les touches du gamepad physique
+    BOTH       // Afficher les deux
+}
+
+/**
+ * Advanced overlay settings (options avancées)
+ */
+data class AdvancedOverlaySettings(
+    val dpadDiagonalSensitivity: Int = 50,     // 0-100
+    val abxyDiagonalSensitivity: Int = 50,     // 0-100
+    val analogRecenterZone: Int = 0,           // 0-100
+    val opacity: Float = 1.0f,                 // 0.0-1.0
+    val aspectAdjust: Float = 0.0f,            // -0.5 à 0.5
+    val hideInMenu: Boolean = false,
+    val behindMenu: Boolean = false,
+    val hideWhenGamepadConnected: Boolean = false,
+    val showInputs: ShowInputsMode = ShowInputsMode.NONE,
+    val showInputsPort: Int = 0,               // Port à afficher (0 = all)
+    // Lightgun options
+    val lightgunPort: Int = 0,                 // Port du lightgun (0-3)
+    val lightgunTriggerOnTouch: Boolean = false,  // Déclencher au touch (vs release)
+    val lightgunTriggerDelay: Int = 0,         // Délai avant déclenchement (ms)
+    val lightgunAllowOffscreen: Boolean = true,   // Permettre tir hors écran
+    val lightgunTwoTouchInput: Int = 0,        // Action pour 2 doigts (0=none, 1=start, 2=select, etc.)
+    val lightgunThreeTouchInput: Int = 0,      // Action pour 3 doigts
+    val lightgunFourTouchInput: Int = 0,       // Action pour 4 doigts
+    // Mouse options
+    val mouseSpeed: Float = 1.0f,              // Vitesse souris (0.1-5.0)
+    val mouseSwipeThreshold: Int = 10,         // Seuil swipe (pixels)
+    val mouseHoldToDrag: Boolean = false,      // Maintenir pour drag
+    val mouseHoldMsec: Int = 500,              // Durée hold (ms)
+    val mouseDoubleTapToDrag: Boolean = false, // Double-tap pour drag
+    val mouseDtapMsec: Int = 300,              // Délai double-tap (ms)
+    val showMouseCursor: Boolean = true        // Afficher curseur souris
+)
+
+/**
  * Préférences d'overlay pour une console
  */
 data class OverlayPreference(
@@ -135,7 +250,14 @@ data class OverlayPreference(
     val overlayName: String,                     // "flat-nes", "dual-shock", etc.
     val landscapeLayout: String = "landscape-A", // Layout pour landscape
     val portraitLayout: String = "portrait-A",   // Layout pour portrait
-    val autoRotate: Boolean = true               // Auto-switch landscape/portrait
+    val autoRotate: Boolean = true,              // Auto-switch landscape/portrait
+    val swapAnalogSticks: Boolean = false,       // Inverser Left <-> Right sticks
+    val invertAnalogY: Boolean = false,          // Inverser haut/bas (Y axis)
+    val scale: Float = 1.0f,                     // Échelle globale (0.5-1.5)
+    val xOffset: Float = 0.0f,                   // Décalage X (-0.2 à 0.2)
+    val yOffset: Float = 0.0f,                   // Décalage Y (-0.2 à 0.2)
+    val xSeparation: Float = 0.0f,               // Séparation interne X (-0.2 à 0.2)
+    val ySeparation: Float = 0.0f                // Séparation interne Y (-0.2 à 0.2)
 )
 
 /**
@@ -156,6 +278,13 @@ object OverlayPreferenceManager {
             .putString("overlay_${console}_layout_landscape", preference.landscapeLayout)
             .putString("overlay_${console}_layout_portrait", preference.portraitLayout)
             .putBoolean("overlay_${console}_auto_rotate", preference.autoRotate)
+            .putBoolean("overlay_${console}_swap_analog_sticks", preference.swapAnalogSticks)
+            .putBoolean("overlay_${console}_invert_analog_y", preference.invertAnalogY)
+            .putFloat("overlay_${console}_scale", preference.scale)
+            .putFloat("overlay_${console}_x_offset", preference.xOffset)
+            .putFloat("overlay_${console}_y_offset", preference.yOffset)
+            .putFloat("overlay_${console}_x_separation", preference.xSeparation)
+            .putFloat("overlay_${console}_y_separation", preference.ySeparation)
             .commit()
     }
     
@@ -170,8 +299,15 @@ object OverlayPreferenceManager {
         val landscapeLayout = prefs.getString("overlay_${console}_layout_landscape", "landscape-A") ?: "landscape-A"
         val portraitLayout = prefs.getString("overlay_${console}_layout_portrait", "portrait-A") ?: "portrait-A"
         val autoRotate = prefs.getBoolean("overlay_${console}_auto_rotate", true)
+        val swapAnalogSticks = prefs.getBoolean("overlay_${console}_swap_analog_sticks", false)
+        val invertAnalogY = prefs.getBoolean("overlay_${console}_invert_analog_y", false)
+        val scale = prefs.getFloat("overlay_${console}_scale", 1.0f)
+        val xOffset = prefs.getFloat("overlay_${console}_x_offset", 0.0f)
+        val yOffset = prefs.getFloat("overlay_${console}_y_offset", 0.0f)
+        val xSeparation = prefs.getFloat("overlay_${console}_x_separation", 0.0f)
+        val ySeparation = prefs.getFloat("overlay_${console}_y_separation", 0.0f)
         
-        return OverlayPreference(enabled, overlayName, landscapeLayout, portraitLayout, autoRotate)
+        return OverlayPreference(enabled, overlayName, landscapeLayout, portraitLayout, autoRotate, swapAnalogSticks, invertAnalogY, scale, xOffset, yOffset, xSeparation, ySeparation)
     }
     
     fun disable(
@@ -181,6 +317,92 @@ object OverlayPreferenceManager {
         // Utiliser commit() pour synchronisation immédiate
         prefs.edit()
             .putBoolean("overlay_${console}_enabled", false)
+            .commit()
+    }
+    
+    /**
+     * Load advanced settings for a console
+     */
+    fun loadAdvancedSettings(
+        prefs: android.content.SharedPreferences,
+        console: String
+    ): AdvancedOverlaySettings {
+        val showInputsString = prefs.getString("overlay_${console}_show_inputs", "NONE") ?: "NONE"
+        val showInputsMode = try {
+            ShowInputsMode.valueOf(showInputsString)
+        } catch (e: IllegalArgumentException) {
+            ShowInputsMode.NONE
+        }
+        
+        return AdvancedOverlaySettings(
+            dpadDiagonalSensitivity = prefs.getInt("overlay_${console}_dpad_diagonal_sensitivity", 50),
+            abxyDiagonalSensitivity = prefs.getInt("overlay_${console}_abxy_diagonal_sensitivity", 50),
+            analogRecenterZone = prefs.getInt("overlay_${console}_analog_recenter_zone", 0),
+            opacity = prefs.getFloat("overlay_${console}_opacity", 1.0f),
+            aspectAdjust = prefs.getFloat("overlay_${console}_aspect_adjust", 0.0f),
+            hideInMenu = prefs.getBoolean("overlay_${console}_hide_in_menu", false),
+            behindMenu = prefs.getBoolean("overlay_${console}_behind_menu", false),
+            hideWhenGamepadConnected = prefs.getBoolean("overlay_${console}_hide_when_gamepad", false),
+            showInputs = showInputsMode,
+            showInputsPort = prefs.getInt("overlay_${console}_show_inputs_port", 0),
+            lightgunPort = prefs.getInt("overlay_${console}_lightgun_port", 0),
+            lightgunTriggerOnTouch = prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", false),
+            lightgunTriggerDelay = prefs.getInt("overlay_${console}_lightgun_trigger_delay", 0),
+            lightgunAllowOffscreen = prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true),
+            lightgunTwoTouchInput = prefs.getInt("overlay_${console}_lightgun_two_touch", 0),
+            lightgunThreeTouchInput = prefs.getInt("overlay_${console}_lightgun_three_touch", 0),
+            lightgunFourTouchInput = prefs.getInt("overlay_${console}_lightgun_four_touch", 0),
+            mouseSpeed = prefs.getFloat("overlay_${console}_mouse_speed", 1.0f),
+            mouseSwipeThreshold = prefs.getInt("overlay_${console}_mouse_swipe_threshold", 10),
+            mouseHoldToDrag = prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", false),
+            mouseHoldMsec = prefs.getInt("overlay_${console}_mouse_hold_msec", 500),
+            mouseDoubleTapToDrag = prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false),
+            mouseDtapMsec = prefs.getInt("overlay_${console}_mouse_dtap_msec", 300),
+            showMouseCursor = prefs.getBoolean("overlay_${console}_show_mouse_cursor", true)
+        )
+    }
+    
+    /**
+     * Sauvegarder un overlay custom browsé via file picker
+     * Format: "overlayName/cfgFile" (ex: "flat/psx.cfg")
+     */
+    fun saveCustomBrowsed(
+        prefs: android.content.SharedPreferences,
+        console: String,
+        customPath: String  // Ex: "flat/psx.cfg"
+    ) {
+        // Ajouter à la liste des customs browsés
+        val existingCustoms = getCustomBrowsedList(prefs, console).toMutableSet()
+        existingCustoms.add(customPath)
+        
+        prefs.edit()
+            .putStringSet("overlay_${console}_custom_browsed", existingCustoms)
+            .commit()
+    }
+    
+    /**
+     * Obtenir la liste des overlays customs browsés via file picker
+     */
+    fun getCustomBrowsedList(
+        prefs: android.content.SharedPreferences,
+        console: String
+    ): Set<String> {
+        return prefs.getStringSet("overlay_${console}_custom_browsed", emptySet()) ?: emptySet()
+    }
+    
+    /**
+     * Supprimer un custom de la liste
+     */
+    fun removeCustomBrowsed(
+        prefs: android.content.SharedPreferences,
+        console: String,
+        customPath: String
+    ) {
+        val existingCustoms = getCustomBrowsedList(prefs, console).toMutableSet()
+        existingCustoms.remove(customPath)
+        
+        prefs.edit()
+            .putStringSet("overlay_${console}_custom_browsed", existingCustoms)
             .commit()
     }
 }

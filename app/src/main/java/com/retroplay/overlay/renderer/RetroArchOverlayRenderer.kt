@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
@@ -55,9 +56,41 @@ fun RetroArchOverlayScreen(
     onMenuToggle: () -> Unit = {},
     onAnalogMove: (String, Float, Float) -> Unit = { _, _, _ -> },  // Callback pour analog sticks (action, x, y)
     showDebug: Boolean = false,
+    swapAnalogSticks: Boolean = false,
+    invertAnalogY: Boolean = false,
+    overlayScale: Float = 1.0f,            // Échelle globale (0.5-1.5)
+    overlayXOffset: Float = 0.0f,          // Décalage X (-0.2 à 0.2)
+    overlayYOffset: Float = 0.0f,          // Décalage Y (-0.2 à 0.2)
+    overlayXSeparation: Float = 0.0f,      // Séparation interne X (-0.2 à 0.2)
+    overlayYSeparation: Float = 0.0f,      // Séparation interne Y (-0.2 à 0.2)
+    overlayOpacity: Float = 1.0f,          // Opacité globale (0.0-1.0)
+    dpadDiagonalSensitivity: Int = 50,     // Sensibilité diagonales D-pad (0-100)
+    abxyDiagonalSensitivity: Int = 50,     // Sensibilité diagonales ABXY (0-100)
+    showInputsMode: com.retroplay.overlay.models.ShowInputsMode = com.retroplay.overlay.models.ShowInputsMode.NONE,
+    hideWhenGamepadConnected: Boolean = false,
+    analogRecenterZone: Int = 0,           // Recentrage analog sticks (0-100)
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"
+    
+    // Détecter si un gamepad physique est connecté
+    val isGamepadConnected = remember {
+        android.view.InputDevice.getDeviceIds().any { deviceId ->
+            val device = android.view.InputDevice.getDevice(deviceId)
+            device != null && (device.sources and android.view.InputDevice.SOURCE_GAMEPAD) == android.view.InputDevice.SOURCE_GAMEPAD
+        }
+    }
+    
+    // Si hideWhenGamepadConnected est activé et qu'un gamepad est connecté, ne rien afficher
+    if (hideWhenGamepadConnected && isGamepadConnected) {
+        Log.i(TAG, "Gamepad connected, hiding overlay (hideWhenGamepadConnected=true)")
+        return
+    }
+    
+    // Appliquer scale/offset/separation à tous les boutons (pré-calcul pour éviter répétition)
+    val scaledLayout = remember(layout, overlayScale, overlayXOffset, overlayYOffset, overlayXSeparation, overlayYSeparation) {
+        applyScaleAndOffset(layout, overlayScale, overlayXOffset, overlayYOffset, overlayXSeparation, overlayYSeparation)
+    }
     
     // Taille de l'écran
     var screenSize by remember { mutableStateOf(IntSize(1920, 1080)) }
@@ -75,10 +108,10 @@ fun RetroArchOverlayScreen(
             .onSizeChanged { size ->
                 screenSize = size
                 Log.d(TAG, "Screen size: ${size.width}x${size.height}")
-                Log.d(TAG, "Layout: ${layout.name} | Buttons: ${layout.buttons.size} | RangeMod: ${layout.rangeModifier} | AlphaMod: ${layout.alphaModifier}")
+                Log.d(TAG, "Layout: ${scaledLayout.name} | Buttons: ${scaledLayout.buttons.size} | RangeMod: ${scaledLayout.rangeModifier} | AlphaMod: ${scaledLayout.alphaModifier} | Scale: $overlayScale | Offset: ($overlayXOffset, $overlayYOffset)")
                 
                 // DEBUG: Afficher TOUS les boutons système dans le layout
-                val systemButtons = layout.buttons.filter { 
+                val systemButtons = scaledLayout.buttons.filter { 
                     it.action.startsWith("overlay_next") || it.action == "menu_toggle"
                 }
                 Log.w(TAG, "🔍 SYSTEM BUTTONS IN LAYOUT: ${systemButtons.size} total")
@@ -89,7 +122,7 @@ fun RetroArchOverlayScreen(
             .pointerInteropFilter { event ->
                 handleTouchEvent(
                     event = event,
-                    layout = layout,
+                    layout = scaledLayout,
                     screenSize = screenSize,
                     pressedButtons = pressedButtons,
                     analogLeftState = analogLeftState,
@@ -98,33 +131,75 @@ fun RetroArchOverlayScreen(
                     onButtonRelease = onButtonRelease,
                     onLayoutSwitch = onLayoutSwitch,
                     onMenuToggle = onMenuToggle,
-                    onAnalogMove = onAnalogMove
+                    onAnalogMove = onAnalogMove,
+                    swapAnalogSticks = swapAnalogSticks,
+                    invertAnalogY = invertAnalogY,
+                    dpadDiagonalSensitivity = dpadDiagonalSensitivity,
+                    abxyDiagonalSensitivity = abxyDiagonalSensitivity
                 )
                 true
             }
     ) {
         // Canvas unique pour afficher TOUS les boutons
         Canvas(modifier = Modifier.fillMaxSize()) {
-            layout.buttons.forEach { button ->
+            scaledLayout.buttons.forEach { button ->
                 // Convertir coordonnées normalisées → pixels
+                // Scale/offset déjà appliqués dans scaledLayout!
                 val xPx = button.x * screenSize.width
                 val yPx = button.y * screenSize.height
-                // Utiliser layout.rangeModifier pour le rendu visuel (tous les boutons)
-                // button.rangeModifier est utilisé UNIQUEMENT pour le calcul des valeurs, pas le rendu
-                val widthPx = button.width * screenSize.width * layout.rangeModifier
-                val heightPx = button.height * screenSize.height * layout.rangeModifier
+                
+                // CRITIQUE: Utiliser button.modW et button.modH pour l'affichage des IMAGES!
+                // RetroArch utilise mod_w = 2.0 * range_x et mod_h = 2.0 * range_y
+                // C'est pour ça que les images du D-pad se chevauchent et forment un D-pad compact!
+                val displayWidthPx = button.modW * screenSize.width * overlayScale
+                val displayHeightPx = button.modH * screenSize.height * overlayScale
+                
+                // Utiliser button.width/height (range_x/y) pour les HITBOXES uniquement
+                // IMPORTANT: Utiliser button.rangeModifier si != 1.0, sinon layout.rangeModifier
+                val effectiveRangeMod = if (button.rangeModifier != 1.0f) button.rangeModifier else scaledLayout.rangeModifier
+                val hitboxWidthPx = button.width * screenSize.width * effectiveRangeMod * overlayScale
+                val hitboxHeightPx = button.height * screenSize.height * effectiveRangeMod * overlayScale
                 
                 // Charger et afficher l'image du bouton
                 button.imagePath?.let { path ->
                     val bitmap = assetManager.loadButtonImage(overlayName, path)
                     if (bitmap != null) {
                         val imageBitmap = bitmap.asImageBitmap()
-                        val alpha = if (pressedButtons.values.any { it.contains(button) }) 1.0f else (0.7f * layout.alphaModifier)
+                        // IMPORTANT: Utiliser button.alphaModifier si défini, sinon layout.alphaModifier
+                        val effectiveAlphaMod = button.alphaModifier ?: scaledLayout.alphaModifier
+                        val baseAlpha = if (pressedButtons.values.any { it.contains(button) }) effectiveAlphaMod else (0.7f * effectiveAlphaMod)
+                        val alpha = baseAlpha * overlayOpacity  // Appliquer opacity globale
                         
-                        // Position top-left depuis le centre
+                        // IMPORTANT: Utiliser modW et modH pour la taille d'affichage!
+                        // RetroArch calcule mod_w = 2.0 * range_x et mod_h = 2.0 * range_y
+                        // C'est pour ça que les images du D-pad se chevauchent pour former un D-pad compact!
+                        
+                        // Position mod_x et mod_y (top-left corner de l'image)
+                        var modXPx = button.modX * screenSize.width
+                        var modYPx = button.modY * screenSize.height
+                        
+                        // MOVABLE: Si le bouton est movable (analog sticks), appliquer delta_x/delta_y
+                        // RetroArch: vertex_geom(..., mod_x + delta_x, mod_y + delta_y, ...)
+                        if (button.movable) {
+                            val analogState = when (button.type) {
+                                OverlayButtonType.ANALOG_LEFT -> analogLeftState.value
+                                OverlayButtonType.ANALOG_RIGHT -> analogRightState.value
+                                else -> null
+                            }
+                            
+                            if (analogState != null && analogState.isActivated) {
+                                // delta = (analog_value / 32768) * (range / 2.0)
+                                // Ici analogState.x/y sont déjà normalisés (-1.0 à 1.0)
+                                val deltaX = analogState.x * (button.width * screenSize.width / 2.0f)
+                                val deltaY = analogState.y * (button.height * screenSize.height / 2.0f)
+                                modXPx += deltaX
+                                modYPx += deltaY
+                            }
+                        }
+                        
                         val topLeft = Offset(
-                            x = xPx - widthPx / 2,
-                            y = yPx - heightPx / 2
+                            x = modXPx,
+                            y = modYPx
                         )
                         
                         drawImage(
@@ -134,16 +209,21 @@ fun RetroArchOverlayScreen(
                                 y = topLeft.y.toInt()
                             ),
                             dstSize = androidx.compose.ui.unit.IntSize(
-                                width = widthPx.toInt(),
-                                height = heightPx.toInt()
+                                width = displayWidthPx.toInt(),
+                                height = displayHeightPx.toInt()
                             ),
                             alpha = alpha
                         )
                     }
                 }
                 
-                // MODE DEBUG: Afficher les hitboxes
+                // MODE DEBUG: Afficher les hitboxes (utiliser hitboxWidthPx/hitboxHeightPx, PAS displayWidthPx!)
                 if (showDebug) {
+                    // CRITIQUE: Utiliser xHitbox/yHitbox pour la POSITION (pas x/y!)
+                    // Les hitboxes peuvent être décalées si reach asymétrique
+                    val hitboxX = button.xHitbox * screenSize.width
+                    val hitboxY = button.yHitbox * screenSize.height
+                    
                     val debugColor = when (button.type) {
                         OverlayButtonType.ANALOG_LEFT, OverlayButtonType.ANALOG_RIGHT -> Color.Green
                         else -> Color.Red
@@ -153,16 +233,16 @@ fun RetroArchOverlayScreen(
                         ButtonShape.RADIAL -> {
                             drawCircle(
                                 color = debugColor,
-                                radius = (widthPx / 2).coerceAtLeast(heightPx / 2),
-                                center = Offset(xPx, yPx),
+                                radius = (hitboxWidthPx / 2).coerceAtLeast(hitboxHeightPx / 2),
+                                center = Offset(hitboxX, hitboxY),
                                 alpha = 0.5f
                             )
                         }
                         ButtonShape.RECT -> {
                             drawRect(
                                 color = Color.Blue,
-                                topLeft = Offset(xPx - widthPx / 2, yPx - heightPx / 2),
-                                size = Size(widthPx, heightPx),
+                                topLeft = Offset(hitboxX - hitboxWidthPx / 2, hitboxY - hitboxHeightPx / 2),
+                                size = Size(hitboxWidthPx, hitboxHeightPx),
                                 alpha = 0.5f
                             )
                         }
@@ -173,11 +253,11 @@ fun RetroArchOverlayScreen(
             // MODE DEBUG: Afficher la position actuelle des analog sticks
             if (showDebug) {
                 // Stick gauche
-                val leftStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
+                val leftStick = scaledLayout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
                 if (leftStick != null && (analogLeftState.value.x != 0f || analogLeftState.value.y != 0f)) {
                     val centerX = leftStick.x * screenSize.width
                     val centerY = leftStick.y * screenSize.height
-                    val radius = leftStick.width * screenSize.width * layout.rangeModifier
+                    val radius = leftStick.width * screenSize.width * scaledLayout.rangeModifier * overlayScale
                     val currentX = centerX + analogLeftState.value.x * radius
                     val currentY = centerY + analogLeftState.value.y * radius
                     
@@ -190,11 +270,11 @@ fun RetroArchOverlayScreen(
                 }
                 
                 // Stick droit
-                val rightStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
+                val rightStick = scaledLayout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
                 if (rightStick != null && (analogRightState.value.x != 0f || analogRightState.value.y != 0f)) {
                     val centerX = rightStick.x * screenSize.width
                     val centerY = rightStick.y * screenSize.height
-                    val radius = rightStick.width * screenSize.width * layout.rangeModifier
+                    val radius = rightStick.width * screenSize.width * scaledLayout.rangeModifier * overlayScale
                     val currentX = centerX + analogRightState.value.x * radius
                     val currentY = centerY + analogRightState.value.y * radius
                     
@@ -204,6 +284,52 @@ fun RetroArchOverlayScreen(
                         center = Offset(currentX, currentY),
                         alpha = 0.8f
                     )
+                }
+            }
+            
+            // MODE SHOW INPUTS: Afficher visuel des boutons pressés (TOUCHED mode)
+            if (showInputsMode == com.retroplay.overlay.models.ShowInputsMode.TOUCHED || 
+                showInputsMode == com.retroplay.overlay.models.ShowInputsMode.BOTH) {
+                
+                // Parcourir tous les boutons pressés
+                pressedButtons.values.flatten().toSet().forEach { pressedButton ->
+                    // Skip system buttons (overlay, layout_next, etc.)
+                    if (!com.retroplay.overlay.models.RetroArchButtonMapping.isOverlayControlAction(pressedButton.action)) {
+                        val xPx = pressedButton.x * screenSize.width
+                        val yPx = pressedButton.y * screenSize.height
+                        val wPx = pressedButton.width * screenSize.width * scaledLayout.rangeModifier
+                        val hPx = pressedButton.height * screenSize.height * scaledLayout.rangeModifier
+                        
+                        // Dessiner un overlay vert semi-transparent sur le bouton pressé
+                        when (pressedButton.shape) {
+                            ButtonShape.RECT -> {
+                                drawRect(
+                                    color = Color(0x4400FF00),  // Vert transparent
+                                    topLeft = Offset(xPx - wPx / 2, yPx - hPx / 2),
+                                    size = Size(wPx, hPx)
+                                )
+                                drawRect(
+                                    color = Color(0xFF00FF00),  // Bordure verte
+                                    topLeft = Offset(xPx - wPx / 2, yPx - hPx / 2),
+                                    size = Size(wPx, hPx),
+                                    style = Stroke(width = 4f)
+                                )
+                            }
+                            else -> {  // "radial" ou défaut
+                                drawCircle(
+                                    color = Color(0x4400FF00),  // Vert transparent
+                                    radius = wPx,
+                                    center = Offset(xPx, yPx)
+                                )
+                                drawCircle(
+                                    color = Color(0xFF00FF00),  // Bordure verte
+                                    radius = wPx,
+                                    center = Offset(xPx, yPx),
+                                    style = Stroke(width = 4f)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -224,7 +350,11 @@ private fun handleTouchEvent(
     onButtonRelease: (String) -> Unit,
     onLayoutSwitch: (String) -> Unit,
     onMenuToggle: () -> Unit,
-    onAnalogMove: (String, Float, Float) -> Unit
+    onAnalogMove: (String, Float, Float) -> Unit,
+    swapAnalogSticks: Boolean = false,
+    invertAnalogY: Boolean = false,
+    dpadDiagonalSensitivity: Int = 50,
+    abxyDiagonalSensitivity: Int = 50
 ): Boolean {
     val TAG = "TouchHandler"
     val ANALOG_DEADZONE = 0.15f  // 15% dead zone (zone morte)
@@ -260,19 +390,22 @@ private fun handleTouchEvent(
             
             if (analogStick != null) {
                 // C'est un analog stick
-                val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier)
+                val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                 if (values != null) {
                     // Enregistrer le pointerId et activer le stick pour permettre hitbox étendue
+                    // Appliquer swap si demandé : LEFT devient RIGHT et RIGHT devient LEFT
                     when (analogStick.type) {
                         OverlayButtonType.ANALOG_LEFT -> {
                             analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
-                            onAnalogMove("analog_left", values.first, values.second)
-                            Log.d(TAG, "Analog LEFT: x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
+                            val actionName = if (swapAnalogSticks) "analog_right" else "analog_left"
+                            onAnalogMove(actionName, values.first, values.second)
+                            Log.d(TAG, "Analog LEFT (sent as $actionName): x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
                         }
                         OverlayButtonType.ANALOG_RIGHT -> {
                             analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
-                            onAnalogMove("analog_right", values.first, values.second)
-                            Log.d(TAG, "Analog RIGHT: x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
+                            val actionName = if (swapAnalogSticks) "analog_left" else "analog_right"
+                            onAnalogMove(actionName, values.first, values.second)
+                            Log.d(TAG, "Analog RIGHT (sent as $actionName): x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
                         }
                         else -> {}
                     }
@@ -283,7 +416,7 @@ private fun handleTouchEvent(
             
             // Si ce n'est pas un analog stick, traiter comme bouton normal
             val touchedButtons = detectButtonsAtPosition(
-                x, y, layout, screenSize
+                x, y, layout, screenSize, dpadDiagonalSensitivity, abxyDiagonalSensitivity
             )
             
             // DEBUG: Log si plusieurs boutons détectés (chevauchement potentiel)
@@ -328,10 +461,11 @@ private fun handleTouchEvent(
                     // Ce doigt contrôle le stick gauche
                     val leftStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
                     if (leftStick != null) {
-                        val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier)
+                        val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                         if (values != null) {
                             analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
-                            onAnalogMove("analog_left", values.first, values.second)
+                            val actionName = if (swapAnalogSticks) "analog_right" else "analog_left"
+                            onAnalogMove(actionName, values.first, values.second)
                         }
                         handledByAnalog = true
                     }
@@ -341,10 +475,11 @@ private fun handleTouchEvent(
                     // Ce doigt contrôle le stick droit
                     val rightStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
                     if (rightStick != null) {
-                        val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier)
+                        val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
                         if (values != null) {
                             analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true)
-                            onAnalogMove("analog_right", values.first, values.second)
+                            val actionName = if (swapAnalogSticks) "analog_left" else "analog_right"
+                            onAnalogMove(actionName, values.first, values.second)
                         }
                         handledByAnalog = true
                     }
@@ -352,7 +487,7 @@ private fun handleTouchEvent(
                 
                 // Si pas géré par analog, traiter comme bouton normal
                 if (!handledByAnalog) {
-                    val currentButtons = detectButtonsAtPosition(x, y, layout, screenSize)
+                    val currentButtons = detectButtonsAtPosition(x, y, layout, screenSize, dpadDiagonalSensitivity, abxyDiagonalSensitivity)
                     val previousButtons = pressedButtons[pointerId] ?: emptySet()
                     
                     // Boutons nouvellement pressés
@@ -439,6 +574,7 @@ private fun handleTouchEvent(
 /**
  * Calculer les valeurs analogiques depuis une position de toucher
  * Implémentation basée sur RetroArch input_overlay_get_analog_state()
+ * @param invertY Si true, inverse l'axe Y (haut devient bas)
  * @return Pair(x, y) normalisées entre -1.0 et 1.0, ou null si hors dead zone
  */
 private fun calculateAnalogValues(
@@ -447,7 +583,8 @@ private fun calculateAnalogValues(
     button: OverlayButton,
     screenSize: IntSize,
     deadzone: Float,
-    layoutRangeMod: Float = 1.5f
+    layoutRangeMod: Float = 1.5f,
+    invertY: Boolean = false
 ): Pair<Float, Float>? {
     // Centre du stick en pixels (x_shift, y_shift dans RetroArch)
     val centerX = button.x * screenSize.width
@@ -466,15 +603,20 @@ private fun calculateAnalogValues(
     val xVal = xDist / rangeX
     val yVal = yDist / rangeY
     
-    // Saturation (analog_saturate_pct = 1.0 par défaut dans RetroArch)
-    // Nous pourrions parser ce paramètre depuis les .cfg si nécessaire
-    val saturate_pct = 1.0f
-    val xValSat = xVal / saturate_pct
-    val yValSat = yVal / saturate_pct
+    // Saturation (analog_saturate_pct dans RetroArch)
+    // Ex: saturate_pct = 0.75 signifie que les 75% internes contiennent toute la plage analog
+    // Au-delà de 75%, c'est complètement saturé (valeur max)
+    val xValSat = xVal / button.analogSaturatePct
+    val yValSat = yVal / button.analogSaturatePct
     
     // Clamp entre -1.0 et 1.0 (comme RetroArch)
-    val finalX = xValSat.coerceIn(-1.0f, 1.0f)
-    val finalY = yValSat.coerceIn(-1.0f, 1.0f)
+    var finalX = xValSat.coerceIn(-1.0f, 1.0f)
+    var finalY = yValSat.coerceIn(-1.0f, 1.0f)
+    
+    // Appliquer inversion Y si demandé
+    if (invertY) {
+        finalY = -finalY
+    }
     
     // Vérifier dead zone simple (magnitude euclidienne)
     val magnitude = sqrt(finalX * finalX + finalY * finalY)
@@ -493,7 +635,9 @@ private fun detectButtonsAtPosition(
     x: Float,
     y: Float,
     layout: OverlayLayout,
-    screenSize: IntSize
+    screenSize: IntSize,
+    dpadDiagonalSensitivity: Int = 50,
+    abxyDiagonalSensitivity: Int = 50
 ): Set<OverlayButton> {
     val touched = mutableSetOf<OverlayButton>()
     
@@ -503,8 +647,44 @@ private fun detectButtonsAtPosition(
             return@forEach
         }
         
-        // Skip zones tactiles et boutons décoratifs (dpad_area, abxy_area, "nul")
+        // Traiter les zones 8-way (dpad_area, abxy_area)
         if (button.type == OverlayButtonType.DPAD_AREA || button.type == OverlayButtonType.ABXY_AREA) {
+            // Vérifier si le touch est dans la zone
+            if (isTouchInsideButton(x, y, button, layout.rangeModifier, screenSize)) {
+                // Calculer l'offset depuis le centre
+                val centerX = button.x * screenSize.width
+                val centerY = button.y * screenSize.height
+                val xDist = (x - centerX) / (button.width * screenSize.width)  // Normalisé
+                val yDist = (y - centerY) / (button.height * screenSize.height)  // Normalisé
+                
+                // Obtenir les directions 8-way avec la bonne sensitivity
+                val sensitivity = if (button.type == OverlayButtonType.DPAD_AREA) {
+                    dpadDiagonalSensitivity
+                } else {
+                    abxyDiagonalSensitivity
+                }
+                val directions = get8WayDirections(xDist, yDist, sensitivity)
+                
+                // Mapper les directions vers les actions custom ou par défaut
+                // Defaults RetroArch (task_overlay.c lignes 138-156):
+                // DPAD_AREA: up=UP, down=DOWN, left=LEFT, right=RIGHT
+                // ABXY_AREA: up=X, down=B, left=Y, right=A
+                directions.forEach { dir ->
+                    val mappedAction = when (dir) {
+                        "up" -> button.eightwayUp ?: if (button.type == OverlayButtonType.ABXY_AREA) "x" else "up"
+                        "down" -> button.eightwayDown ?: if (button.type == OverlayButtonType.ABXY_AREA) "b" else "down"
+                        "left" -> button.eightwayLeft ?: if (button.type == OverlayButtonType.ABXY_AREA) "y" else "left"
+                        "right" -> button.eightwayRight ?: if (button.type == OverlayButtonType.ABXY_AREA) "a" else "right"
+                        else -> null
+                    }
+                    
+                    // Créer un bouton virtuel pour cette direction
+                    if (mappedAction != null) {
+                        val virtualButton = button.copy(action = mappedAction)
+                        touched.add(virtualButton)
+                    }
+                }
+            }
             return@forEach
         }
         
@@ -513,15 +693,16 @@ private fun detectButtonsAtPosition(
             return@forEach
         }
         
-        // Utiliser layout.rangeModifier pour les boutons normaux
+        // Utiliser rangeXHitbox/rangeYHitbox (avec reach_*) ET layout.rangeModifier pour les boutons normaux
+        // Identique à RetroArch: range_x_mod = range_x_hitbox * range_mod
         if (isTouchInsideButton(x, y, button, layout.rangeModifier, screenSize)) {
             touched.add(button)
             
             // DEBUG: Log détaillé de la détection
             val buttonX = button.x * screenSize.width
             val buttonY = button.y * screenSize.height
-            val buttonWidth = button.width * screenSize.width * layout.rangeModifier
-            val buttonHeight = button.height * screenSize.height * layout.rangeModifier
+            val buttonWidth = button.rangeXHitbox * screenSize.width * layout.rangeModifier
+            val buttonHeight = button.rangeYHitbox * screenSize.height * layout.rangeModifier
             Log.d("TouchHandler", "HIT: ${button.action} | Touch: ($x,$y) | Center: ($buttonX,$buttonY) | Size: ${buttonWidth.toInt()}x${buttonHeight.toInt()} | Shape: ${button.shape}")
         }
     }
@@ -539,11 +720,16 @@ private fun isTouchInsideButton(
     rangeModifier: Float,
     screenSize: IntSize
 ): Boolean {
-    // Convertir coordonnées normalisées → pixels
-    val buttonX = button.x * screenSize.width
-    val buttonY = button.y * screenSize.height
-    val buttonWidth = button.width * screenSize.width * rangeModifier
-    val buttonHeight = button.height * screenSize.height * rangeModifier
+    // CRITIQUE: Utiliser x_hitbox et y_hitbox (PAS x et y!) pour la position de la hitbox
+    // La hitbox peut être décalée si reach_left != reach_right ou reach_up != reach_down
+    // Identique à RetroArch input_overlay_desc_init_hitbox() lignes 2641-2655
+    val buttonX = button.xHitbox * screenSize.width
+    val buttonY = button.yHitbox * screenSize.height
+    
+    // Utiliser rangeXHitbox/rangeYHitbox (avec reach_*) pour la TAILLE
+    // Identique à RetroArch: range_x_mod = range_x_hitbox * range_mod
+    val buttonWidth = button.rangeXHitbox * screenSize.width * rangeModifier
+    val buttonHeight = button.rangeYHitbox * screenSize.height * rangeModifier
     
     val isInside = when (button.shape) {
         ButtonShape.RADIAL -> {
@@ -566,7 +752,7 @@ private fun isTouchInsideButton(
     
     // DEBUG: Log détaillé pour les boutons système
     if (isInside && (button.action.startsWith("overlay_next") || button.action == "menu_toggle")) {
-        Log.e("TouchHandler", "🔴 HITBOX: action='${button.action}' | normalized=(${button.x},${button.y}) size=(${button.width},${button.height}) | pixels=($buttonX,$buttonY) size=(${buttonWidth.toInt()}x${buttonHeight.toInt()}) | touch=($touchX,$touchY)")
+        Log.e("TouchHandler", "🔴 HITBOX: action='${button.action}' | normalized=(${button.x},${button.y}) size=(${button.width},${button.height}) | reach=(L:${button.reachLeft} R:${button.reachRight} U:${button.reachUp} D:${button.reachDown}) | hitbox=(${button.rangeXHitbox},${button.rangeYHitbox}) | pixels=($buttonX,$buttonY) size=(${buttonWidth.toInt()}x${buttonHeight.toInt()}) | touch=($touchX,$touchY)")
     }
     
     return isInside
@@ -703,6 +889,139 @@ fun RetroArchOverlayDebug(
             
             // Label du bouton (debug)
             // Note: drawText nécessite TextMeasurer (Material3)
+        }
+    }
+}
+
+/**
+ * Appliquer scale, offset et separation à tous les boutons du layout
+ * Identique à RetroArch input_driver.c ligne 2674-2715
+ */
+private fun applyScaleAndOffset(
+    layout: OverlayLayout,
+    scale: Float,
+    xOffset: Float,
+    yOffset: Float,
+    xSeparation: Float,
+    ySeparation: Float
+): OverlayLayout {
+    if (scale == 1.0f && xOffset == 0.0f && yOffset == 0.0f && xSeparation == 0.0f && ySeparation == 0.0f) {
+        return layout  // Pas de transformation nécessaire
+    }
+    
+    val transformedButtons = layout.buttons.map { button ->
+        // 1. Appliquer SEPARATION interne (RetroArch ligne 2692-2705)
+        var xShiftOffset = 0.0f
+        var yShiftOffset = 0.0f
+        
+        // Si bouton à gauche du centre (x < 0.5), décaler vers la gauche
+        if (button.x < 0.5f - 0.0001f) {
+            xShiftOffset = xSeparation * -1.0f
+        }
+        // Si bouton à droite du centre (x > 0.5), décaler vers la droite
+        else if (button.x > 0.5f + 0.0001f) {
+            xShiftOffset = xSeparation
+        }
+        
+        // Pareil pour Y
+        if (button.y < 0.5f - 0.0001f) {
+            yShiftOffset = ySeparation * -1.0f
+        }
+        else if (button.y > 0.5f + 0.0001f) {
+            yShiftOffset = ySeparation
+        }
+        
+        val xWithSeparation = button.x + xShiftOffset
+        val yWithSeparation = button.y + yShiftOffset
+        
+        // 2. Appliquer SCALE (centré autour de 0.5) puis OFFSET global
+        val newX = 0.5f + (xWithSeparation - 0.5f) * scale + xOffset
+        val newY = 0.5f + (yWithSeparation - 0.5f) * scale + yOffset
+        
+        // Recalculer modX/modY ET xHitbox/yHitbox avec les nouvelles positions
+        // CRITIQUE: x_hitbox dépend de x_shift (pas x), donc recalculer!
+        val newXHitbox = ((newX + button.width * button.reachRight) + (newX - button.width * button.reachLeft)) / 2.0f
+        val newYHitbox = ((newY + button.height * button.reachDown) + (newY - button.height * button.reachUp)) / 2.0f
+        
+        button.copy(
+            x = newX,
+            y = newY,
+            modX = newX - button.width,
+            modY = newY - button.height,
+            xHitboxOverride = newXHitbox,
+            yHitboxOverride = newYHitbox
+        )
+    }
+    
+    return layout.copy(buttons = transformedButtons)
+}
+
+/**
+ * Calculer la direction 8-way basée sur l'offset (x_dist, y_dist) depuis le centre
+ * Identique à RetroArch input_overlay_get_eightway_state()
+ * 
+ * @param xDist Offset X depuis le centre (normalisé par range_x)
+ * @param yDist Offset Y depuis le centre (normalisé par range_y)
+ * @param diagonalSensitivity Sensibilité des diagonales (0-100, défaut 50)
+ * @return Liste des actions à déclencher (ex: ["left", "up"] pour diagonal up-left)
+ */
+private fun get8WayDirections(
+    xDist: Float,
+    yDist: Float,
+    diagonalSensitivity: Int = 50
+): List<String> {
+    // Calculer les slopes (pentes) pour définir les zones diagonales
+    val f = 2.0f * diagonalSensitivity / (100.0f + diagonalSensitivity)
+    val highAngle = f * (0.375 * Math.PI) + (1.0f - f) * (0.25 * Math.PI)  // 67.5 deg max
+    val lowAngle = f * (0.125 * Math.PI) + (1.0f - f) * (0.25 * Math.PI)   // 22.5 deg min
+    val slopeHigh = kotlin.math.tan(highAngle).toFloat()
+    val slopeLow = kotlin.math.tan(lowAngle).toFloat()
+    
+    // Éviter division par zéro
+    val xDistAdjusted = if (xDist == 0.0f) 0.0001f else xDist
+    val absSlope = kotlin.math.abs(yDist / xDistAdjusted)
+    
+    // Déterminer le quadrant et la direction
+    return when {
+        xDist > 0.0f -> {
+            when {
+                yDist < 0.0f -> {
+                    // Q1 (haut-droite)
+                    when {
+                        absSlope > slopeHigh -> listOf("up")
+                        absSlope < slopeLow -> listOf("right")
+                        else -> listOf("up", "right")  // diagonal up-right
+                    }
+                }
+                else -> {
+                    // Q4 (bas-droite)
+                    when {
+                        absSlope > slopeHigh -> listOf("down")
+                        absSlope < slopeLow -> listOf("right")
+                        else -> listOf("down", "right")  // diagonal down-right
+                    }
+                }
+            }
+        }
+        else -> {
+            when {
+                yDist < 0.0f -> {
+                    // Q2 (haut-gauche)
+                    when {
+                        absSlope > slopeHigh -> listOf("up")
+                        absSlope < slopeLow -> listOf("left")
+                        else -> listOf("up", "left")  // diagonal up-left
+                    }
+                }
+                else -> {
+                    // Q3 (bas-gauche)
+                    when {
+                        absSlope > slopeHigh -> listOf("down")
+                        absSlope < slopeLow -> listOf("left")
+                        else -> listOf("down", "left")  // diagonal down-left
+                    }
+                }
+            }
         }
     }
 }

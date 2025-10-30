@@ -113,6 +113,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     // États des menus
     private val showMainMenu = mutableStateOf(false)
     private val showGamePadSettings = mutableStateOf(false)
+    private val showAdvancedOverlaySettings = mutableStateOf(false)
     private val showQuickMenu = mutableStateOf(false)
     private val overlaysVisible = mutableStateOf(true)
     private val showCoreErrorDialog = mutableStateOf(false)
@@ -162,26 +163,66 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
      * Gestion des touches Zapper - Émule le bouton A au port 2 (Zapper port)
      * Port 1 (index 0) = Manette standard (Start/Select pour menus)
      * Port 2 (index 1) = Zapper (Button A pour tirer)
+     * 
+     * Filtre les touches pour ne capturer QUE la zone centrale (35%-65% de largeur)
      */
-    private fun handleZapperTouch(event: android.view.MotionEvent): Boolean {
+    private fun handleZapperTouch(event: android.view.MotionEvent, triggerOnTouch: Boolean = false, allowOffscreen: Boolean = true): Boolean {
         if (!isZapperGame) {
             return false
         }
         
+        // Vérifier que la touche est dans la zone centrale (35% à 65% de largeur)
+        val screenWidth = resources.displayMetrics.widthPixels.toFloat()
+        val touchX = event.x
+        val relativeX = touchX / screenWidth
+        
+        // Zone libre pour Duck Hunt : 35% à 65% (30% de largeur au centre)
+        val isInZapperZone = relativeX >= 0.35f && relativeX <= 0.65f
+        
+        if (!isInZapperZone) {
+            Log.d(TAG, "[ZAPPER] Touch OUTSIDE zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - ignored")
+            return false  // Laisser passer au gamepad
+        }
+        
+        // Si allowOffscreen=false, vérifier aussi que le touch est dans la zone de jeu (retroView bounds)
+        // Note: Pour l'instant, on considère que la zone centrale EST la zone de jeu
+        // Une implémentation plus précise nécessiterait les bounds exacts du GLRetroView
+        if (!allowOffscreen) {
+            // TODO: Implémenter bounds check exact du GLRetroView
+            // Pour l'instant, le filtre zone centrale suffit
+            Log.d(TAG, "[ZAPPER] allowOffscreen=false, using zone centrale as game bounds")
+        }
+        
         when (event.actionMasked) {
             android.view.MotionEvent.ACTION_DOWN -> {
-                Log.d(TAG, "[ZAPPER] Touch DOWN - Button A pressed (port 2)")
+                Log.d(TAG, "[ZAPPER] Touch DOWN in zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - Button A pressed (port 2)")
                 // Envoyer au port 1 (Player 2 / Zapper port)
                 retroView.sendKeyEvent(
                     android.view.KeyEvent.ACTION_DOWN,
                     android.view.KeyEvent.KEYCODE_BUTTON_A,
                     1  // Port 2 (index 1)
                 )
+                
+                // Si triggerOnTouch, envoyer immédiatement le release aussi (tir instantané)
+                if (triggerOnTouch) {
+                    retroView.sendKeyEvent(
+                        android.view.KeyEvent.ACTION_UP,
+                        android.view.KeyEvent.KEYCODE_BUTTON_A,
+                        1  // Port 2 (index 1)
+                    )
+                    Log.d(TAG, "[ZAPPER] Trigger on touch: immediate release sent")
+                }
                 return true
             }
             
             android.view.MotionEvent.ACTION_UP -> {
-                Log.d(TAG, "[ZAPPER] Touch UP - Button A released (port 2)")
+                // Si triggerOnTouch, le release a déjà été envoyé, donc skip
+                if (triggerOnTouch) {
+                    Log.d(TAG, "[ZAPPER] Touch UP ignored (triggerOnTouch=true)")
+                    return true
+                }
+                
+                Log.d(TAG, "[ZAPPER] Touch UP in zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - Button A released (port 2)")
                 // Envoyer au port 1 (Player 2 / Zapper port)
                 retroView.sendKeyEvent(
                     android.view.KeyEvent.ACTION_UP,
@@ -272,6 +313,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
         console = intent.getStringExtra("console") ?: "psx"
         gameName = intent.getStringExtra("gameName") ?: "Game"
+        val gameId = intent.getStringExtra("gameId") ?: gameName  // Use gameName as fallback
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
         
         // Détecter les jeux Zapper AVANT la création de GLRetroViewData
@@ -294,7 +336,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         // Charger les settings depuis SharedPreferences
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
         val savedSettings = loadSettings(prefs, console)
-        val savedVariant = GamePadLayoutManager.loadVariant(prefs, console)
+        
+        // ALWAYS use NATIVE (Radial/Lemuroid) in this activity
+        val savedVariant = GamePadLayoutManager.LayoutVariant.DEFAULT
+        Log.i(TAG, "Emulator mode forced: NATIVE (Radial) in NativeComposeEmulatorActivity")
         
         // Créer GLRetroView avec GLRetroViewData
         val data = com.swordfish.libretrodroid.GLRetroViewData(this).apply {
@@ -701,6 +746,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 prefs = prefs,
                 showMainMenu = showMainMenu,
                 showGamePadSettings = showGamePadSettings,
+                showAdvancedOverlaySettings = showAdvancedOverlaySettings,
                 showQuickMenu = showQuickMenu,
                 overlaysVisible = overlaysVisible,
                 initialSettings = savedSettings,
@@ -721,7 +767,9 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 },
                 isZapperGame = isZapperGame,
                 onZapperTouch = { event ->
-                    handleZapperTouch(event)
+                    // Charger advancedSettings pour lightgun options
+                    val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+                    handleZapperTouch(event, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)
                 },
                 onLoadState = { slot ->
                     loadGameState(slot)
@@ -979,50 +1027,50 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
         // Si pas d'override, utiliser la logique par défaut basée sur la console
         if (coreFileName == null) {
-            // Pour les sous-consoles (ex: fbneo/sega), utiliser le parent (fbneo)
-            val consoleKey = if (console.contains("/")) {
-                console.substringBefore("/").lowercase()
-            } else {
-                console.lowercase()
-            }
-            
+        // Pour les sous-consoles (ex: fbneo/sega), utiliser le parent (fbneo)
+        val consoleKey = if (console.contains("/")) {
+            console.substringBefore("/").lowercase()
+        } else {
+            console.lowercase()
+        }
+        
             coreFileName = when (consoleKey) {
-                // Nintendo
-                "nes" -> "fceumm_libretro_android.so"
-                "snes" -> "snes9x_libretro_android.so"
-                "n64" -> "parallel_n64_libretro_android.so"
-                "gb", "gbc" -> "gambatte_libretro_android.so"
-                "gba" -> "libmgba_libretro_android.so"
-                
-                // Sony
-                "psx", "ps1", "playstation" -> "pcsx_rearmed_libretro_android.so"
-                "psp" -> "ppsspp_libretro_android.so"
-                
-                // Sega
-                "genesis", "megadrive", "md" -> "genesis_plus_gx_libretro_android.so"
-                "scd", "segacd" -> "genesis_plus_gx_libretro_android.so"
-                "mastersystem", "sms", "segasms" -> "genesis_plus_gx_libretro_android.so"
-                "gamegear", "gg", "segagg" -> "genesis_plus_gx_libretro_android.so"
-                "32x", "sega32x" -> "picodrive_libretro_android.so"
-                
-                // Atari
-                "atari2600", "atari", "a2600" -> "stella2014_libretro_android.so"
-                "atari5200", "a5200" -> "a5200_libretro_android.so"
-                "atari7800", "a7800" -> "prosystem_libretro_android.so"
+            // Nintendo
+            "nes" -> "fceumm_libretro_android.so"
+            "snes" -> "snes9x_libretro_android.so"
+            "n64" -> "parallel_n64_libretro_android.so"
+            "gb", "gbc" -> "gambatte_libretro_android.so"
+            "gba" -> "libmgba_libretro_android.so"
+            
+            // Sony
+            "psx", "ps1", "playstation" -> "pcsx_rearmed_libretro_android.so"
+            "psp" -> "ppsspp_libretro_android.so"
+            
+            // Sega
+            "genesis", "megadrive", "md" -> "genesis_plus_gx_libretro_android.so"
+            "scd", "segacd" -> "genesis_plus_gx_libretro_android.so"
+            "mastersystem", "sms", "segasms" -> "genesis_plus_gx_libretro_android.so"
+            "gamegear", "gg", "segagg" -> "genesis_plus_gx_libretro_android.so"
+            "32x", "sega32x" -> "picodrive_libretro_android.so"
+            
+            // Atari
+            "atari2600", "atari", "a2600" -> "stella2014_libretro_android.so"
+            "atari5200", "a5200" -> "a5200_libretro_android.so"
+            "atari7800", "a7800" -> "prosystem_libretro_android.so"
                 "lynx", "atarilynx" -> "mednafen_lynx_libretro_android.so"
-                
-                // Other
-                "ngp", "ngc", "neogeopocket" -> "mednafen_ngp_libretro_android.so"
-                "ws", "wsc", "wonderswan" -> "mednafen_wswan_libretro_android.so"
-                "pce", "turbografx", "pcengine" -> "mednafen_pce_libretro_android.so"
-                "arcade" -> "mame2003_plus_libretro_android.so"
-                "mame" -> "mame2010_libretro_android.so"
-                "fbneo", "neogeo", "cps1", "cps2" -> "fbneo_libretro_android.so"
-                
-                else -> {
+            
+            // Other
+            "ngp", "ngc", "neogeopocket" -> "mednafen_ngp_libretro_android.so"
+            "ws", "wsc", "wonderswan" -> "mednafen_wswan_libretro_android.so"
+            "pce", "turbografx", "pcengine" -> "mednafen_pce_libretro_android.so"
+            "arcade" -> "mame2003_plus_libretro_android.so"
+            "mame" -> "mame2010_libretro_android.so"
+            "fbneo", "neogeo", "cps1", "cps2" -> "fbneo_libretro_android.so"
+            
+            else -> {
                     Log.w(TAG, "No native core for console: $console, using fceumm fallback")
-                    "fceumm_libretro_android.so"
-                }
+                "fceumm_libretro_android.so"
+            }
             }
         }
         
@@ -1244,7 +1292,7 @@ private fun handlePadKitEvent(
 }
 
 @Composable
-fun ComposeEmulatorScreen(
+private fun ComposeEmulatorScreen(
     retroView: GLRetroView,
     console: String,
     gameName: String,
@@ -1252,6 +1300,7 @@ fun ComposeEmulatorScreen(
     prefs: SharedPreferences,
     showMainMenu: MutableState<Boolean>,
     showGamePadSettings: MutableState<Boolean>,
+    showAdvancedOverlaySettings: MutableState<Boolean>,
     showQuickMenu: MutableState<Boolean>,
     overlaysVisible: MutableState<Boolean>,
     initialSettings: TouchControllerSettingsManager.Settings,
@@ -1277,6 +1326,11 @@ fun ComposeEmulatorScreen(
     // Variante de layout (state mutable)
     var layoutVariant by remember {
         mutableStateOf(initialVariant)
+    }
+    
+    // Charger advanced settings pour lightgun options
+    val advancedSettings = remember(console) {
+        com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
     }
     
     // État pour le switch de layout RetroArch (overrides la préférence)
@@ -1444,8 +1498,8 @@ fun ComposeEmulatorScreen(
                         if (overlayPreference != null) {
                             val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(retroView.context) }
                             // Recharger la config si le nom de l'overlay change
-                            val overlayConfig = remember(overlayPreference.overlayName) {
-                                assetManager.loadOverlayConfig(overlayPreference.overlayName)
+                            val overlayConfig = remember(overlayPreference.overlayName, console) {
+                                assetManager.loadOverlayConfig(overlayPreference.overlayName, console)
                             }
                             
                             // Utiliser currentRetroArchLayout si défini (boutons overlay_next), 
@@ -1501,6 +1555,11 @@ fun ComposeEmulatorScreen(
                                     }
                                 }
                                 
+                                // Charger advanced settings
+                                val advancedSettings = remember(console) {
+                                    com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+                                }
+                                
                                 // key() force le recompose quand layoutName OU orientation change
                                 // Afficher seulement si overlaysVisible est true
                                 if (overlaysVisible.value) {
@@ -1510,6 +1569,19 @@ fun ComposeEmulatorScreen(
                                         overlayName = overlayPreference.overlayName,
                                         assetManager = assetManager,
                                         showDebug = debugModeState.value,
+                                        swapAnalogSticks = overlayPreference.swapAnalogSticks,
+                                        invertAnalogY = overlayPreference.invertAnalogY,
+                                        overlayScale = overlayPreference.scale,
+                                        overlayXOffset = overlayPreference.xOffset,
+                                        overlayYOffset = overlayPreference.yOffset,
+                                        overlayXSeparation = overlayPreference.xSeparation,
+                                        overlayYSeparation = overlayPreference.ySeparation,
+                                        overlayOpacity = advancedSettings.opacity,
+                                        dpadDiagonalSensitivity = advancedSettings.dpadDiagonalSensitivity,
+                                        abxyDiagonalSensitivity = advancedSettings.abxyDiagonalSensitivity,
+                                        showInputsMode = advancedSettings.showInputs,
+                                        hideWhenGamepadConnected = advancedSettings.hideWhenGamepadConnected,
+                                        analogRecenterZone = advancedSettings.analogRecenterZone,
                                         onButtonPress = { action ->
                                             val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)
                                             if (keyCodes.isNotEmpty()) {
@@ -1680,6 +1752,10 @@ fun ComposeEmulatorScreen(
                             showQuickMenu.value = false
                             showMainMenu.value = true
                         },
+                        onAdvancedSettings = {
+                            showQuickMenu.value = false
+                            showAdvancedOverlaySettings.value = true
+                        },
                         onSaveState = { slot ->
                             closeQuickMenuWithCooldown()  // Fermer avec cooldown
                             onSaveState(slot)
@@ -1715,6 +1791,10 @@ fun ComposeEmulatorScreen(
                         onGamePadSettings = {
                             showMainMenu.value = false
                             showGamePadSettings.value = true
+                        },
+                        onAdvancedSettings = {
+                            showMainMenu.value = false
+                            showAdvancedOverlaySettings.value = true
                         },
                         onCheatCodes = {
                             showMainMenu.value = false
@@ -1783,6 +1863,16 @@ fun ComposeEmulatorScreen(
                             layoutVariant = newVariant
                             onVariantChanged(newVariant)
                         },
+                        context = retroView.context,
+                        prefs = prefs
+                    )
+                }
+                
+                // Advanced Overlay Settings Dialog
+                if (showAdvancedOverlaySettings.value) {
+                    AdvancedOverlaySettingsDialog(
+                        console = console,
+                        onDismiss = { showAdvancedOverlaySettings.value = false },
                         context = retroView.context,
                         prefs = prefs
                     )
@@ -1915,21 +2005,43 @@ fun ComposeEmulatorScreen(
                 }
                 
                 // Box Zapper transparent par-dessus l'overlay RetroArch (zone de jeu uniquement)
-                // Permet le touch-to-shoot sans bloquer les boutons du gamepad sur les côtés
+                // DOIT avoir exactement la même taille et le même offset que l'AndroidView
                 if (isZapperGame && !showMainMenu.value && !showGamePadSettings.value && !showQuickMenu.value) {
+                    // Calculer le même offset vertical que l'AndroidView
                     val zapperVerticalOffsetDp = if (isLandscape) {
                         0.dp  // Landscape : pas d'offset
                     } else {
                         (-configuration.screenHeightDp * 0.20f).dp  // Portrait : 20% vers le haut
                     }
                     
+                    // MODE DEBUG: Afficher la zone Zapper en rouge semi-transparent
+                    val showDebugZapperZone = true  // Mettre à false pour masquer
+                    
+                    // Adapter la largeur de la Box selon l'orientation
+                    // Landscape : 30% (contrôles sur les côtés) | Portrait : 100% (contrôles en bas)
+                    val boxWidthFraction = if (isLandscape) {
+                        0.30f  // Landscape : zone centrale seulement
+                    } else {
+                        1.0f   // Portrait : toute la largeur (contrôles sous l'écran)
+                    }
+                    
                     androidx.compose.foundation.layout.Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                            .offset(y = zapperVerticalOffsetDp)
+                            .fillMaxWidth(boxWidthFraction)  // 30% de la largeur au centre
+                            .fillMaxHeight()  // Même hauteur que l'AndroidView
+                            .offset(y = zapperVerticalOffsetDp)  // MÊME offset que l'AndroidView
+                            .align(Alignment.Center)  // Centrer horizontalement
+                            .background(
+                                if (showDebugZapperZone) 
+                                    Color.Red.copy(alpha = 0.3f)  // Rouge semi-transparent pour debug
+                                else 
+                                    Color.Transparent
+                            )
                             .pointerInteropFilter { event ->
-                                onZapperTouch(event)
+                                // Laisser passer les touches vers le gamepad si hors zone centrale
+                                val handled = onZapperTouch(event)
+                                android.util.Log.d("ZapperBox", "Touch at (${event.x}, ${event.y}) handled=$handled")
+                                handled
                             }
                     )
                 }
@@ -2012,7 +2124,7 @@ private fun buildLandscapeConstraints(): ConstraintSet {
 
 // Main Menu Dialog (Save/Load/Settings/Cheats/Cache)
 @Composable
-fun MainMenuDialog(
+private fun MainMenuDialog(
     gameName: String,
     console: String,
     prefs: SharedPreferences,
@@ -2020,6 +2132,7 @@ fun MainMenuDialog(
     onSaveGame: () -> Unit,
     onLoadGame: () -> Unit,
     onGamePadSettings: () -> Unit,
+    onAdvancedSettings: () -> Unit = {},  // Nouveau callback
     onCheatCodes: () -> Unit,
     onChangeCore: () -> Unit,
     onDipSwitches: () -> Unit,
@@ -2108,6 +2221,14 @@ fun MainMenuDialog(
                         }
                     }
                     
+                    // Advanced Overlay Settings
+                    TextButton(
+                        onClick = onAdvancedSettings,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Advanced Overlay Settings", color = Color(0xFFFF9800))
+                    }
+                    
                     // Change Core
                     TextButton(
                         onClick = onChangeCore,
@@ -2166,7 +2287,7 @@ fun MainMenuDialog(
 
 // Slot Selection Dialog (Save/Load avec 5 slots par console)
 @Composable
-fun SlotSelectionDialog(
+private fun SlotSelectionDialog(
     title: String,
     console: String,
     gameName: String,
@@ -2274,7 +2395,7 @@ fun SlotSelectionDialog(
 }
 
 @Composable
-fun GamePadSettingsDialog(
+private fun GamePadSettingsDialog(
     console: String,
     currentSettings: TouchControllerSettingsManager.Settings,
     currentVariant: GamePadLayoutManager.LayoutVariant,
@@ -2308,9 +2429,9 @@ fun GamePadSettingsDialog(
     val availableVariants = GamePadLayoutManager.getAvailableVariants(console)
     
     // Charger layouts disponibles pour l'overlay sélectionné (si RetroArch)
-    val availableLayouts = remember(selectedOverlay) {
+    val availableLayouts = remember(selectedOverlay, console) {
         if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH && selectedOverlay.isNotEmpty()) {
-            val layouts = assetManager.getAvailableLayouts(selectedOverlay)
+            val layouts = assetManager.getAvailableLayouts(selectedOverlay, console)
             android.util.Log.d("GamePadSettings", "Loaded ${layouts.size} layouts for '$selectedOverlay': ${layouts.joinToString()}")
             layouts
         } else {
@@ -2698,10 +2819,11 @@ fun GamePadSettingsDialog(
 
 // Quick Menu Dialog (Menu Rapide - Bouton Back)
 @Composable
-fun QuickMenuDialog(
+private fun QuickMenuDialog(
     onDismiss: () -> Unit,
     onHideOverlay: () -> Unit,
     onSettings: () -> Unit,
+    onAdvancedSettings: () -> Unit = {},  // Nouveau callback
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
     onQuit: () -> Unit,
@@ -2873,7 +2995,7 @@ private fun findFallbackLayout(orientation: String, availableLayouts: Set<String
 }
 
 @Composable
-fun CoreErrorDialog(
+private fun CoreErrorDialog(
     coreName: String,
     gameName: String,
     onChangeCore: () -> Unit,

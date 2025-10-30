@@ -182,8 +182,10 @@ fun RetroArchOverlayScreen(
                         // C'est pour ça que les images du D-pad se chevauchent pour former un D-pad compact!
                         
                         // Position mod_x et mod_y (top-left corner de l'image)
-                        var modXPx = button.modX * screenSize.width
-                        var modYPx = button.modY * screenSize.height
+                        // IMPORTANT: Utiliser viewport (pas screenSize) pour respecter aspect_ratio!
+                        val (modXPx_base, modYPx_base) = normalizedToPixels(button.modX, button.modY, viewport)
+                        var modXPx = modXPx_base
+                        var modYPx = modYPx_base
                         
                         // MOVABLE: Si le bouton est movable (analog sticks), appliquer visualOffset
                         // L'image du stick suit le doigt dans la limite du rayon
@@ -406,12 +408,11 @@ private fun handleTouchEvent(
                 if (values != null) {
                     // Calculer l'offset visuel pour movable buttons
                     val (visualOffsetX, visualOffsetY) = if (analogStick.movable) {
-                        val centerX = analogStick.x * screenSize.width
-                        val centerY = analogStick.y * screenSize.height
+                        val (centerX, centerY) = normalizedToPixels(analogStick.x, analogStick.y, viewport)
                         // Range de BASE en pixels (sans modifiers, juste width/height)
                         // RetroArch limite le delta visuel au range de base, pas au range étendu pour hitbox
-                        val baseRangeX = analogStick.width * screenSize.width
-                        val baseRangeY = analogStick.height * screenSize.height
+                        val baseRangeX = analogStick.width * viewport.width()
+                        val baseRangeY = analogStick.height * viewport.height()
                         val dx = x - centerX
                         val dy = y - centerY
                         // Limiter l'offset visuel au range de base (clamp chaque axe)
@@ -499,10 +500,9 @@ private fun handleTouchEvent(
                         if (values != null) {
                             // Calculer l'offset visuel pour movable buttons
                             val (visualOffsetX, visualOffsetY) = if (leftStick.movable) {
-                                val centerX = leftStick.x * screenSize.width
-                                val centerY = leftStick.y * screenSize.height
-                                val baseRangeX = leftStick.width * screenSize.width
-                                val baseRangeY = leftStick.height * screenSize.height
+                                val (centerX, centerY) = normalizedToPixels(leftStick.x, leftStick.y, viewport)
+                                val baseRangeX = leftStick.width * viewport.width()
+                                val baseRangeY = leftStick.height * viewport.height()
                                 val dx = x - centerX
                                 val dy = y - centerY
                                 // Limiter l'offset visuel au range de base (clamp chaque axe)
@@ -528,10 +528,9 @@ private fun handleTouchEvent(
                         if (values != null) {
                             // Calculer l'offset visuel pour movable buttons
                             val (visualOffsetX, visualOffsetY) = if (rightStick.movable) {
-                                val centerX = rightStick.x * screenSize.width
-                                val centerY = rightStick.y * screenSize.height
-                                val baseRangeX = rightStick.width * screenSize.width
-                                val baseRangeY = rightStick.height * screenSize.height
+                                val (centerX, centerY) = normalizedToPixels(rightStick.x, rightStick.y, viewport)
+                                val baseRangeX = rightStick.width * viewport.width()
+                                val baseRangeY = rightStick.height * viewport.height()
                                 val dx = x - centerX
                                 val dy = y - centerY
                                 // Limiter l'offset visuel au range de base (clamp chaque axe)
@@ -976,24 +975,30 @@ private fun calculateOverlayViewport(
 ): android.graphics.RectF {
     if (aspectRatio == null || aspectRatio <= 0f) {
         // Pas de contrainte: utiliser tout l'écran
+        android.util.Log.i("OverlayViewport", "No aspect_ratio constraint, using fullscreen: ${screenSize.width}x${screenSize.height}")
         return android.graphics.RectF(0f, 0f, screenSize.width.toFloat(), screenSize.height.toFloat())
     }
     
     val screenAspect = screenSize.width.toFloat() / screenSize.height.toFloat()
+    android.util.Log.i("OverlayViewport", "aspect_ratio=$aspectRatio, screen=${screenSize.width}x${screenSize.height}, screenAspect=$screenAspect")
     
     return if (screenAspect > aspectRatio) {
         // Écran plus large que l'overlay aspect → limiter la largeur
         // Ex: overlay 16:9 sur écran ultra-wide
         val viewportWidth = screenSize.height * aspectRatio
         val xOffset = (screenSize.width - viewportWidth) / 2f  // Centrer horizontalement
-        android.graphics.RectF(xOffset, 0f, xOffset + viewportWidth, screenSize.height.toFloat())
+        val rect = android.graphics.RectF(xOffset, 0f, xOffset + viewportWidth, screenSize.height.toFloat())
+        android.util.Log.i("OverlayViewport", "Screen WIDER than aspect → viewport: x=$xOffset, width=$viewportWidth, height=${screenSize.height}")
+        rect
     } else {
         // Écran plus haut que l'overlay aspect → limiter la hauteur
         // Ex: overlay 16:9 landscape (1.77778) sur écran portrait (0.5625)
         // Les contrôles seront compressés verticalement
         val viewportHeight = screenSize.width / aspectRatio
         val yOffset = 0f  // Collé en haut (sous l'écran de jeu)
-        android.graphics.RectF(0f, yOffset, screenSize.width.toFloat(), yOffset + viewportHeight)
+        val rect = android.graphics.RectF(0f, yOffset, screenSize.width.toFloat(), yOffset + viewportHeight)
+        android.util.Log.i("OverlayViewport", "Screen TALLER than aspect → viewport: y=$yOffset, width=${screenSize.width}, height=$viewportHeight")
+        rect
     }
 }
 

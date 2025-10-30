@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -123,6 +124,67 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private var allCoreVariables = mutableStateListOf<CoreVariable>()
     private val dipSwitches = mutableStateListOf<CoreVariable>()
     private val coreOptions = mutableStateListOf<CoreVariable>()
+    
+    // File picker pour custom .cfg (initialisé AVANT onCreate avec lateinit)
+    private lateinit var pickCustomCfgLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
+    
+    /**
+     * Gérer le fichier .cfg sélectionné (LECTURE SEULE - aucune modification)
+     */
+    private fun handleCustomCfgSelection(uri: android.net.Uri) {
+        try {
+            Log.i(TAG, "Overlay .cfg selected: $uri")
+            
+            // Convertir URI vers path réel
+            val path = uri.path ?: run {
+                Toast.makeText(this, "Invalid file path", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            // Extraire overlayName depuis le path (ex: /overlays/gamepads/flat/nes.cfg → "flat")
+            val overlayName = if (path.contains("/overlays/gamepads/")) {
+                val afterGamepads = path.substringAfter("/overlays/gamepads/")
+                afterGamepads.substringBefore("/")
+            } else if (path.contains("/overlays/keyboards/")) {
+                val afterKeyboards = path.substringAfter("/overlays/keyboards/")
+                afterKeyboards.substringBefore("/")
+            } else {
+                Toast.makeText(this, "Please select a .cfg from /RetroPlay-Data/overlays/", Toast.LENGTH_LONG).show()
+                return
+            }
+            
+            if (overlayName.isEmpty()) {
+                Toast.makeText(this, "Invalid overlay path", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            Log.i(TAG, "Extracted overlay name: $overlayName from path: $path")
+            
+            // Extraire le nom du fichier .cfg (ex: "psx.cfg" depuis "flat/psx.cfg")
+            val cfgFileName = path.substringAfterLast("/")
+            val customPath = "$overlayName/$cfgFileName"  // Ex: "flat/psx.cfg"
+            
+            // Sauvegarder dans la liste des customs browsés
+            com.retroplay.overlay.models.OverlayPreferenceManager.saveCustomBrowsed(prefs, console, customPath)
+            
+            // Sauvegarder aussi comme preference active
+            val pref = com.retroplay.overlay.models.OverlayPreference(
+                enabled = true,
+                overlayName = overlayName,
+                landscapeLayout = "landscape-A",  // Conforme au git RetroArch officiel
+                portraitLayout = "portrait-A",
+                autoRotate = true
+            )
+            com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
+            
+            Log.i(TAG, "Saved custom overlay: $customPath for console: $console")
+            Toast.makeText(this, "Custom '$customPath' loaded!", Toast.LENGTH_LONG).show()
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading overlay .cfg", e)
+            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
     
     /**
      * Termine l'activité de manière sécurisée.
@@ -305,6 +367,17 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         // Charger les SharedPreferences
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
+        
+        // Initialiser le file picker AVANT setContent (CRITIQUE pour lifecycle)
+        pickCustomCfgLauncher = registerForActivityResult(
+            ActivityResultContracts.OpenDocument()
+        ) { uri ->
+            if (uri != null) {
+                handleCustomCfgSelection(uri)
+            } else {
+                Log.w(TAG, "No file selected")
+            }
+        }
         
         // ALWAYS use RetroArch overlays (this activity is dedicated to RetroArch mode only)
         val savedVariant = GamePadLayoutManager.LayoutVariant.RETROARCH
@@ -739,7 +812,11 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 showDipSwitchDialog = showDipSwitchDialog,
                 showCoreOptionsDialog = showCoreOptionsDialog,
                 dipSwitches = dipSwitches,
-                coreOptions = coreOptions
+                coreOptions = coreOptions,
+                onLoadCustomCfg = {
+                    // Lancer le file picker pour sélectionner un .cfg
+                    pickCustomCfgLauncher.launch(arrayOf("*/*"))
+                }
             )
             
             // Dialog d'erreur de chargement du core
@@ -1251,7 +1328,8 @@ private fun ComposeEmulatorScreen(
     dipSwitches: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
     coreOptions: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
     isZapperGame: Boolean = false,
-    onZapperTouch: (android.view.MotionEvent) -> Boolean = { false }
+    onZapperTouch: (android.view.MotionEvent) -> Boolean = { false },
+    onLoadCustomCfg: (() -> Unit)? = null  // Callback pour file picker
 ) {
     // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
@@ -1726,10 +1804,7 @@ private fun ComposeEmulatorScreen(
                         onDismiss = { showGamePadSettings.value = false },
                         context = retroView.context,
                         prefs = prefs,
-                        onLoadCustomCfg = { 
-                            // TODO: Implement file picker for custom .cfg
-                            android.util.Log.i("RetroArchEmulator", "Load Custom .cfg clicked")
-                        }
+                        onLoadCustomCfg = onLoadCustomCfg
                     )
                 }
                 

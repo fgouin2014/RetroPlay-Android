@@ -41,6 +41,9 @@ fun RetroArchSettingsDialog(
     val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
     val availableOverlays = remember { assetManager.getCompatibleOverlays(console) }
     
+    // Load custom browsed overlays
+    val customBrowsed = remember { com.retroplay.overlay.models.OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList() }
+    
     // Load current preferences
     val currentOverlayPref = remember { com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console) }
     var selectedOverlay by remember { 
@@ -173,6 +176,69 @@ fun RetroArchSettingsDialog(
                                     color = if (isSelected) Color.White else Color(0xFFBBBBBB),
                                     fontSize = 14.sp
                                 )
+                            }
+                        }
+                    }
+                    
+                    // Custom Overlays Section (browsed via file picker)
+                    if (customBrowsed.isNotEmpty()) {
+                        Spacer(Modifier.height(16.dp))
+                        
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = Color(0xFF444444),
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                        
+                        Text(
+                            "Custom Overlays (File Picker)",
+                            color = Color(0xFFFF9800),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        customBrowsed.forEach { customPath ->
+                            val customOverlayName = customPath.substringBefore("/")
+                            val isSelected = selectedOverlay == customOverlayName
+                            
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .background(
+                                        if (isSelected) Color(0xFFFF9800).copy(alpha = 0.3f) 
+                                        else Color.Transparent
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isSelected) Color(0xFFFF9800) else Color(0xFF444444)
+                                    )
+                                    .clickable { selectedOverlay = customOverlayName }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = { selectedOverlay = customOverlayName },
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = Color(0xFFFF9800),
+                                        unselectedColor = Color(0xFF888888)
+                                    )
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        customPath,
+                                        color = if (isSelected) Color.White else Color(0xFFBBBBBB),
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        "via File Picker",
+                                        color = Color(0xFF888888),
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
                         }
                     }

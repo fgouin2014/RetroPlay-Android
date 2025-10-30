@@ -211,6 +211,50 @@ object OverlayPreferenceManager {
             .putBoolean("overlay_${console}_enabled", false)
             .commit()
     }
+    
+    /**
+     * Sauvegarder un overlay custom browsé via file picker
+     * Format: "overlayName/cfgFile" (ex: "flat/psx.cfg")
+     */
+    fun saveCustomBrowsed(
+        prefs: android.content.SharedPreferences,
+        console: String,
+        customPath: String  // Ex: "flat/psx.cfg"
+    ) {
+        // Ajouter à la liste des customs browsés
+        val existingCustoms = getCustomBrowsedList(prefs, console).toMutableSet()
+        existingCustoms.add(customPath)
+        
+        prefs.edit()
+            .putStringSet("overlay_${console}_custom_browsed", existingCustoms)
+            .commit()
+    }
+    
+    /**
+     * Obtenir la liste des overlays customs browsés via file picker
+     */
+    fun getCustomBrowsedList(
+        prefs: android.content.SharedPreferences,
+        console: String
+    ): Set<String> {
+        return prefs.getStringSet("overlay_${console}_custom_browsed", emptySet()) ?: emptySet()
+    }
+    
+    /**
+     * Supprimer un custom de la liste
+     */
+    fun removeCustomBrowsed(
+        prefs: android.content.SharedPreferences,
+        console: String,
+        customPath: String
+    ) {
+        val existingCustoms = getCustomBrowsedList(prefs, console).toMutableSet()
+        existingCustoms.remove(customPath)
+        
+        prefs.edit()
+            .putStringSet("overlay_${console}_custom_browsed", existingCustoms)
+            .commit()
+    }
 }
 
 /**

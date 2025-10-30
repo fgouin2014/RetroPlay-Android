@@ -63,7 +63,10 @@ fun AdvancedOverlaySettingsDialog(
     var mouseDtapMsec by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_dtap_msec", 300)) }
     var showMouseCursor by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_show_mouse_cursor", true)) }
     
-    // Save when changed
+    // Preview transparency state
+    var isTransparent by remember { mutableStateOf(false) }
+    
+    // Save when changed + trigger preview transparency
     LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort, lightgunPort, lightgunTriggerOnTouch, lightgunTriggerDelay, lightgunAllowOffscreen, mouseSpeed, mouseSwipeThreshold, mouseHoldToDrag, mouseHoldMsec, mouseDoubleTapToDrag, mouseDtapMsec, showMouseCursor) {
         prefs.edit()
             .putInt("overlay_${console}_dpad_diagonal_sensitivity", dpadDiagonalSensitivity)
@@ -89,15 +92,23 @@ fun AdvancedOverlaySettingsDialog(
             .putBoolean("overlay_${console}_show_mouse_cursor", showMouseCursor)
             .commit()
         android.util.Log.i("AdvancedOverlaySettings", "Saved for $console: dpadSens=$dpadDiagonalSensitivity abxySens=$abxyDiagonalSensitivity recenter=$analogRecenterZone opacity=$opacity")
+        
+        // Trigger preview transparency for 2 seconds
+        isTransparent = true
+        kotlinx.coroutines.delay(2000)
+        isTransparent = false
     }
     
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.85f),
+                .fillMaxHeight(0.95f),  // Augmenté de 0.85 à 0.95 pour plus d'espace scroll
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xDD000000)
+                containerColor = if (isTransparent) 
+                    Color(0xDD000000).copy(alpha = 0.3f)  // Preview: 30% transparent
+                else 
+                    Color(0xDD000000).copy(alpha = 0.4f)  // Normal: 40% transparent
             )
         ) {
             Column(

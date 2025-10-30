@@ -2912,17 +2912,6 @@ private fun QuickMenuDialog(
                     Text("SETTINGS", color = Color.White)
                 }
                 
-                // Bouton Advanced Overlay Settings
-                androidx.compose.material3.Button(
-                    onClick = onAdvancedSettings,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFF9800)
-                    )
-                ) {
-                    Text("ADVANCED OVERLAY SETTINGS", color = Color.White)
-                }
-                
                 Divider(color = Color.Gray, modifier = Modifier.padding(vertical = 4.dp))
                 
                 // Bouton Quit

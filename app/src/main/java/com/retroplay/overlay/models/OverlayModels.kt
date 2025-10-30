@@ -78,16 +78,33 @@ data class OverlayButton(
     val eightwayUpLeft: String? = null,       // overlayN_descM_up_left
     val eightwayUpRight: String? = null,      // overlayN_descM_up_right
     val eightwayDownLeft: String? = null,     // overlayN_descM_down_left
-    val eightwayDownRight: String? = null     // overlayN_descM_down_right
+    val eightwayDownRight: String? = null,    // overlayN_descM_down_right
+    // Hitbox position override (recalculée après scale/offset/separation)
+    val xHitboxOverride: Float? = null,
+    val yHitboxOverride: Float? = null
 ) {
     /**
-     * Calcul de la hitbox réelle (range_x_hitbox) en appliquant reach_*
+     * Calcul de la POSITION de la hitbox (peut être décalée si reach asymétrique)
+     * Identique à RetroArch: x_hitbox = ((x + range_x * reach_right) + (x - range_x * reach_left)) / 2.0
+     * Utilise xHitboxOverride si défini (après transformations scale/offset)
+     */
+    val xHitbox: Float = xHitboxOverride ?: ((x + width * reachRight) + (x - width * reachLeft)) / 2.0f
+    
+    /**
+     * Calcul de la POSITION de la hitbox en Y
+     * Identique à RetroArch: y_hitbox = ((y + range_y * reach_down) + (y - range_y * reach_up)) / 2.0
+     * Utilise yHitboxOverride si défini (après transformations scale/offset)
+     */
+    val yHitbox: Float = yHitboxOverride ?: ((y + height * reachDown) + (y - height * reachUp)) / 2.0f
+    
+    /**
+     * Calcul de la TAILLE de la hitbox réelle (range_x_hitbox) en appliquant reach_*
      * Identique à RetroArch: range_x_hitbox = (range_x * reach_right + range_x * reach_left) / 2.0
      */
     val rangeXHitbox: Float = (width * reachRight + width * reachLeft) / 2.0f
     
     /**
-     * Calcul de la hitbox réelle (range_y_hitbox) en appliquant reach_*
+     * Calcul de la TAILLE de la hitbox réelle (range_y_hitbox) en appliquant reach_*
      * Identique à RetroArch: range_y_hitbox = (range_y * reach_down + range_y * reach_up) / 2.0
      */
     val rangeYHitbox: Float = (height * reachDown + height * reachUp) / 2.0f

@@ -636,10 +636,13 @@ private fun isTouchInsideButton(
     rangeModifier: Float,
     screenSize: IntSize
 ): Boolean {
-    // Convertir coordonnées normalisées → pixels
-    val buttonX = button.x * screenSize.width
-    val buttonY = button.y * screenSize.height
-    // Utiliser rangeXHitbox/rangeYHitbox (avec reach_*) au lieu de width/height brut
+    // CRITIQUE: Utiliser x_hitbox et y_hitbox (PAS x et y!) pour la position de la hitbox
+    // La hitbox peut être décalée si reach_left != reach_right ou reach_up != reach_down
+    // Identique à RetroArch input_overlay_desc_init_hitbox() lignes 2641-2655
+    val buttonX = button.xHitbox * screenSize.width
+    val buttonY = button.yHitbox * screenSize.height
+    
+    // Utiliser rangeXHitbox/rangeYHitbox (avec reach_*) pour la TAILLE
     // Identique à RetroArch: range_x_mod = range_x_hitbox * range_mod
     val buttonWidth = button.rangeXHitbox * screenSize.width * rangeModifier
     val buttonHeight = button.rangeYHitbox * screenSize.height * rangeModifier
@@ -851,12 +854,18 @@ private fun applyScaleAndOffset(
         val newX = 0.5f + (xWithSeparation - 0.5f) * scale + xOffset
         val newY = 0.5f + (yWithSeparation - 0.5f) * scale + yOffset
         
-        // Recalculer modX/modY avec les nouvelles positions
+        // Recalculer modX/modY ET xHitbox/yHitbox avec les nouvelles positions
+        // CRITIQUE: x_hitbox dépend de x_shift (pas x), donc recalculer!
+        val newXHitbox = ((newX + button.width * button.reachRight) + (newX - button.width * button.reachLeft)) / 2.0f
+        val newYHitbox = ((newY + button.height * button.reachDown) + (newY - button.height * button.reachUp)) / 2.0f
+        
         button.copy(
             x = newX,
             y = newY,
             modX = newX - button.width,
-            modY = newY - button.height
+            modY = newY - button.height,
+            xHitboxOverride = newXHitbox,
+            yHitboxOverride = newYHitbox
         )
     }
     

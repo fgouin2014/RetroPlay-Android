@@ -38,6 +38,7 @@ import androidx.constraintlayout.compose.ChainStyle
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
@@ -436,29 +437,30 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         val relativeX = (clampedX - bounds.left) / bounds.width
         val relativeY = (clampedY - bounds.top) / bounds.height
         
-        // Normaliser pour RETRO_DEVICE_POINTER: [0,1] → [-0x7fff, 0x7fff]
-        // Note: POINTER utilise -0x7fff à +0x7fff (différent de LIGHTGUN qui utilise -0x8000)
-        val normalizedX = (relativeX * 2f - 1f) * 0x7fff
-        val normalizedY = (relativeY * 2f - 1f) * 0x7fff
+        // LibretroDroid ATTEND [0, 1] et fait la conversion [-0x7fff, +0x7fff] lui-même !
+        // Formule dans input.cpp: (pointerScreenXAxis - 0.5f) * 2.0 * 0x7fff
+        // POINTER_PRESSED = (X >= 0 && Y >= 0) donc on DOIT envoyer [0, 1] !
         
         when (event.actionMasked) {
             android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
                 // Envoyer position POINTER au core
-                // MOTION_SOURCE_POINTER = 3 (de LibretroDroid.java)
+                // CRITIQUE: Envoyer [0, 1] PAS [-1, +1] !
+                // Port 2 = index 1 dans LibretroDroid (ports indexés à partir de 0)
                 retroView.sendMotionEvent(
                     com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
-                    normalizedX / 0x7fff,  // Normaliser -1.0 à +1.0
-                    normalizedY / 0x7fff,
-                    1  // Port 2 (Zapper)
+                    relativeX,  // 0.0 à 1.0 (LibretroDroid convertit)
+                    relativeY,  // 0.0 à 1.0
+                    1  // Port index 1 = Port 2 physique
                 )
                 
+                Log.v(TAG, "[ZAPPER] sendMotionEvent(POINTER, x=$relativeX, y=$relativeY, port=1) | Expected PRESSED=${relativeX >= 0f && relativeY >= 0f}")
+                
                 if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-                    Log.d(TAG, "[ZAPPER] Touch DOWN at (${touchX.toInt()}, ${touchY.toInt()}) → POINTER($normalizedX, $normalizedY) on port 2")
+                    Log.d(TAG, "[ZAPPER] Touch DOWN at (${touchX.toInt()}, ${touchY.toInt()}) → POINTER([0-1]: $relativeX, $relativeY) on port 2")
                     
-                    // Si triggerOnTouch, tir instantané (simule tap rapide)
+                    // En mode touchscreen (RetroPointer), FCEUmm lit le trigger depuis POINTER_PRESSED
+                    // Pas besoin d'envoyer un bouton séparé
                     if (triggerOnTouch) {
-                        // Note: POINTER_PRESSED géré automatiquement par onTouchEvent de GLRetroView
-                        // Pas besoin d'envoyer Button A explicitement
                         Log.d(TAG, "[ZAPPER] Trigger on touch enabled - instant shot")
                     }
                 }
@@ -466,9 +468,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             }
             
             android.view.MotionEvent.ACTION_UP -> {
-                // Release POINTER
+                // Release POINTER (FCEUmm détecte automatiquement via POINTER_PRESSED=0)
                 Log.d(TAG, "[ZAPPER] Touch UP - POINTER released")
-                // Note: GLRetroView.onTouchEvent() gère automatiquement le release via POINTER_PRESSED=0
                 return true
             }
             
@@ -576,6 +577,17 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         // Charger les SharedPreferences
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
         
+        // Quick Wins: Charger états Fast Forward et Audio Mute
+        fastForwardRatio = prefs.getInt("emulation_fast_forward_ratio", 2).coerceIn(1, 4)
+        audioMuted.value = prefs.getBoolean("emulation_audio_muted", false)
+        
+        // Quick Win #4: Charger shader préféré
+        val savedShaderName = prefs.getString("emulation_shader_preset", "DEFAULT") ?: "DEFAULT"
+        currentShader.value = com.retroplay.shader.ShaderManager.fromString(savedShaderName)
+        
+        // QuickActionsBar visibility: Charger état
+        quickActionsBarVisible.value = prefs.getBoolean("emulation_quick_actions_bar_visible", true)
+        
         // Initialiser le file picker AVANT setContent (CRITIQUE pour lifecycle)
         pickCustomCfgLauncher = registerForActivityResult(
             ActivityResultContracts.OpenDocument()
@@ -640,8 +652,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             if (!sharedSavesDir.exists()) sharedSavesDir.mkdirs()
             savesDirectory = sharedSavesDir.absolutePath
             
-            // Shader
-            shader = ShaderConfig.Default
+            // Shader (appliquer le shader sauvegardé)
+            shader = com.retroplay.shader.ShaderManager.getShaderConfig(currentShader.value)
             
             // Options
             rumbleEventsEnabled = true
@@ -742,19 +754,25 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     }
                 }
                 "nes" -> {
-                    // Configuration Zapper (NES light gun) via RETRO_DEVICE_POINTER
+                    // Configuration NES / FCEUmm
+                    Log.i(TAG, "[NES] Configuring core variables for console: 'nes', isZapperGame=$isZapperGame")
+                    
                     if (isZapperGame) {
-                        Log.i(TAG, "[NES] Zapper game detected: $gameName")
+                        // CRITIQUE: Forcer mode touchscreen + trigger enabled pour Zapper fonctionnel
+                        // 1. touchscreen → Active RetroPointer dans FCEUmm (lit RETRO_DEVICE_POINTER)
+                        // 2. trigger=enabled → Pas d'inversion du signal (mousedata[2] direct, pas !mousedata[2])
+                        // 3. sensor=enabled → Pas d'inversion du sensor (brightness detection correcte)
+                        val nesVariables = arrayOf(
+                            Variable("fceumm_zapper_mode", "touchscreen"),
+                            Variable("fceumm_zapper_trigger", "enabled"),
+                            Variable("fceumm_zapper_sensor", "enabled")
+                        )
                         
-                        // Configurer le port 2 (Player 2) comme RETRO_DEVICE_POINTER
-                        // RETRO_DEVICE_POINTER = 6 (défini dans libretro.h)
-                        // Permet au core FCEUmm de recevoir les coordonnées de touch
                         try {
-                            retroView.setControllerType(1, 6)  // Port 2 (index 1) = POINTER
-                            Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_POINTER on port 2")
-                            Toast.makeText(this@RetroArchEmulatorActivity, "Zapper enabled! Tap screen to shoot", Toast.LENGTH_LONG).show()
+                            variables = nesVariables
+                            Log.i(TAG, "[NES] Zapper variables set: mode=touchscreen, trigger=enabled, sensor=enabled")
                         } catch (e: Exception) {
-                            Log.e(TAG, "[NES] Failed to configure Zapper: ${e.message}")
+                            Log.w(TAG, "[NES] Failed to set Zapper variables: ${e.message}")
                         }
                     }
                 }
@@ -822,6 +840,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         retroView = GLRetroView(this, data)
         lifecycle.addObserver(retroView)
+        
+        // Quick Wins: Appliquer l'état audio au démarrage (après création de retroView)
+        retroView.audioEnabled = !audioMuted.value
         
         // === ÉCOUTE DES ERREURS LIBRETRODROID (CHARGEMENT ÉCHOUÉ) ===
         lifecycleScope.launch {
@@ -901,16 +922,27 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         // Configuration pour les jeux Zapper (Duck Hunt, etc.)
         // Port 1 = Gamepad (Start/Select), Port 2 = Zapper (Touch to shoot)
+        // DOIT ATTENDRE que le core soit complètement chargé (1 seconde)
         if (isZapperGame) {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                runOnUiThread {
-                    Toast.makeText(
-                        this@RetroArchEmulatorActivity,
-                        "Zapper detected!\nPort 1: Gamepad (Start/Select)\nPort 2: Touch game area to shoot",
-                        Toast.LENGTH_LONG
-                    ).show()
+                try {
+                    // Configurer le port 2 (Player 2) comme RETRO_DEVICE_ZAPPER
+                    // RETRO_DEVICE_ZAPPER = SUBCLASS(MOUSE, 0) = 258 dans FCEUmm
+                    // En mode touchscreen, FCEUmm lira quand même RETRO_DEVICE_POINTER grâce à zappermode=RetroPointer
+                    retroView.setControllerType(1, 258)  // Port 2 (index 1) = ZAPPER
+                    Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_ZAPPER (258) on port 2")
+                    
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@RetroArchEmulatorActivity,
+                            "Zapper detected!\nPort 1: Gamepad (Start/Select)\nPort 2: Touch game area to shoot",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "[NES] Failed to configure Zapper: ${e.message}")
                 }
-            }, 1000)
+            }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
         }
 
         // Configurer les extensions contrôleur pour N64
@@ -997,6 +1029,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             loadAndApplyCheats()
         }, if (loadSlot > 0) 3000 else 8000)  // 8s pour NEW GAME, 3s pour LOAD SAVE
         
+        // State pour capturer les bounds exacts du GLRetroView (pour Zapper)
+        // Défini ICI (dans l'Activity) pour être accessible dans onZapperTouch
+        val gameViewBounds = mutableStateOf<androidx.compose.ui.geometry.Rect?>(null)
+        
         setContent {
             ComposeEmulatorScreen(
                 retroView = retroView,
@@ -1022,9 +1058,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     saveGameState(slot)
                 },
                 isZapperGame = isZapperGame,
+                gameViewBounds = gameViewBounds,  // Passer le state pour capture
                 onZapperTouch = { event ->
                     val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
-                    handleZapperTouch(event, null, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)  // TODO: Implémenter gameViewBounds
+                    handleZapperTouch(event, gameViewBounds.value, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)
                 },
                 onLoadState = { slot ->
                     loadGameState(slot)
@@ -1032,6 +1069,23 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 onHotkey = { action ->
                     handleHotkey(action)
                 },
+                // Quick Wins callbacks
+                onToggleFastForward = {
+                    toggleFastForward()
+                },
+                onToggleAudioMute = {
+                    toggleAudioMute()
+                },
+                onCycleShader = {
+                    cycleShader()
+                },
+                onToggleQuickActionsBar = {
+                    toggleQuickActionsBar()
+                },
+                isFastForwardActive = isFastForwardActive.value,
+                audioMuted = audioMuted.value,
+                currentShaderName = currentShader.value.displayName,
+                quickActionsBarVisible = quickActionsBarVisible.value,
                 showDipSwitchDialog = showDipSwitchDialog,
                 showCoreOptionsDialog = showCoreOptionsDialog,
                 dipSwitches = dipSwitches,
@@ -1463,10 +1517,20 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
     }
     
-    // État pour fast forward et pause
-    private var isFastForwardActive = false
+    // État pour fast forward et pause (MutableState pour reactivity Compose)
+    private val isFastForwardActive = mutableStateOf(false)
+    private var fastForwardRatio = 2  // 2x par défaut (2x, 3x, 4x disponibles)
     private var isPaused = false
     private val currentSaveSlot = 0  // Slot par défaut (0-9)
+    
+    // État pour audio mute (MutableState pour reactivity Compose)
+    private val audioMuted = mutableStateOf(false)
+    
+    // État pour shader selection (MutableState pour reactivity Compose)
+    private val currentShader = mutableStateOf(com.retroplay.shader.ShaderManager.ShaderPreset.DEFAULT)
+    
+    // État pour QuickActionsBar visibility (MutableState pour reactivity Compose)
+    private val quickActionsBarVisible = mutableStateOf(true)
     
     // Gérer les hotkeys RetroArch
     private fun handleHotkey(action: String) {
@@ -1496,18 +1560,23 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             
             // Fast forward
             "toggle_fast_forward" -> {
-                isFastForwardActive = !isFastForwardActive
-                retroView.frameSpeed = if (isFastForwardActive) 2 else 1
-                Log.i(TAG, "Fast forward: ${if (isFastForwardActive) "ON" else "OFF"}")
-                runOnUiThread {
-                    Toast.makeText(this, "Fast Forward: ${if (isFastForwardActive) "ON" else "OFF"}", Toast.LENGTH_SHORT).show()
-                }
+                toggleFastForward()
             }
             "hold_fast_forward" -> {
                 // Hold fast forward (maintenir pour accélérer)
-                retroView.frameSpeed = 2
-                isFastForwardActive = true
-                Log.i(TAG, "Hold fast forward: ON")
+                retroView.frameSpeed = fastForwardRatio
+                isFastForwardActive.value = true
+                Log.i(TAG, "[FAST_FORWARD] Hold: ${fastForwardRatio}x")
+            }
+            
+            // Audio mute
+            "audio_mute_toggle" -> {
+                toggleAudioMute()
+            }
+            
+            // Shader cycle
+            "shader_next" -> {
+                cycleShader()
             }
             
             // Rewind (nécessite support du core)
@@ -1592,6 +1661,81 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             else -> {
                 Log.w(TAG, "Unknown hotkey: $action")
             }
+        }
+    }
+    
+    // Quick Win #1: Fast Forward Toggle
+    private fun toggleFastForward() {
+        isFastForwardActive.value = !isFastForwardActive.value
+        val speed = if (isFastForwardActive.value) fastForwardRatio else 1
+        retroView.frameSpeed = speed
+        Log.i(TAG, "[FAST_FORWARD] ${if (isFastForwardActive.value) "ENABLED (${fastForwardRatio}x)" else "DISABLED (1x)"}")
+        
+        // Sauvegarder l'état dans SharedPreferences
+        prefs.edit().putBoolean("emulation_fast_forward_active", isFastForwardActive.value).apply()
+        
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                if (isFastForwardActive.value) "Fast Forward: ${fastForwardRatio}x" else "Normal Speed",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    
+    // Quick Win #2: Audio Mute Toggle
+    private fun toggleAudioMute() {
+        audioMuted.value = !audioMuted.value
+        retroView.audioEnabled = !audioMuted.value
+        Log.i(TAG, "[AUDIO] ${if (audioMuted.value) "MUTED" else "UNMUTED"}")
+        
+        // Sauvegarder l'état dans SharedPreferences
+        prefs.edit().putBoolean("emulation_audio_muted", audioMuted.value).apply()
+        
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                if (audioMuted.value) "Audio Muted" else "Audio Unmuted",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    
+    // QuickActionsBar Visibility Toggle
+    private fun toggleQuickActionsBar() {
+        quickActionsBarVisible.value = !quickActionsBarVisible.value
+        Log.i(TAG, "[QUICK_ACTIONS_BAR] ${if (quickActionsBarVisible.value) "VISIBLE" else "HIDDEN"}")
+        
+        // Sauvegarder l'état dans SharedPreferences
+        prefs.edit().putBoolean("emulation_quick_actions_bar_visible", quickActionsBarVisible.value).apply()
+        
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                if (quickActionsBarVisible.value) "Quick Actions Bar Visible" else "Quick Actions Bar Hidden",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    
+    // Quick Win #4: Shader Cycle (Next shader)
+    private fun cycleShader() {
+        currentShader.value = com.retroplay.shader.ShaderManager.getNextShader(currentShader.value)
+        val shaderConfig = com.retroplay.shader.ShaderManager.getShaderConfig(currentShader.value)
+        retroView.shader = shaderConfig
+        
+        Log.i(TAG, "[SHADER] Switched to: ${currentShader.value.displayName}")
+        Log.i(TAG, "[SHADER] ShaderConfig type: ${shaderConfig.javaClass.simpleName}")
+        
+        // Sauvegarder dans SharedPreferences
+        prefs.edit().putString("emulation_shader_preset", currentShader.value.name).apply()
+        
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                "Shader: ${currentShader.value.displayName}",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
     
@@ -1697,8 +1841,18 @@ private fun ComposeEmulatorScreen(
     dipSwitches: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
     coreOptions: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
     isZapperGame: Boolean = false,
+    gameViewBounds: MutableState<androidx.compose.ui.geometry.Rect?>,  // Bounds du GLRetroView
     onZapperTouch: (android.view.MotionEvent) -> Boolean = { false },
-    onLoadCustomCfg: (() -> Unit)? = null  // Callback pour file picker
+    onLoadCustomCfg: (() -> Unit)? = null,  // Callback pour file picker
+    // Quick Wins
+    onToggleFastForward: () -> Unit = {},
+    onToggleAudioMute: () -> Unit = {},
+    onCycleShader: () -> Unit = {},
+    onToggleQuickActionsBar: () -> Unit = {},
+    isFastForwardActive: Boolean = false,
+    audioMuted: Boolean = false,
+    currentShaderName: String = "None",
+    quickActionsBarVisible: Boolean = true
 ) {
     // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
@@ -1725,9 +1879,6 @@ private fun ComposeEmulatorScreen(
         retroView.onResume()
         Log.d("ComposeEmulator", "QuickMenu closed with cooldown")
     }
-    
-    // State pour capturer les bounds exacts du GLRetroView (pour Zapper)
-    val gameViewBounds = remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     
     // Détection de l'orientation
     val configuration = LocalConfiguration.current
@@ -1827,11 +1978,14 @@ private fun ComposeEmulatorScreen(
                     Box(modifier = Modifier.fillMaxSize()) {
                         // Emulator View avec offset vertical pour éviter que les doigts cachent l'écran
                         // Portrait : offset de 20% vers le haut (laisse espace pour les doigts en bas)
-                        // Landscape : centré (pas d'offset, les boutons sont sur les côtés)
+                        // Landscape : légèrement remonté pour compenser la QuickActionsBar (si visible)
+                        // AJOUT: Compenser la hauteur de la QuickActionsBar (40dp cutout + 36dp bar = ~76dp)
+                        val quickBarOffsetDp = if (quickActionsBarVisible) -23.dp else 0.dp  // Remonter de ~23dp si visible
+                        
                         val verticalOffsetDp = if (isLandscape) {
-                            0.dp  // Landscape : pas d'offset
+                            quickBarOffsetDp  // Landscape : remonter pour QuickBar (si visible)
                         } else {
-                            (-configuration.screenHeightDp * 0.20f).dp  // Portrait : 20% vers le haut
+                            quickBarOffsetDp + (-configuration.screenHeightDp * 0.20f).dp  // Portrait : 20% + QuickBar (si visible)
                         }
                         
                         AndroidView(
@@ -1840,6 +1994,44 @@ private fun ComposeEmulatorScreen(
                                 .fillMaxWidth()
                                 .fillMaxHeight()
                                 .offset(y = verticalOffsetDp)
+                                .onGloballyPositioned { layoutCoordinates ->
+                                    // Capturer position ET bounds pour tenir compte de l'offset
+                                    val position = layoutCoordinates.positionInWindow()
+                                    val size = layoutCoordinates.size
+                                    
+                                    // Créer bounds réels incluant l'offset
+                                    val realBounds = androidx.compose.ui.geometry.Rect(
+                                        left = position.x,
+                                        top = position.y,
+                                        right = position.x + size.width,
+                                        bottom = position.y + size.height
+                                    )
+                                    
+                                    // Ne logger que si les bounds ont changé significativement (> 1dp)
+                                    val oldBounds = gameViewBounds.value
+                                    val hasChanged = oldBounds == null || 
+                                        kotlin.math.abs(oldBounds.left - realBounds.left) > 3 ||
+                                        kotlin.math.abs(oldBounds.top - realBounds.top) > 3 ||
+                                        kotlin.math.abs(oldBounds.width - realBounds.width) > 3 ||
+                                        kotlin.math.abs(oldBounds.height - realBounds.height) > 3
+                                    
+                                    if (hasChanged) {
+                                        android.util.Log.d("ComposeEmulator", "[BOUNDS] GLRetroView REAL bounds: left=${realBounds.left}, top=${realBounds.top}, right=${realBounds.right}, bottom=${realBounds.bottom}, size=${realBounds.width}x${realBounds.height}")
+                                    }
+                                    
+                                    gameViewBounds.value = realBounds
+                                }
+                                .pointerInteropFilter { event ->
+                                    // Gérer Zapper en background (seulement pour touch hors overlay)
+                                    // L'overlay au-dessus intercepte les touch sur boutons AVANT que ceci soit appelé
+                                    // Donc ce code est appelé SEULEMENT pour touch hors boutons
+                                    if (isZapperGame) {
+                                        onZapperTouch(event)  // Envoyer au core
+                                        true  // Capturer pour le Zapper (touch hors boutons)
+                                    } else {
+                                        false  // Pas de Zapper, laisser passer
+                                    }
+                                }
                         )
                         
                         // Overlay RetroArch fullscreen par-dessus (appelé directement, pas via LayoutPair)
@@ -2066,6 +2258,27 @@ private fun ComposeEmulatorScreen(
                 }
                 // NO ELSE - RetroArch mode ONLY in this activity!
                 
+                // Quick Actions Bar (Hybrid mode - variante F)
+                if (quickActionsBarVisible) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter)
+                    ) {
+                        com.retroplay.ui.QuickActionsBar(
+                            isFastForwardActive = isFastForwardActive,
+                            audioMuted = audioMuted,
+                            onToggleFastForward = onToggleFastForward,
+                            onToggleAudioMute = onToggleAudioMute,
+                            onQuickSave = { onSaveState(1) },  // Quick save slot 1
+                            onQuickLoad = { onLoadState(1) },  // Quick load slot 1
+                            onCycleShader = onCycleShader,  // Quick Win #4
+                            currentShaderName = currentShaderName,
+                            onOpenSettings = { showMainMenu.value = true }
+                        )
+                    }
+                }
+                
                 // États locaux pour les sous-menus
                 var showSaveSlots by remember { mutableStateOf(false) }
                 var showLoadSlots by remember { mutableStateOf(false) }
@@ -2109,7 +2322,24 @@ private fun ComposeEmulatorScreen(
                             retroView.onPause()
                             onFinishActivity()
                         },
-                        overlaysVisible = overlaysVisible.value
+                        onToggleFastForward = {
+                            onToggleFastForward()
+                            closeQuickMenuWithCooldown()
+                        },
+                        onToggleAudioMute = {
+                            onToggleAudioMute()
+                        },
+                        onCycleShader = {
+                            onCycleShader()
+                        },
+                        onToggleQuickActionsBar = {
+                            onToggleQuickActionsBar()
+                        },
+                        overlaysVisible = overlaysVisible.value,
+                        isFastForwardActive = isFastForwardActive,
+                        audioMuted = audioMuted,
+                        currentShaderName = currentShaderName,
+                        quickActionsBarVisible = quickActionsBarVisible
                     )
                 }
                 
@@ -2333,47 +2563,7 @@ private fun ComposeEmulatorScreen(
                     )
                 }
                 
-                // Box Zapper transparent par-dessus l'overlay RetroArch (zone de jeu uniquement)
-                // DOIT avoir exactement la même taille et le même offset que l'AndroidView
-                if (isZapperGame && !showMainMenu.value && !showGamePadSettings.value && !showQuickMenu.value) {
-                    // Calculer le même offset vertical que l'AndroidView
-                    val zapperVerticalOffsetDp = if (isLandscape) {
-                        0.dp  // Landscape : pas d'offset
-                    } else {
-                        (-configuration.screenHeightDp * 0.20f).dp  // Portrait : 20% vers le haut
-                    }
-                    
-                    // MODE DEBUG: Afficher la zone Zapper en rouge semi-transparent
-                    val showDebugZapperZone = true  // Mettre à false pour masquer
-                    
-                    // Adapter la largeur de la Box selon l'orientation
-                    // Landscape : 30% (contrôles sur les côtés) | Portrait : 100% (contrôles en bas)
-                    val boxWidthFraction = if (isLandscape) {
-                        0.30f  // Landscape : zone centrale seulement
-                    } else {
-                        1.0f   // Portrait : toute la largeur (contrôles sous l'écran)
-                    }
-                    
-                    androidx.compose.foundation.layout.Box(
-                        modifier = Modifier
-                            .fillMaxWidth(boxWidthFraction)  // 30% de la largeur au centre
-                            .fillMaxHeight()  // Même hauteur que l'AndroidView
-                            .offset(y = zapperVerticalOffsetDp)  // MÊME offset que l'AndroidView
-                            .align(Alignment.Center)  // Centrer horizontalement
-                            .background(
-                                if (showDebugZapperZone) 
-                                    Color.Red.copy(alpha = 0.3f)  // Rouge semi-transparent pour debug
-                                else 
-                                    Color.Transparent
-                            )
-                            .pointerInteropFilter { event ->
-                                // Laisser passer les touches vers le gamepad si hors zone centrale
-                                val handled = onZapperTouch(event)
-                                android.util.Log.d("ZapperBox", "Touch at (${event.x}, ${event.y}) handled=$handled")
-                                handled
-                            }
-                    )
-            }
+                // ZapperBox supprimé - Zapper géré en background sur AndroidView (ne bloque plus les overlays)
         }
     }
 }
@@ -3148,7 +3338,15 @@ private fun QuickMenuDialog(
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
     onQuit: () -> Unit,
-    overlaysVisible: Boolean
+    onToggleFastForward: () -> Unit = {},  // Quick Win #1
+    onToggleAudioMute: () -> Unit = {},    // Quick Win #2
+    onCycleShader: () -> Unit = {},        // Quick Win #4
+    onToggleQuickActionsBar: () -> Unit = {},  // QuickActionsBar visibility toggle
+    overlaysVisible: Boolean,
+    isFastForwardActive: Boolean = false,
+    audioMuted: Boolean = false,
+    currentShaderName: String = "None",
+    quickActionsBarVisible: Boolean = true
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -3204,6 +3402,20 @@ private fun QuickMenuDialog(
                     )
                 }
                 
+                // Bouton Hide/Show QuickActionsBar
+                androidx.compose.material3.Button(
+                    onClick = onToggleQuickActionsBar,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = if (quickActionsBarVisible) Color(0xFF00BCD4) else Color(0xFF607D8B)
+                    )
+                ) {
+                    Text(
+                        if (quickActionsBarVisible) "QUICK BAR: VISIBLE" else "QUICK BAR: HIDDEN", 
+                        color = Color.White
+                    )
+                }
+                
                 // Bouton Save State (Quick Save Slot 1)
                 androidx.compose.material3.Button(
                     onClick = { onSaveState(1) },
@@ -3224,6 +3436,34 @@ private fun QuickMenuDialog(
                     )
                 ) {
                     Text("LOAD STATE (Slot 1)", color = Color.White)
+                }
+                
+                // Quick Win #1: Fast Forward Toggle
+                androidx.compose.material3.Button(
+                    onClick = onToggleFastForward,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = if (isFastForwardActive) Color(0xFFFF5722) else Color(0xFF795548)
+                    )
+                ) {
+                    Text(
+                        if (isFastForwardActive) "FAST FORWARD: ON (2x)" else "FAST FORWARD: OFF",
+                        color = Color.White
+                    )
+                }
+                
+                // Quick Win #2: Audio Mute Toggle
+                androidx.compose.material3.Button(
+                    onClick = onToggleAudioMute,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = if (audioMuted) Color(0xFFD32F2F) else Color(0xFF388E3C)
+                    )
+                ) {
+                    Text(
+                        if (audioMuted) "AUDIO: MUTED" else "AUDIO: ON",
+                        color = Color.White
+                    )
                 }
                 
                 // Bouton Settings (ouvrir le menu complet)

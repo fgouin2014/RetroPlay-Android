@@ -46,6 +46,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     private MaterialButton coreOverrideButton;
     private MaterialButton favoriteButton;
     private FrameLayout pillWasm;
+    private FrameLayout pillLoad;
     private FrameLayout pillNative;
     private LinearLayout nativeButtonsContainer;
     private FavoritesManager favoritesManager;
@@ -134,6 +135,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         cheatButton = findViewById(R.id.cheat_button);
         coreOverrideButton = findViewById(R.id.core_override_button);
         pillWasm = findViewById(R.id.pill_wasm);
+        pillLoad = findViewById(R.id.pill_load);
         pillNative = findViewById(R.id.pill_native);
         nativeButtonsContainer = findViewById(R.id.native_buttons_container);
         
@@ -206,10 +208,15 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Vérifier si des sauvegardes existent dans les slots
         checkAndShowLoadSaveButton();
         
-        // Dual-Color Pill - WASM (Red) and Native (Green)
+        // Dual/Triple-Color Pill - WASM (Red), LOAD (Blue), and Native (Green)
         pillWasm.setOnClickListener(v -> {
             Log.i(TAG, "WASM pill clicked - launching EmulatorJS");
             launchGame();
+        });
+        
+        pillLoad.setOnClickListener(v -> {
+            Log.i(TAG, "LOAD pill clicked - opening slot selection");
+            showSlotSelectionDialog();
         });
         
         pillNative.setOnClickListener(v -> {
@@ -888,9 +895,14 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
         
         if (hasAnySave) {
+            // Afficher le bouton pill LOAD dans le dual pill container
+            pillLoad.setVisibility(View.VISIBLE);
+            // Afficher aussi le bouton normal dans la section native (pour compatibilité)
             loadSaveButton.setVisibility(View.VISIBLE);
             Log.i(TAG, "Save slots found for: " + gameName);
         } else {
+            // Masquer les deux boutons de chargement
+            pillLoad.setVisibility(View.GONE);
             loadSaveButton.setVisibility(View.GONE);
             Log.d(TAG, "No save slots found for: " + gameName);
         }

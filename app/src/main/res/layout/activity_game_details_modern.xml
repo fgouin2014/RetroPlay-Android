@@ -18,7 +18,7 @@
         app:titleTextColor="@color/kitt_red"
         app:titleTextAppearance="@style/ToolbarTitleStyle" />
 
-    <!-- Dual-Color Pill Button (WASM Red | NATIVE Green) -->
+    <!-- Dual/Triple-Color Pill Button (WASM Red | LOAD Blue | NATIVE Green) -->
     <LinearLayout
         android:id="@+id/dual_pill_container"
         android:layout_width="match_parent"
@@ -39,7 +39,7 @@
             android:background="@android:color/transparent"
             android:clipToOutline="true">
 
-            <!-- WASM Section (Red - Left Half) -->
+            <!-- WASM Section (Red - Left) -->
             <FrameLayout
                 android:id="@+id/pill_wasm"
                 android:layout_width="56dp"
@@ -58,7 +58,27 @@
 
             </FrameLayout>
 
-            <!-- NATIVE Section (Green - Right Half) -->
+            <!-- LOAD Section (Blue - Middle) - Visible only when save exists -->
+            <FrameLayout
+                android:id="@+id/pill_load"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:background="@drawable/pill_middle_blue_ripple"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_folder_open_24"
+                    android:tint="@color/kitt_black"
+                    android:contentDescription="Load Save" />
+
+            </FrameLayout>
+
+            <!-- NATIVE Section (Green - Right) -->
             <FrameLayout
                 android:id="@+id/pill_native"
                 android:layout_width="56dp"

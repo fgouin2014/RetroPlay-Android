@@ -511,21 +511,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     }
                 }
                 "nes" -> {
-                    // Configuration Zapper (NES light gun) via RETRO_DEVICE_POINTER
-                    if (isZapperGame) {
-                        Log.i(TAG, "[NES] Zapper game detected: $gameName")
-                        
-                        // Configurer le port 2 (Player 2) comme RETRO_DEVICE_POINTER
-                        // RETRO_DEVICE_POINTER = 6 (défini dans libretro.h)
-                        // Permet au core FCEUmm de recevoir les coordonnées de touch
-                        try {
-                            retroView.setControllerType(1, 6)  // Port 2 (index 1) = POINTER
-                            Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_POINTER on port 2")
-                            Toast.makeText(this@NativeComposeEmulatorActivity, "Zapper enabled! Tap screen to shoot", Toast.LENGTH_LONG).show()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "[NES] Failed to configure Zapper: ${e.message}")
-                        }
-                    }
+                    // Configuration Zapper sera faite APRÈS la création de retroView
                 }
                 "snes" -> {
                     val blendMode = corePrefs.getInt("${prefix}snes_blend_mode", 0)
@@ -668,14 +654,15 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
         }
         
-        // Configuration pour les jeux Zapper (Duck Hunt, etc.)
-        // Port 1 = Gamepad (Start/Select), Port 2 = Zapper (Touch to shoot)
+        // ⚠️ ZAPPER DÉSACTIVÉ DANS NATIVE MODE
+        // Le Zapper cause des problèmes en mode Native
+        // Utiliser RetroArchEmulatorActivity (PLAY sans "Native") pour les jeux Zapper
         if (isZapperGame) {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 runOnUiThread {
                     Toast.makeText(
                         this@NativeComposeEmulatorActivity,
-                        "Zapper detected!\nPort 1: Gamepad (Start/Select)\nPort 2: Touch game area to shoot",
+                        "⚠️ Duck Hunt detected!\nPlease use PLAY (not PLAY NATIVE) for Zapper games",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -766,6 +753,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             loadAndApplyCheats()
         }, if (loadSlot > 0) 3000 else 8000)  // 8s pour NEW GAME, 3s pour LOAD SAVE
         
+        // State pour capturer les bounds exacts du GLRetroView (pour Zapper)
+        // Défini ICI (dans l'Activity) pour être accessible dans onZapperTouch
+        val gameViewBounds = mutableStateOf<androidx.compose.ui.geometry.Rect?>(null)
+        
         setContent {
             ComposeEmulatorScreen(
                 retroView = retroView,
@@ -795,9 +786,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     saveGameState(slot)
                 },
                 isZapperGame = isZapperGame,
+                gameViewBounds = gameViewBounds,  // Passer le state pour capture
                 onZapperTouch = { event ->
                     val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
-                    handleZapperTouch(event, null, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)  // TODO: Implémenter gameViewBounds
+                    handleZapperTouch(event, gameViewBounds.value, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)
                 },
                 onLoadState = { slot ->
                     loadGameState(slot)
@@ -1356,6 +1348,7 @@ private fun ComposeEmulatorScreen(
     dipSwitches: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
     coreOptions: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
     isZapperGame: Boolean = false,
+    gameViewBounds: MutableState<androidx.compose.ui.geometry.Rect?>,  // Bounds du GLRetroView
     onZapperTouch: (android.view.MotionEvent) -> Boolean = { false }
 ) {
     // Settings manager pour les gamepads (state mutable)
@@ -1387,9 +1380,6 @@ private fun ComposeEmulatorScreen(
         retroView.onResume()
         Log.d("ComposeEmulator", "QuickMenu closed with cooldown")
     }
-    
-    // State pour capturer les bounds exacts du GLRetroView (pour Zapper)
-    val gameViewBounds = remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     
     // Détection de l'orientation
     val configuration = LocalConfiguration.current
@@ -1506,8 +1496,20 @@ private fun ComposeEmulatorScreen(
                                 .onGloballyPositioned { layoutCoordinates ->
                                     // Capturer bounds exacts du GLRetroView pour Zapper
                                     val bounds = layoutCoordinates.boundsInWindow()
+                                    
+                                    // Ne logger que si les bounds ont changé significativement (> 3px)
+                                    val oldBounds = gameViewBounds.value
+                                    val hasChanged = oldBounds == null || 
+                                        kotlin.math.abs(oldBounds.left - bounds.left) > 3 ||
+                                        kotlin.math.abs(oldBounds.top - bounds.top) > 3 ||
+                                        kotlin.math.abs(oldBounds.width - bounds.width) > 3 ||
+                                        kotlin.math.abs(oldBounds.height - bounds.height) > 3
+                                    
+                                    if (hasChanged) {
+                                        android.util.Log.d("ComposeEmulator", "[BOUNDS] GLRetroView bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}, size=${bounds.width}x${bounds.height}")
+                                    }
+                                    
                                     gameViewBounds.value = bounds
-                                    android.util.Log.d("ComposeEmulator", "[BOUNDS] GLRetroView bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}, size=${bounds.width}x${bounds.height}")
                                 }
                         )
                         
@@ -1760,7 +1762,26 @@ private fun ComposeEmulatorScreen(
                             // Emulator View
                             AndroidView(
                                 factory = { retroView },
-                                modifier = Modifier.layoutId("gameView")
+                                modifier = Modifier
+                                    .layoutId("gameView")
+                                    .onGloballyPositioned { layoutCoordinates ->
+                                        // Capturer bounds exacts du GLRetroView pour Zapper
+                                        val bounds = layoutCoordinates.boundsInWindow()
+                                        
+                                        // Ne logger que si les bounds ont changé significativement (> 3px)
+                                        val oldBounds = gameViewBounds.value
+                                        val hasChanged = oldBounds == null || 
+                                            kotlin.math.abs(oldBounds.left - bounds.left) > 3 ||
+                                            kotlin.math.abs(oldBounds.top - bounds.top) > 3 ||
+                                            kotlin.math.abs(oldBounds.width - bounds.width) > 3 ||
+                                            kotlin.math.abs(oldBounds.height - bounds.height) > 3
+                                        
+                                        if (hasChanged) {
+                                            android.util.Log.d("ComposeEmulator", "[BOUNDS] GLRetroView bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}, size=${bounds.width}x${bounds.height}")
+                                        }
+                                        
+                                        gameViewBounds.value = bounds
+                                    }
                             )
                             
                             // GamePads (affichés seulement si overlaysVisible est true)

@@ -296,18 +296,6 @@ class RetroArchOverlayParser {
             val eightwayDownLeft = readMapping("down_left")
             val eightwayDownRight = readMapping("down_right")
             
-            // Parser mod_x/y/w/h (custom image positioning/sizing)
-            // Si absents, calculer par défaut: modX = x - width, modW = 2*width, etc.
-            val customModX = readFloat("mod_x", Float.NaN)
-            val customModY = readFloat("mod_y", Float.NaN)
-            val customModW = readFloat("mod_w", Float.NaN)
-            val customModH = readFloat("mod_h", Float.NaN)
-            
-            val finalModX = if (customModX.isNaN()) x - width else customModX
-            val finalModY = if (customModY.isNaN()) y - height else customModY
-            val finalModW = if (customModW.isNaN()) 2f * width else customModW
-            val finalModH = if (customModH.isNaN()) 2f * height else customModH
-            
             val button = OverlayButton(
                 action = action,
                 x = x,
@@ -328,10 +316,10 @@ class RetroArchOverlayParser {
                 reachLeft = reachLeft,
                 reachRight = reachRight,
                 analogSaturatePct = saturatePct,
-                modX = finalModX,
-                modY = finalModY,
-                modW = finalModW,
-                modH = finalModH,
+                modX = x - width,
+                modY = y - height,
+                modW = 2f * width,
+                modH = 2f * height,
                 eightwayUp = eightwayUp,
                 eightwayDown = eightwayDown,
                 eightwayLeft = eightwayLeft,

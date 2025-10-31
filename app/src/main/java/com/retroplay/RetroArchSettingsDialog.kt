@@ -13,6 +13,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,7 +44,7 @@ fun RetroArchSettingsDialog(
     val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
     val availableOverlays = remember { assetManager.getCompatibleOverlays(console) }
     
-    // Load custom browsed overlays (mutableState pour recomposition)
+    // Load custom browsed overlays (mutableState pour pouvoir supprimer dynamiquement)
     var customBrowsed by remember { mutableStateOf(com.retroplay.overlay.models.OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()) }
     
     // Load current preferences
@@ -54,7 +56,16 @@ fun RetroArchSettingsDialog(
         ) 
     }
     // Separate state for custom overlay path (ex: "flat/nes.cfg")
-    var selectedCustomPath by remember { mutableStateOf<String?>(null) }
+    // Initialiser avec le custom actuel si existe
+    var selectedCustomPath by remember { 
+        mutableStateOf<String?>(
+            if (currentOverlayPref?.customCfgName != null) {
+                "${currentOverlayPref.overlayName}/${currentOverlayPref.customCfgName}"
+            } else {
+                null
+            }
+        ) 
+    }
     
     var selectedLandscapeLayout by remember { mutableStateOf(currentOverlayPref?.landscapeLayout ?: "landscape-A") }
     var selectedPortraitLayout by remember { mutableStateOf(currentOverlayPref?.portraitLayout ?: "portrait-A") }
@@ -70,6 +81,42 @@ fun RetroArchSettingsDialog(
     // Semi-transparent state for preview (30% transparent for 2 seconds)
     var isTransparent by remember { mutableStateOf(false) }
     
+    // Scroll state pour auto-scroll vers la sélection
+    val scrollState = rememberScrollState()
+    var customSectionOffsetY by remember { mutableStateOf(0f) }
+    
+    // Rafraîchir la liste custom ET la sélection quand les SharedPreferences changent (file picker)
+    DisposableEffect(console) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "overlay_${console}_custom_browsed") {
+                customBrowsed = com.retroplay.overlay.models.OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()
+            }
+            // Rafraîchir la sélection si overlay_name ou custom_cfg changent (file picker)
+            if (key == "overlay_${console}_name" || key == "overlay_${console}_custom_cfg") {
+                val updatedPref = com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)
+                if (updatedPref != null) {
+                    selectedOverlay = updatedPref.overlayName
+                    selectedCustomPath = if (updatedPref.customCfgName != null) {
+                        "${updatedPref.overlayName}/${updatedPref.customCfgName}"
+                    } else {
+                        null
+                    }
+                }
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+    
+    // Auto-scroll vers la section custom quand un custom est sélectionné
+    LaunchedEffect(selectedCustomPath, customSectionOffsetY) {
+        if (selectedCustomPath != null && customSectionOffsetY > 0f) {
+            scrollState.animateScrollTo(customSectionOffsetY.toInt())
+        }
+    }
+    
     // Sauvegarder le mode debug quand il change
     LaunchedEffect(debugModeState.value) {
         prefs.edit()
@@ -78,20 +125,26 @@ fun RetroArchSettingsDialog(
     }
     
     // Available layouts for selected overlay
-    val availableLayouts = remember(selectedOverlay, console) {
+    val availableLayouts = remember(selectedOverlay, selectedCustomPath, console) {
         if (selectedOverlay.isNotEmpty()) {
-            assetManager.getAvailableLayouts(selectedOverlay, console)
+            // Extraire le nom du .cfg custom si applicable
+            val customCfgName = selectedCustomPath?.substringAfter("/")
+            assetManager.getAvailableLayouts(selectedOverlay, console, customCfgName)
         } else {
             emptyList()
         }
     }
     
     // Save preferences when changed + trigger 30% transparency for 2 seconds
-    LaunchedEffect(selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate, swapAnalogSticks, invertAnalogY, scale, xOffset, yOffset, xSeparation, ySeparation) {
+    LaunchedEffect(selectedOverlay, selectedCustomPath, selectedLandscapeLayout, selectedPortraitLayout, autoRotate, swapAnalogSticks, invertAnalogY, scale, xOffset, yOffset, xSeparation, ySeparation) {
         if (selectedOverlay.isNotEmpty()) {
+            // Si c'est un custom, extraire le nom du .cfg (ex: "flat/dreamcast.cfg" → "dreamcast.cfg")
+            val customCfgName = selectedCustomPath?.substringAfter("/")
+            
             val pref = com.retroplay.overlay.models.OverlayPreference(
                 enabled = true,
                 overlayName = selectedOverlay,
+                customCfgName = customCfgName,  // "dreamcast.cfg" pour custom, null pour standard
                 landscapeLayout = selectedLandscapeLayout,
                 portraitLayout = selectedPortraitLayout,
                 autoRotate = autoRotate,
@@ -104,7 +157,7 @@ fun RetroArchSettingsDialog(
                 ySeparation = ySeparation
             )
             com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
-            android.util.Log.i("RetroArchSettings", "Saved overlay pref for $console: overlay='$selectedOverlay' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate swap=$swapAnalogSticks invertY=$invertAnalogY")
+            android.util.Log.i("RetroArchSettings", "Saved overlay pref for $console: overlay='$selectedOverlay' customCfg='$customCfgName' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate swap=$swapAnalogSticks invertY=$invertAnalogY")
             
             // Trigger 30% transparency for 2 seconds to preview overlay
             isTransparent = true
@@ -151,7 +204,7 @@ fun RetroArchSettingsDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(scrollState)
                 ) {
                     // Overlay Package Selection
                     Text(
@@ -228,7 +281,11 @@ fun RetroArchSettingsDialog(
                             color = Color(0xFFFF9800),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            modifier = Modifier
+                                .padding(bottom = 8.dp)
+                                .onGloballyPositioned { coordinates ->
+                                    customSectionOffsetY = coordinates.positionInParent().y
+                                }
                         )
                         
                         customBrowsed.forEach { customPath ->
@@ -248,6 +305,10 @@ fun RetroArchSettingsDialog(
                                         width = 1.dp,
                                         color = if (isSelected) Color(0xFFFF9800) else Color(0xFF444444)
                                     )
+                                    .clickable { 
+                                        selectedCustomPath = customPath
+                                        selectedOverlay = customOverlayName
+                                    }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -263,14 +324,7 @@ fun RetroArchSettingsDialog(
                                     )
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { 
-                                            selectedCustomPath = customPath
-                                            selectedOverlay = customOverlayName
-                                        }
-                                ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         customPath,
                                         color = if (isSelected) Color.White else Color(0xFFBBBBBB),
@@ -283,28 +337,28 @@ fun RetroArchSettingsDialog(
                                     )
                                 }
                                 
-                                // Bouton X pour enlever
+                                // Bouton X pour supprimer
                                 IconButton(
                                     onClick = {
-                                        // Enlever ce custom overlay de la liste
+                                        // Supprimer de la liste
                                         com.retroplay.overlay.models.OverlayPreferenceManager.removeCustomBrowsed(prefs, console, customPath)
                                         
-                                        // Recharger la liste pour forcer recomposition
+                                        // Mettre à jour la liste locale (recompose automatiquement)
                                         customBrowsed = com.retroplay.overlay.models.OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()
                                         
-                                        // Si c'était l'overlay sélectionné, revenir au premier standard
+                                        // Si ce custom était sélectionné, revenir au premier overlay standard
                                         if (selectedCustomPath == customPath) {
                                             selectedCustomPath = null
                                             selectedOverlay = if (availableOverlays.isNotEmpty()) availableOverlays[0] else ""
-                                            selectedLandscapeLayout = "landscape-A"
-                                            selectedPortraitLayout = "portrait-A"
                                         }
+                                        
+                                        // NE PAS fermer le dialog! Rester dans le menu pour continuer à choisir
                                     },
                                     modifier = Modifier.size(32.dp)
                                 ) {
                                     Text(
                                         "✕",
-                                        color = Color(0xFFFF5555),
+                                        color = Color(0xFFFF5252),
                                         fontSize = 20.sp,
                                         fontWeight = FontWeight.Bold
                                     )

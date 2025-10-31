@@ -124,21 +124,27 @@ class OverlayAssetManager(private val context: Context) {
     /**
      * Charger une configuration d'overlay
      * @param overlayName Nom de l'overlay (ex: "flat-nes")
+     * @param customCfgName Nom du .cfg custom (ex: "dreamcast.cfg"), null pour auto-detect
      * @return Configuration parsée, ou null si erreur
      */
-    fun loadOverlayConfig(overlayName: String, console: String): RetroArchOverlayConfig? {
-        // 1) Essayer <overlay>/<overlay>.cfg (packages avec cfg unique)
-        var cfgFile = File(OVERLAY_DIR, "$overlayName/$overlayName.cfg")
+    fun loadOverlayConfig(overlayName: String, console: String, customCfgName: String? = null): RetroArchOverlayConfig? {
+        // Si customCfgName spécifié (custom browsé), l'utiliser directement
+        var cfgFile = if (customCfgName != null) {
+            File(OVERLAY_DIR, "$overlayName/$customCfgName")
+        } else {
+            // 1) Essayer <overlay>/<overlay>.cfg (packages avec cfg unique)
+            File(OVERLAY_DIR, "$overlayName/$overlayName.cfg")
+        }
         
         // 2) Sinon, essayer <overlay>/<console>.cfg (ex: flat/nes.cfg)
-        if (!cfgFile.exists()) {
+        if (!cfgFile.exists() && customCfgName == null) {
             val consoleCfg = mapConsoleToCfg(console)
             val alt = File(OVERLAY_DIR, "$overlayName/$consoleCfg.cfg")
             if (alt.exists()) cfgFile = alt
         }
         
         // 3) Sinon, prendre le PREMIER .cfg trouvé (ex: nes-small/nes-small-ab.cfg)
-        if (!cfgFile.exists()) {
+        if (!cfgFile.exists() && customCfgName == null) {
             val overlayDir = File(OVERLAY_DIR, overlayName)
             val cfgFiles = overlayDir.listFiles { file -> file.extension == "cfg" }
             if (!cfgFiles.isNullOrEmpty()) {
@@ -148,14 +154,15 @@ class OverlayAssetManager(private val context: Context) {
         }
         
         if (!cfgFile.exists()) {
-            Log.e(TAG, "Config file not found for overlay='$overlayName' console='$console' in ${File(OVERLAY_DIR, overlayName).absolutePath}")
+            Log.e(TAG, "Config file not found for overlay='$overlayName' console='$console' customCfg='$customCfgName' in ${File(OVERLAY_DIR, overlayName).absolutePath}")
             return null
         }
         
+        Log.i(TAG, "Loading config: ${cfgFile.absolutePath}")
         val config = parser.parseConfig(cfgFile)
         
         if (config != null && parser.validateConfig(config)) {
-            Log.i(TAG, "Successfully loaded overlay config: $overlayName")
+            Log.i(TAG, "Successfully loaded overlay config: $overlayName (cfg: ${cfgFile.name})")
             Log.d(TAG, parser.getConfigStats(config))
             return config
         }
@@ -206,66 +213,173 @@ class OverlayAssetManager(private val context: Context) {
     /**
      * Obtenir les layouts disponibles pour un overlay
      * @param overlayName Nom de l'overlay
+     * @param customCfgName Nom du .cfg custom si applicable
      * @return Liste des noms de layouts (ex: ["landscape-A", "portrait-B"])
      */
-    fun getAvailableLayouts(overlayName: String, console: String): List<String> {
-        val config = loadOverlayConfig(overlayName, console) ?: return emptyList()
+    fun getAvailableLayouts(overlayName: String, console: String, customCfgName: String? = null): List<String> {
+        val config = loadOverlayConfig(overlayName, console, customCfgName) ?: return emptyList()
         val layouts = config.layouts.keys.toList().sorted()
-        Log.d(TAG, "getAvailableLayouts for '$overlayName': ${layouts.size} layouts found: ${layouts.joinToString()}")
+        Log.d(TAG, "getAvailableLayouts for '$overlayName' customCfg='$customCfgName': ${layouts.size} layouts found: ${layouts.joinToString()}")
         return layouts
     }
     
     /**
      * Filtrer les overlays compatibles avec une console
      * @param console ID de la console (ex: "nes", "psx")
-     * @return Liste des overlays compatibles
+     * @return Liste des overlays compatibles (universels + spécifiques à la console)
      */
     fun getCompatibleOverlays(console: String): List<String> {
         val allOverlays = getAvailableOverlays()
         Log.d(TAG, "getCompatibleOverlays for console='$console': found ${allOverlays.size} total overlays")
         Log.d(TAG, "Available overlays: ${allOverlays.joinToString()}")
         
-        // Les overlays universels (compatibles avec TOUTES les consoles)
-        val universalOverlays = allOverlays.filter { 
-            it.contains("retropad") || it == "flat"
+        val consoleLower = console.lowercase()
+        val compatible = mutableListOf<String>()
+        
+        allOverlays.forEach { overlay ->
+            val overlayLower = overlay.lowercase()
+            
+            // 1. OVERLAYS UNIVERSELS (compatibles TOUTES consoles) - EN PREMIER
+            val isUniversal = overlayLower.contains("retropad") || 
+                             overlayLower == "flat" ||
+                             overlayLower.startsWith("flat-") && isGenericFlat(overlayLower)
+            
+            if (isUniversal) {
+                compatible.add(overlay)
+                return@forEach
+            }
+            
+            // 2. OVERLAYS SPÉCIFIQUES À LA CONSOLE - Ordre important pour éviter faux positifs!
+            val isCompatible = when (consoleLower) {
+                // IMPORTANT: Tester les plus spécifiques D'ABORD pour éviter contains() ambiguités
+                
+                // SNES (tester AVANT nes pour éviter "nes" dans "snes")
+                "snes", "superfamicom", "super famicom" -> 
+                    overlayLower.contains("snes") && !overlayLower.contains("nes-")
+                
+                // NES (APRÈS snes, exclure genesis aussi!)
+                "nes", "famicom", "fc" -> 
+                    (overlayLower.contains("nes") && !overlayLower.contains("snes") && !overlayLower.contains("genesis")) ||
+                    overlayLower == "nes" || overlayLower.startsWith("nes-")
+                
+                // GameBoy Advanced (tester AVANT gameboy)
+                "gba", "gameboyadvance", "gameboy advance" -> 
+                    overlayLower.contains("gba") || overlayLower.contains("gameboy") && overlayLower.contains("advance")
+                
+                // GameBoy/Color (APRÈS gba)
+                "gb", "gameboy", "game boy" -> 
+                    (overlayLower.contains("gameboy") || overlayLower.contains("game-boy") || overlayLower == "gb") && 
+                    !overlayLower.contains("gba") && !overlayLower.contains("advance")
+                
+                "gbc", "gameboycolor", "gameboy color" -> 
+                    (overlayLower.contains("gameboy") || overlayLower.contains("game-boy") || overlayLower.contains("gbc")) && 
+                    !overlayLower.contains("gba") && !overlayLower.contains("advance")
+                
+                // PlayStation
+                "psx", "ps1", "playstation", "playstation 1" -> 
+                    overlayLower.contains("psx") || overlayLower.contains("ps-") || 
+                    overlayLower.contains("dual-shock") || overlayLower.contains("dualshock") ||
+                    (overlayLower.contains("playstation") && !overlayLower.contains("2"))
+                
+                // PSP (tester avant "ps")
+                "psp", "playstation portable" -> 
+                    overlayLower.contains("psp")
+                
+                // Genesis/MegaDrive
+                "genesis", "megadrive", "md", "mega drive" -> 
+                    overlayLower.contains("genesis") || overlayLower.contains("megadrive") || overlayLower.contains("mega-drive")
+                
+                // Sega Master System
+                "sms", "mastersystem", "master system" -> 
+                    overlayLower.contains("sms") || overlayLower.contains("master")
+                
+                // Arcade (large compatibilité)
+                "arcade", "mame", "mame2003", "mame2010", "fbneo", "cps1", "cps2", "cps3" -> 
+                    overlayLower.contains("arcade") || overlayLower.contains("mame") || 
+                    overlayLower.contains("cps") || overlayLower.contains("fighter")
+                
+                // Neo Geo (séparer Pocket de console)
+                "neogeo", "neo-geo", "neo geo" -> 
+                    overlayLower.contains("neogeo") && !overlayLower.contains("pocket")
+                
+                "ngp", "ngpc", "neogeopocket", "neo geo pocket" -> 
+                    overlayLower.contains("ngp") || (overlayLower.contains("neogeo") && overlayLower.contains("pocket"))
+                
+                // Nintendo 64
+                "n64", "nintendo64", "nintendo 64" -> 
+                    overlayLower.contains("n64") || overlayLower.contains("nintendo64") || overlayLower.contains("nintendo-64")
+                
+                // PC Engine / TurboGrafx (tester AVANT pcfx)
+                "pce", "pcengine", "pc engine", "turbografx", "tg16", "tg-16" -> 
+                    (overlayLower.contains("pce") || overlayLower.contains("pcengine") || 
+                     overlayLower.contains("turbografx") || overlayLower.contains("tg")) && 
+                    !overlayLower.contains("pcfx") && !overlayLower.contains("pc-fx")
+                
+                // PC-FX (APRÈS pce)
+                "pcfx", "pc-fx", "pc fx" -> 
+                    overlayLower.contains("pcfx") || overlayLower.contains("pc-fx")
+                
+                // Sega Saturn
+                "saturn", "sega saturn" -> 
+                    overlayLower.contains("saturn")
+                
+                // Dreamcast
+                "dreamcast", "dc" -> 
+                    overlayLower.contains("dreamcast") || overlayLower == "dc"
+                
+                // Atari 7800 (tester AVANT 2600 pour éviter substring)
+                "atari7800", "atari-7800", "atari 7800" -> 
+                    overlayLower.contains("7800") || (overlayLower.contains("atari") && overlayLower.contains("78"))
+                
+                // Atari 2600 (APRÈS 7800)
+                "atari2600", "atari-2600", "atari 2600", "atari" -> 
+                    (overlayLower.contains("2600") || overlayLower.contains("26")) && !overlayLower.contains("7800")
+                
+                // Atari Lynx
+                "atarilynx", "atari-lynx", "lynx" -> 
+                    overlayLower.contains("lynx") || (overlayLower.contains("atari") && overlayLower.contains("lynx"))
+                
+                // WonderSwan
+                "wonderswan", "wswan", "ws", "wsc", "wonderswancolor" -> 
+                    overlayLower.contains("wonderswan") || overlayLower.contains("wswan") || 
+                    overlayLower == "ws" || overlayLower == "wsc"
+                
+                // VirtualBoy
+                "virtualboy", "vb", "virtual boy" -> 
+                    overlayLower.contains("virtualboy") || overlayLower.contains("virtual-boy") || 
+                    overlayLower == "vb"
+                
+                // PokeMini
+                "pokemini", "pokemon mini" -> 
+                    overlayLower.contains("pokemini") || overlayLower.contains("pokemon-mini")
+                
+                // GameCube
+                "gamecube", "ngc", "gc", "nintendo gamecube" -> 
+                    overlayLower.contains("gamecube") || overlayLower.contains("game-cube")
+                
+                else -> false  // Pas de correspondance spécifique
+            }
+            
+            if (isCompatible) {
+                compatible.add(overlay)
+            }
         }
         
-        // Correspondances console -> overlays spécifiques
-        val specificOverlays = allOverlays.filter { overlay ->
-            when (console.lowercase()) {
-                "nes", "famicom" -> overlay.contains("nes")
-                "snes", "superfamicom" -> overlay.contains("snes")
-                "psx", "ps1", "playstation" -> overlay.contains("psx") || overlay.contains("dual-shock")
-                "genesis", "megadrive", "md" -> overlay.contains("genesis") || overlay.contains("megadrive")
-                "sms", "mastersystem" -> overlay.contains("sms")
-                "arcade", "mame", "fbneo", "cps1", "cps2", "cps3", "neogeo" -> 
-                    overlay.contains("arcade") || overlay.contains("neogeo")
-                "n64", "nintendo64" -> overlay.contains("n64")
-                "gb", "gameboy" -> overlay.contains("gameboy") && !overlay.contains("gba")
-                "gbc", "gameboycolor" -> overlay.contains("gameboy") && !overlay.contains("gba")
-                "gba", "gameboyadvance" -> overlay.contains("gba")
-                "psp" -> overlay.contains("psp")
-                "pce", "pcengine", "turbografx", "tg16" -> overlay.contains("pce")
-                "saturn" -> overlay.contains("saturn")
-                "dreamcast", "dc" -> overlay.contains("dreamcast")
-                "atari2600", "atari-2600" -> overlay.contains("atari2600")
-                "atari7800", "atari-7800" -> overlay.contains("atari7800")
-                "atarilynx", "lynx" -> overlay.contains("atarilynx") || overlay.contains("lynx")
-                "ngp", "ngpc", "neogeopocket" -> overlay.contains("ngp")
-                "wonderswan", "wswan", "ws", "wsc" -> overlay.contains("wonderswan")
-                "virtualboy", "vb" -> overlay.contains("virtualboy")
-                "pokemini" -> overlay.contains("pokemini")
-                "pcfx", "pc-fx" -> overlay.contains("pcfx")
-                "gamecube", "ngc", "gc" -> overlay.contains("gamecube")
-                else -> false  // Pas d'overlay spécifique pour cette console
-            }
-        }.filter { !it.contains("retropad") }  // Exclure les retropads des overlays spécifiques
-        
-        // Combiner : retropads universels EN PREMIER (recommandés), puis overlays spécifiques
-        val compatible = (universalOverlays + specificOverlays).distinct()
-        
         Log.i(TAG, "Compatible overlays for '$console': ${compatible.joinToString()}")
-        return compatible
+        return compatible.distinct()
+    }
+    
+    /**
+     * Vérifier si un overlay "flat-xxx" est générique (pas spécifique à une console)
+     */
+    private fun isGenericFlat(overlayName: String): Boolean {
+        // flat-retropad, flat-one-handed, etc. sont génériques
+        // flat-nes, flat-psx, etc. sont spécifiques
+        val consoleSpecificKeywords = listOf(
+            "nes", "snes", "psx", "genesis", "n64", "gba", "gameboy",
+            "arcade", "saturn", "dreamcast", "psp", "atari", "lynx"
+        )
+        return !consoleSpecificKeywords.any { overlayName.contains(it) }
     }
     
     /**

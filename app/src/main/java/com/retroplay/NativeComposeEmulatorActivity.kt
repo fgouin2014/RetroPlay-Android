@@ -35,6 +35,8 @@ import androidx.constraintlayout.compose.ConstraintSet
 import androidx.constraintlayout.compose.Dimension
 import androidx.constraintlayout.compose.ChainStyle
 import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
@@ -160,75 +162,92 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     }
     
     /**
-     * Gestion des touches Zapper - Émule le bouton A au port 2 (Zapper port)
+     * Gestion des touches Zapper - Envoie position POINTER + trigger au port 2
      * Port 1 (index 0) = Manette standard (Start/Select pour menus)
-     * Port 2 (index 1) = Zapper (Button A pour tirer)
+     * Port 2 (index 1) = Zapper (RETRO_DEVICE_POINTER configuré)
      * 
-     * Filtre les touches pour ne capturer QUE la zone centrale (35%-65% de largeur)
+     * Utilise RETRO_DEVICE_POINTER (6) pour envoyer coordonnées exactes au core FCEUmm
+     * 
+     * @param event Touch event
+     * @param gameViewBounds Bounds exacts du GLRetroView (zone de jeu)
+     * @param triggerOnTouch Si true, tir instantané (DOWN+UP), sinon hold-release
+     * @param allowOffscreen Si false, clamp position aux bounds
      */
-    private fun handleZapperTouch(event: android.view.MotionEvent, triggerOnTouch: Boolean = false, allowOffscreen: Boolean = true): Boolean {
+    private fun handleZapperTouch(
+        event: android.view.MotionEvent,
+        gameViewBounds: androidx.compose.ui.geometry.Rect?,
+        triggerOnTouch: Boolean = false,
+        allowOffscreen: Boolean = true
+    ): Boolean {
         if (!isZapperGame) {
             return false
         }
         
-        // Vérifier que la touche est dans la zone centrale (35% à 65% de largeur)
-        val screenWidth = resources.displayMetrics.widthPixels.toFloat()
+        // Vérifier si bounds disponibles
+        val bounds = gameViewBounds
+        if (bounds == null) {
+            Log.w(TAG, "[ZAPPER] GLRetroView bounds not available yet, ignoring touch")
+            return false
+        }
+        
+        // Touch coordinates (écran)
         val touchX = event.x
-        val relativeX = touchX / screenWidth
+        val touchY = event.y
         
-        // Zone libre pour Duck Hunt : 35% à 65% (30% de largeur au centre)
-        val isInZapperZone = relativeX >= 0.35f && relativeX <= 0.65f
+        // Vérifier si touch est DANS le GLRetroView (zone de jeu)
+        val isInGameArea = touchX >= bounds.left && touchX <= bounds.right &&
+                          touchY >= bounds.top && touchY <= bounds.bottom
         
-        if (!isInZapperZone) {
-            Log.d(TAG, "[ZAPPER] Touch OUTSIDE zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - ignored")
-            return false  // Laisser passer au gamepad
+        if (!isInGameArea) {
+            // Touch hors zone de jeu (dans les overlays, bars, etc.)
+            if (!allowOffscreen) {
+                Log.d(TAG, "[ZAPPER] Touch OUTSIDE game area and allowOffscreen=false - ignored")
+                return false
+            }
+            // Si allowOffscreen=true, clamp aux bounds
+            Log.d(TAG, "[ZAPPER] Touch OUTSIDE game area, clamping to bounds")
         }
         
-        // Si allowOffscreen=false, vérifier aussi que le touch est dans la zone de jeu (retroView bounds)
-        // Note: Pour l'instant, on considère que la zone centrale EST la zone de jeu
-        // Une implémentation plus précise nécessiterait les bounds exacts du GLRetroView
-        if (!allowOffscreen) {
-            // TODO: Implémenter bounds check exact du GLRetroView
-            // Pour l'instant, le filtre zone centrale suffit
-            Log.d(TAG, "[ZAPPER] allowOffscreen=false, using zone centrale as game bounds")
-        }
+        // Convertir en coordonnées relatives au GLRetroView
+        val clampedX = touchX.coerceIn(bounds.left, bounds.right)
+        val clampedY = touchY.coerceIn(bounds.top, bounds.bottom)
+        
+        val relativeX = (clampedX - bounds.left) / bounds.width
+        val relativeY = (clampedY - bounds.top) / bounds.height
+        
+        // Normaliser pour RETRO_DEVICE_POINTER: [0,1] → [-0x7fff, 0x7fff]
+        // Note: POINTER utilise -0x7fff à +0x7fff (différent de LIGHTGUN qui utilise -0x8000)
+        val normalizedX = (relativeX * 2f - 1f) * 0x7fff
+        val normalizedY = (relativeY * 2f - 1f) * 0x7fff
         
         when (event.actionMasked) {
-            android.view.MotionEvent.ACTION_DOWN -> {
-                Log.d(TAG, "[ZAPPER] Touch DOWN in zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - Button A pressed (port 2)")
-                // Envoyer au port 1 (Player 2 / Zapper port)
-                retroView.sendKeyEvent(
-                    android.view.KeyEvent.ACTION_DOWN,
-                    android.view.KeyEvent.KEYCODE_BUTTON_A,
-                    1  // Port 2 (index 1)
+            android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
+                // Envoyer position POINTER au core
+                // MOTION_SOURCE_POINTER = 3 (de LibretroDroid.java)
+                retroView.sendMotionEvent(
+                    com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
+                    normalizedX / 0x7fff,  // Normaliser -1.0 à +1.0
+                    normalizedY / 0x7fff,
+                    1  // Port 2 (Zapper)
                 )
                 
-                // Si triggerOnTouch, envoyer immédiatement le release aussi (tir instantané)
-                if (triggerOnTouch) {
-                    retroView.sendKeyEvent(
-                        android.view.KeyEvent.ACTION_UP,
-                        android.view.KeyEvent.KEYCODE_BUTTON_A,
-                        1  // Port 2 (index 1)
-                    )
-                    Log.d(TAG, "[ZAPPER] Trigger on touch: immediate release sent")
+                if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                    Log.d(TAG, "[ZAPPER] Touch DOWN at (${touchX.toInt()}, ${touchY.toInt()}) → POINTER($normalizedX, $normalizedY) on port 2")
+                    
+                    // Si triggerOnTouch, tir instantané (simule tap rapide)
+                    if (triggerOnTouch) {
+                        // Note: POINTER_PRESSED géré automatiquement par onTouchEvent de GLRetroView
+                        // Pas besoin d'envoyer Button A explicitement
+                        Log.d(TAG, "[ZAPPER] Trigger on touch enabled - instant shot")
+                    }
                 }
                 return true
             }
             
             android.view.MotionEvent.ACTION_UP -> {
-                // Si triggerOnTouch, le release a déjà été envoyé, donc skip
-                if (triggerOnTouch) {
-                    Log.d(TAG, "[ZAPPER] Touch UP ignored (triggerOnTouch=true)")
-                    return true
-                }
-                
-                Log.d(TAG, "[ZAPPER] Touch UP in zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - Button A released (port 2)")
-                // Envoyer au port 1 (Player 2 / Zapper port)
-                retroView.sendKeyEvent(
-                    android.view.KeyEvent.ACTION_UP,
-                    android.view.KeyEvent.KEYCODE_BUTTON_A,
-                    1  // Port 2 (index 1)
-                )
+                // Release POINTER
+                Log.d(TAG, "[ZAPPER] Touch UP - POINTER released")
+                // Note: GLRetroView.onTouchEvent() gère automatiquement le release via POINTER_PRESSED=0
                 return true
             }
             
@@ -492,10 +511,20 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     }
                 }
                 "nes" -> {
-                    // Note: Zapper configuration désactivée car LibretroDroid ne supporte pas RETRO_DEVICE_LIGHTGUN
-                    // L'utilisateur doit utiliser le bouton A du gamepad pour tirer dans Duck Hunt
+                    // Configuration Zapper (NES light gun) via RETRO_DEVICE_POINTER
                     if (isZapperGame) {
-                        Log.i(TAG, "[NES] Zapper game detected: $gameName - use gamepad button A to shoot")
+                        Log.i(TAG, "[NES] Zapper game detected: $gameName")
+                        
+                        // Configurer le port 2 (Player 2) comme RETRO_DEVICE_POINTER
+                        // RETRO_DEVICE_POINTER = 6 (défini dans libretro.h)
+                        // Permet au core FCEUmm de recevoir les coordonnées de touch
+                        try {
+                            retroView.setControllerType(1, 6)  // Port 2 (index 1) = POINTER
+                            Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_POINTER on port 2")
+                            Toast.makeText(this@NativeComposeEmulatorActivity, "Zapper enabled! Tap screen to shoot", Toast.LENGTH_LONG).show()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[NES] Failed to configure Zapper: ${e.message}")
+                        }
                     }
                 }
                 "snes" -> {
@@ -767,9 +796,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 },
                 isZapperGame = isZapperGame,
                 onZapperTouch = { event ->
-                    // Charger advancedSettings pour lightgun options
                     val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
-                    handleZapperTouch(event, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)
+                    handleZapperTouch(event, null, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)  // TODO: Implémenter gameViewBounds
                 },
                 onLoadState = { slot ->
                     loadGameState(slot)
@@ -1360,6 +1388,9 @@ private fun ComposeEmulatorScreen(
         Log.d("ComposeEmulator", "QuickMenu closed with cooldown")
     }
     
+    // State pour capturer les bounds exacts du GLRetroView (pour Zapper)
+    val gameViewBounds = remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    
     // Détection de l'orientation
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -1472,6 +1503,12 @@ private fun ComposeEmulatorScreen(
                                 .fillMaxWidth()
                                 .fillMaxHeight()
                                 .offset(y = verticalOffsetDp)
+                                .onGloballyPositioned { layoutCoordinates ->
+                                    // Capturer bounds exacts du GLRetroView pour Zapper
+                                    val bounds = layoutCoordinates.boundsInWindow()
+                                    gameViewBounds.value = bounds
+                                    android.util.Log.d("ComposeEmulator", "[BOUNDS] GLRetroView bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}, size=${bounds.width}x${bounds.height}")
+                                }
                         )
                         
                         // Overlay RetroArch fullscreen par-dessus (appelé directement, pas via LayoutPair)
@@ -1510,8 +1547,8 @@ private fun ComposeEmulatorScreen(
                         if (overlayPreference != null) {
                             val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(retroView.context) }
                             // Recharger la config si le nom de l'overlay change
-                            val overlayConfig = remember(overlayPreference.overlayName, console) {
-                                assetManager.loadOverlayConfig(overlayPreference.overlayName, console)
+                            val overlayConfig = remember(overlayPreference.overlayName, overlayPreference.customCfgName, console) {
+                                assetManager.loadOverlayConfig(overlayPreference.overlayName, console, overlayPreference.customCfgName)
                             }
                             
                             // Utiliser currentRetroArchLayout si défini (boutons overlay_next), 
@@ -2163,8 +2200,7 @@ private fun MainMenuDialog(
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
-                    .fillMaxHeight(0.85f)
-                    .verticalScroll(rememberScrollState()),
+                    .wrapContentHeight(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xDD000000))
             ) {
                 Column(

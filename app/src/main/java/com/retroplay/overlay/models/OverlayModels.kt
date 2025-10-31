@@ -274,6 +274,7 @@ data class AdvancedOverlaySettings(
 data class OverlayPreference(
     val enabled: Boolean = false,                // Si false, utilise Lemuroid
     val overlayName: String,                     // "flat-nes", "dual-shock", etc.
+    val customCfgName: String? = null,           // Pour customs: "dreamcast.cfg", null pour standards
     val landscapeLayout: String = "landscape-A", // Layout pour landscape
     val portraitLayout: String = "portrait-A",   // Layout pour portrait
     val autoRotate: Boolean = true,              // Auto-switch landscape/portrait
@@ -298,7 +299,7 @@ object OverlayPreferenceManager {
     ) {
         // Utiliser commit() au lieu de apply() pour synchronisation immédiate
         // Cela garantit que le listener se déclenche immédiatement
-        prefs.edit()
+        val editor = prefs.edit()
             .putBoolean("overlay_${console}_enabled", preference.enabled)
             .putString("overlay_${console}_name", preference.overlayName)
             .putString("overlay_${console}_layout_landscape", preference.landscapeLayout)
@@ -311,7 +312,15 @@ object OverlayPreferenceManager {
             .putFloat("overlay_${console}_y_offset", preference.yOffset)
             .putFloat("overlay_${console}_x_separation", preference.xSeparation)
             .putFloat("overlay_${console}_y_separation", preference.ySeparation)
-            .commit()
+        
+        // Sauvegarder customCfgName si c'est un custom (sinon supprimer la clé)
+        if (preference.customCfgName != null) {
+            editor.putString("overlay_${console}_custom_cfg", preference.customCfgName)
+        } else {
+            editor.remove("overlay_${console}_custom_cfg")
+        }
+        
+        editor.commit()
     }
     
     fun load(
@@ -322,6 +331,7 @@ object OverlayPreferenceManager {
         if (!enabled) return null
         
         val overlayName = prefs.getString("overlay_${console}_name", null) ?: return null
+        val customCfgName = prefs.getString("overlay_${console}_custom_cfg", null)
         val landscapeLayout = prefs.getString("overlay_${console}_layout_landscape", "landscape-A") ?: "landscape-A"
         val portraitLayout = prefs.getString("overlay_${console}_layout_portrait", "portrait-A") ?: "portrait-A"
         val autoRotate = prefs.getBoolean("overlay_${console}_auto_rotate", true)
@@ -333,7 +343,7 @@ object OverlayPreferenceManager {
         val xSeparation = prefs.getFloat("overlay_${console}_x_separation", 0.0f)
         val ySeparation = prefs.getFloat("overlay_${console}_y_separation", 0.0f)
         
-        return OverlayPreference(enabled, overlayName, landscapeLayout, portraitLayout, autoRotate, swapAnalogSticks, invertAnalogY, scale, xOffset, yOffset, xSeparation, ySeparation)
+        return OverlayPreference(enabled, overlayName, customCfgName, landscapeLayout, portraitLayout, autoRotate, swapAnalogSticks, invertAnalogY, scale, xOffset, yOffset, xSeparation, ySeparation)
     }
     
     fun disable(

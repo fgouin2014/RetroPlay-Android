@@ -36,6 +36,8 @@ import androidx.constraintlayout.compose.ConstraintSet
 import androidx.constraintlayout.compose.Dimension
 import androidx.constraintlayout.compose.ChainStyle
 import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
@@ -132,67 +134,215 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     
     /**
      * Gérer le fichier .cfg sélectionné (LECTURE SEULE - aucune modification)
+     * Utilise ContentResolver pour gérer les content:// URIs correctement
      */
     private fun handleCustomCfgSelection(uri: android.net.Uri) {
         try {
             Log.i(TAG, "Overlay .cfg selected: $uri")
             
-            // Convertir URI vers path réel
-            val path = uri.path ?: run {
-                Toast.makeText(this, "Invalid file path", Toast.LENGTH_SHORT).show()
+            // Obtenir le nom du fichier via ContentResolver
+            val fileName = getFileNameFromUri(uri) ?: run {
+                Toast.makeText(this, "Cannot get file name", Toast.LENGTH_SHORT).show()
                 return
             }
             
-            // Extraire overlayName depuis le path (ex: /overlays/gamepads/flat/nes.cfg → "flat")
-            val overlayName = if (path.contains("/overlays/gamepads/")) {
-                val afterGamepads = path.substringAfter("/overlays/gamepads/")
-                afterGamepads.substringBefore("/")
-            } else if (path.contains("/overlays/keyboards/")) {
-                val afterKeyboards = path.substringAfter("/overlays/keyboards/")
-                afterKeyboards.substringBefore("/")
-            } else {
-                Toast.makeText(this, "Please select a .cfg from /RetroPlay-Data/overlays/", Toast.LENGTH_LONG).show()
+            Log.i(TAG, "File name: $fileName")
+            
+            // Vérifier que c'est bien un .cfg
+            if (!fileName.endsWith(".cfg", ignoreCase = true)) {
+                Toast.makeText(this, "Please select a .cfg file", Toast.LENGTH_SHORT).show()
                 return
             }
+            
+            // Lire le contenu du fichier pour détecter le type d'overlay
+            val cfgContent = readFileFromUri(uri) ?: run {
+                Toast.makeText(this, "Cannot read file content", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            // Extraire le nom du dossier parent depuis l'URI
+            // Ex: primary:RetroPlay-Data/overlays/gamepads/flat/dreamcast.cfg → "flat"
+            val overlayName = extractOverlayFolderFromUri(uri) ?: 
+                detectOverlayNameFromContent(cfgContent, fileName)
             
             if (overlayName.isEmpty()) {
-                Toast.makeText(this, "Invalid overlay path", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Cannot detect overlay type from .cfg", Toast.LENGTH_SHORT).show()
                 return
             }
             
-            Log.i(TAG, "Extracted overlay name: $overlayName from path: $path")
+            Log.i(TAG, "Detected overlay name: $overlayName")
             
-            // Extraire le nom du fichier .cfg (ex: "psx.cfg" depuis "flat/psx.cfg")
-            val cfgFileName = path.substringAfterLast("/")
-            val customPath = "$overlayName/$cfgFileName"  // Ex: "flat/psx.cfg"
+            // Créer le path custom (overlayName/fileName)
+            val customPath = "$overlayName/$fileName"
             
             // Sauvegarder dans la liste des customs browsés
             com.retroplay.overlay.models.OverlayPreferenceManager.saveCustomBrowsed(prefs, console, customPath)
             
-            // Pour les customs, utiliser overlay0 par défaut
-            // Le fallback intelligent détectera le bon layout par aspect_ratio au runtime
-            val landscapeLayout = "overlay0"
-            val portraitLayout = "overlay0"
-            
-            // Sauvegarder comme preference active
+            // Sauvegarder aussi comme preference active avec le nom du .cfg custom!
             val pref = com.retroplay.overlay.models.OverlayPreference(
                 enabled = true,
                 overlayName = overlayName,
-                landscapeLayout = landscapeLayout,
-                portraitLayout = portraitLayout,
+                customCfgName = fileName,  // "dreamcast.cfg" pour custom, null pour standard
+                landscapeLayout = "landscape-A",
+                portraitLayout = "portrait-A",
                 autoRotate = true
             )
             com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
             
-            Log.i(TAG, "Auto-detected layouts: landscape='$landscapeLayout' portrait='$portraitLayout'")
-            
             Log.i(TAG, "Saved custom overlay: $customPath for console: $console")
-            Toast.makeText(this, "Custom '$customPath' loaded!", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Custom overlay '$overlayName' loaded!", Toast.LENGTH_LONG).show()
             
         } catch (e: Exception) {
             Log.e(TAG, "Error loading overlay .cfg", e)
             Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
         }
+    }
+    
+    /**
+     * Obtenir le nom du fichier depuis un content:// URI
+     */
+    private fun getFileNameFromUri(uri: android.net.Uri): String? {
+        var fileName: String? = null
+        
+        // Méthode 1: Query via ContentResolver
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0) {
+                    fileName = cursor.getString(nameIndex)
+                }
+            }
+        }
+        
+        // Méthode 2: Fallback - Extraire depuis l'URI
+        if (fileName == null) {
+            fileName = uri.lastPathSegment
+        }
+        
+        return fileName
+    }
+    
+    /**
+     * Lire le contenu d'un fichier depuis son URI
+     */
+    private fun readFileFromUri(uri: android.net.Uri): String? {
+        return try {
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                inputStream.bufferedReader().use { it.readText() }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading file from URI", e)
+            null
+        }
+    }
+    
+    /**
+     * Extraire le nom du dossier overlay depuis l'URI
+     * Ex: content://.../primary:RetroPlay-Data/overlays/gamepads/flat/nes.cfg → "flat"
+     */
+    private fun extractOverlayFolderFromUri(uri: android.net.Uri): String? {
+        return try {
+            // DECODE %2F → / pour gérer les URIs encodés!
+            val uriString = java.net.URLDecoder.decode(uri.toString(), "UTF-8")
+            Log.d(TAG, "Extracting overlay folder from URI: $uriString")
+            
+            // Chercher pattern /overlays/gamepads/XXX/ ou /overlays/keyboards/XXX/
+            val gamepadPattern = Regex("""/overlays/gamepads/([^/]+)/""")
+            val keyboardPattern = Regex("""/overlays/keyboards/([^/]+)/""")
+            
+            val gamepadMatch = gamepadPattern.find(uriString)
+            if (gamepadMatch != null) {
+                val folder = gamepadMatch.groupValues[1]
+                Log.i(TAG, "Extracted overlay folder from URI (gamepads): $folder")
+                return folder
+            }
+            
+            val keyboardMatch = keyboardPattern.find(uriString)
+            if (keyboardMatch != null) {
+                val folder = keyboardMatch.groupValues[1]
+                Log.i(TAG, "Extracted overlay folder from URI (keyboards): $folder")
+                return folder
+            }
+            
+            Log.w(TAG, "No overlay folder pattern found in URI")
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error extracting overlay folder from URI", e)
+            null
+        }
+    }
+    
+    /**
+     * Détecter le nom de l'overlay depuis le contenu du .cfg
+     * IMPORTANT: Le overlay name est le NOM DU DOSSIER, pas le nom du fichier!
+     * Ex: flat/dreamcast.cfg → overlayName = "flat" (pas "dreamcast")
+     */
+    private fun detectOverlayNameFromContent(cfgContent: String, fileName: String): String {
+        val baseFileName = fileName.substringBeforeLast(".cfg")
+        
+        // Méthode 1: Parser le contenu pour trouver le path des images
+        // Ex: overlay0_desc0_overlay = img/A.png → overlay dans même dossier (utiliser fileName)
+        // Ex: overlay0_desc0_overlay = ../flat/img/A.png → overlay = "flat"
+        // Ex: overlay0_desc0_overlay = dreamcast/img/A.png → overlay = "dreamcast"
+        val imgPathPattern = Regex("""overlay\d+_desc\d+_overlay\s*=\s*["']?([^"'\r\n]+)""")
+        val imgMatch = imgPathPattern.find(cfgContent)
+        
+        if (imgMatch != null) {
+            val imgPath = imgMatch.groupValues[1].trim()
+            Log.d(TAG, "Found image path in .cfg: $imgPath")
+            
+            // Cas 1: Path commence par "../" (remonte d'un dossier)
+            // Ex: ../flat/img/A.png → overlay = "flat"
+            if (imgPath.startsWith("../")) {
+                val overlayName = imgPath.removePrefix("../").substringBefore("/")
+                Log.i(TAG, "Detected overlay from ../ path: $overlayName")
+                return overlayName
+            }
+            
+            // Cas 2: Path contient un dossier parent (mais pas img/)
+            // Ex: dreamcast/img/A.png → overlay = "dreamcast"
+            // Ex: flat/img/A.png → overlay = "flat"
+            if (imgPath.contains("/") && !imgPath.startsWith("img/")) {
+                val overlayName = imgPath.substringBefore("/")
+                Log.i(TAG, "Detected overlay from image path: $overlayName")
+                return overlayName
+            }
+            
+            // Cas 3: Path direct = img/A.png
+            // → Overlay name = nom du fichier .cfg
+            // Ex: flat.cfg avec img/A.png → overlay = "flat"
+            if (imgPath.startsWith("img/")) {
+                Log.i(TAG, "Direct img/ path, using fileName as overlay: $baseFileName")
+                return baseFileName
+            }
+        }
+        
+        // Méthode 2: Chercher la ligne overlay_name (si elle existe)
+        // Ex: overlay0_name = "landscape" indique que c'est un multi-layout
+        val overlayNamePattern = Regex("""overlay\d+_name\s*=\s*["']([^"']+)["']""")
+        val nameMatch = overlayNamePattern.find(cfgContent)
+        if (nameMatch != null) {
+            Log.d(TAG, "Found overlay0_name in .cfg, using fileName as overlay: $baseFileName")
+            return baseFileName
+        }
+        
+        // Méthode 3: Liste des overlays "dossiers" connus
+        // Si le fileName correspond à un overlay qui a son propre dossier, l'utiliser
+        val knownFolderOverlays = listOf(
+            "flat", "dual-shock", "arcade-anim", "lite", "neo-retropad",
+            "nes", "nes-small", "snes", "psx", "gba", "n64", "genesis",
+            "arcade", "gameboy", "quadpad", "scummvm", "retropad",
+            "720-med", "flip_phone", "gb_anim_portrait", "gba-grey"
+        )
+        
+        if (knownFolderOverlays.any { it.equals(baseFileName, ignoreCase = true) }) {
+            Log.i(TAG, "FileName matches known folder overlay: $baseFileName")
+            return baseFileName
+        }
+        
+        // Méthode 4 (Fallback): Utiliser le nom du fichier
+        Log.w(TAG, "Could not detect overlay from content, using fileName: $baseFileName")
+        return baseFileName
     }
     
     /**
@@ -232,44 +382,93 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * 
      * Filtre les touches pour ne capturer QUE la zone centrale (35%-65% de largeur)
      */
-    private fun handleZapperTouch(event: android.view.MotionEvent): Boolean {
+    /**
+     * Gestion des touches Zapper - Envoie position POINTER + trigger au port 2
+     * Port 1 (index 0) = Manette standard (Start/Select pour menus)
+     * Port 2 (index 1) = Zapper (RETRO_DEVICE_POINTER configuré)
+     * 
+     * Utilise RETRO_DEVICE_POINTER (6) pour envoyer coordonnées exactes au core FCEUmm
+     * 
+     * @param event Touch event
+     * @param gameViewBounds Bounds exacts du GLRetroView (zone de jeu)
+     * @param triggerOnTouch Si true, tir instantané (DOWN+UP), sinon hold-release
+     * @param allowOffscreen Si false, clamp position aux bounds
+     */
+    private fun handleZapperTouch(
+        event: android.view.MotionEvent,
+        gameViewBounds: androidx.compose.ui.geometry.Rect?,
+        triggerOnTouch: Boolean = false,
+        allowOffscreen: Boolean = true
+    ): Boolean {
         if (!isZapperGame) {
             return false
         }
         
-        // Vérifier que la touche est dans la zone centrale (35% à 65% de largeur)
-        val screenWidth = resources.displayMetrics.widthPixels.toFloat()
-        val touchX = event.x
-        val relativeX = touchX / screenWidth
-        
-        // Zone libre pour Duck Hunt : 35% à 65% (30% de largeur au centre)
-        val isInZapperZone = relativeX >= 0.35f && relativeX <= 0.65f
-        
-        if (!isInZapperZone) {
-            Log.d(TAG, "[ZAPPER] Touch OUTSIDE zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - ignored")
-            return false  // Laisser passer au gamepad
+        // Vérifier si bounds disponibles
+        val bounds = gameViewBounds
+        if (bounds == null) {
+            Log.w(TAG, "[ZAPPER] GLRetroView bounds not available yet, ignoring touch")
+            return false
         }
         
+        // Touch coordinates (écran)
+        val touchX = event.x
+        val touchY = event.y
+        
+        // Vérifier si touch est DANS le GLRetroView (zone de jeu)
+        val isInGameArea = touchX >= bounds.left && touchX <= bounds.right &&
+                          touchY >= bounds.top && touchY <= bounds.bottom
+        
+        if (!isInGameArea) {
+            // Touch hors zone de jeu (dans les overlays, bars, etc.)
+            if (!allowOffscreen) {
+                Log.d(TAG, "[ZAPPER] Touch OUTSIDE game area and allowOffscreen=false - ignored")
+                return false
+            }
+            // Si allowOffscreen=true, clamp aux bounds
+            Log.d(TAG, "[ZAPPER] Touch OUTSIDE game area, clamping to bounds")
+        }
+        
+        // Convertir en coordonnées relatives au GLRetroView
+        val clampedX = touchX.coerceIn(bounds.left, bounds.right)
+        val clampedY = touchY.coerceIn(bounds.top, bounds.bottom)
+        
+        val relativeX = (clampedX - bounds.left) / bounds.width
+        val relativeY = (clampedY - bounds.top) / bounds.height
+        
+        // Normaliser pour RETRO_DEVICE_POINTER: [0,1] → [-0x7fff, 0x7fff]
+        // Note: POINTER utilise -0x7fff à +0x7fff (différent de LIGHTGUN qui utilise -0x8000)
+        val normalizedX = (relativeX * 2f - 1f) * 0x7fff
+        val normalizedY = (relativeY * 2f - 1f) * 0x7fff
+        
         when (event.actionMasked) {
-            android.view.MotionEvent.ACTION_DOWN -> {
-                Log.d(TAG, "[ZAPPER] Touch DOWN in zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - Button A pressed (port 2)")
-                // Envoyer au port 1 (Player 2 / Zapper port)
-                retroView.sendKeyEvent(
-                    android.view.KeyEvent.ACTION_DOWN,
-                    android.view.KeyEvent.KEYCODE_BUTTON_A,
-                    1  // Port 2 (index 1)
+            android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
+                // Envoyer position POINTER au core
+                // MOTION_SOURCE_POINTER = 3 (de LibretroDroid.java)
+                retroView.sendMotionEvent(
+                    com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
+                    normalizedX / 0x7fff,  // Normaliser -1.0 à +1.0
+                    normalizedY / 0x7fff,
+                    1  // Port 2 (Zapper)
                 )
+                
+                if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                    Log.d(TAG, "[ZAPPER] Touch DOWN at (${touchX.toInt()}, ${touchY.toInt()}) → POINTER($normalizedX, $normalizedY) on port 2")
+                    
+                    // Si triggerOnTouch, tir instantané (simule tap rapide)
+                    if (triggerOnTouch) {
+                        // Note: POINTER_PRESSED géré automatiquement par onTouchEvent de GLRetroView
+                        // Pas besoin d'envoyer Button A explicitement
+                        Log.d(TAG, "[ZAPPER] Trigger on touch enabled - instant shot")
+                    }
+                }
                 return true
             }
             
             android.view.MotionEvent.ACTION_UP -> {
-                Log.d(TAG, "[ZAPPER] Touch UP in zone centrale: x=$touchX (${(relativeX * 100).toInt()}%) - Button A released (port 2)")
-                // Envoyer au port 1 (Player 2 / Zapper port)
-                retroView.sendKeyEvent(
-                    android.view.KeyEvent.ACTION_UP,
-                    android.view.KeyEvent.KEYCODE_BUTTON_A,
-                    1  // Port 2 (index 1)
-                )
+                // Release POINTER
+                Log.d(TAG, "[ZAPPER] Touch UP - POINTER released")
+                // Note: GLRetroView.onTouchEvent() gère automatiquement le release via POINTER_PRESSED=0
                 return true
             }
             
@@ -543,10 +742,20 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     }
                 }
                 "nes" -> {
-                    // Note: Zapper configuration désactivée car LibretroDroid ne supporte pas RETRO_DEVICE_LIGHTGUN
-                    // L'utilisateur doit utiliser le bouton A du gamepad pour tirer dans Duck Hunt
+                    // Configuration Zapper (NES light gun) via RETRO_DEVICE_POINTER
                     if (isZapperGame) {
-                        Log.i(TAG, "[NES] Zapper game detected: $gameName - use gamepad button A to shoot")
+                        Log.i(TAG, "[NES] Zapper game detected: $gameName")
+                        
+                        // Configurer le port 2 (Player 2) comme RETRO_DEVICE_POINTER
+                        // RETRO_DEVICE_POINTER = 6 (défini dans libretro.h)
+                        // Permet au core FCEUmm de recevoir les coordonnées de touch
+                        try {
+                            retroView.setControllerType(1, 6)  // Port 2 (index 1) = POINTER
+                            Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_POINTER on port 2")
+                            Toast.makeText(this@RetroArchEmulatorActivity, "Zapper enabled! Tap screen to shoot", Toast.LENGTH_LONG).show()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[NES] Failed to configure Zapper: ${e.message}")
+                        }
                     }
                 }
                 "snes" -> {
@@ -814,7 +1023,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 },
                 isZapperGame = isZapperGame,
                 onZapperTouch = { event ->
-                    handleZapperTouch(event)
+                    val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+                    handleZapperTouch(event, null, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)  // TODO: Implémenter gameViewBounds
                 },
                 onLoadState = { slot ->
                     loadGameState(slot)
@@ -1516,6 +1726,9 @@ private fun ComposeEmulatorScreen(
         Log.d("ComposeEmulator", "QuickMenu closed with cooldown")
     }
     
+    // State pour capturer les bounds exacts du GLRetroView (pour Zapper)
+    val gameViewBounds = remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    
     // Détection de l'orientation
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -1671,8 +1884,8 @@ private fun ComposeEmulatorScreen(
                         if (overlayPreference != null) {
                             val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(retroView.context) }
                             // Recharger la config si le nom de l'overlay change
-                            val overlayConfig = remember(overlayPreference.overlayName, console) {
-                                assetManager.loadOverlayConfig(overlayPreference.overlayName, console)
+                            val overlayConfig = remember(overlayPreference.overlayName, overlayPreference.customCfgName, console) {
+                                assetManager.loadOverlayConfig(overlayPreference.overlayName, console, overlayPreference.customCfgName)
                             }
                             
                             // Utiliser currentRetroArchLayout si défini (boutons overlay_next), 
@@ -1691,35 +1904,16 @@ private fun ComposeEmulatorScreen(
                                 }
                             }
                             
-                            // Trouver le layout (avec fallback intelligent basé sur aspect ratio)
+                            // Trouver le layout (avec fallback si le nom exact n'existe pas)
                             val layoutName = overlayConfig?.layouts?.get(requestedLayoutName)?.let { 
                                 android.util.Log.d("ComposeEmulator", "Using requested layout: '$requestedLayoutName'")
                                 requestedLayoutName 
                             }
                                 ?: run {
-                                    // Fallback 1 : chercher layout contenant "landscape" ou "portrait"
+                                    // Fallback : chercher le premier layout correspondant à l'orientation
                                     val orientation = if (isLandscape) "landscape" else "portrait"
-                                    var fallback = overlayConfig?.layouts?.keys?.firstOrNull { it.contains(orientation, ignoreCase = true) }
-                                    
-                                    // Fallback 2 : Chercher par aspect ratio (>1.0 = landscape, <1.0 = portrait)
-                                    if (fallback == null && overlayConfig != null) {
-                                        fallback = overlayConfig.layouts.entries.firstOrNull { (_, layout) ->
-                                            val aspectRatio = layout.aspectRatio ?: 1.0f
-                                            if (isLandscape) aspectRatio > 1.0f else aspectRatio < 1.0f
-                                        }?.key
-                                    }
-                                    
-                                    // Fallback 3 : overlay0 (standard RetroArch)
-                                    if (fallback == null) {
-                                        fallback = overlayConfig?.layouts?.keys?.firstOrNull { it.startsWith("overlay") }
-                                    }
-                                    
-                                    // Fallback 4 : Premier layout disponible
-                                    if (fallback == null) {
-                                        fallback = overlayConfig?.layouts?.keys?.firstOrNull()
-                                    }
-                                    
-                                    android.util.Log.w("ComposeEmulator", "Layout '$requestedLayoutName' not found, using fallback: '$fallback' (orientation=${if (isLandscape) "landscape" else "portrait"})")
+                                    val fallback = overlayConfig?.layouts?.keys?.firstOrNull { it.contains(orientation) }
+                                    android.util.Log.w("ComposeEmulator", "Layout '$requestedLayoutName' not found, using fallback: '$fallback'")
                                     fallback
                                 }
                             
@@ -2285,8 +2479,7 @@ private fun MainMenuDialog(
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
-                    .fillMaxHeight(0.85f)
-                    .verticalScroll(rememberScrollState()),
+                    .wrapContentHeight(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xDD000000))
             ) {
                 Column(

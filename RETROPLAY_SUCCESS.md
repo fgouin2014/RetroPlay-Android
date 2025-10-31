@@ -10,7 +10,7 @@
 - **Nom:** RetroPlay
 - **Package:** `com.retroplay`
 - **Activité Launcher:** `GameListActivity`
-- **Port WebServer:** 6666
+- **Port WebServer:** 7777
 - **Thème:** KITT (rouge/noir) - Conservé de ChatAI
 - **ROMs Directory:** `/storage/emulated/0/GameLibrary-Data/` (partagé avec GameLibrary)
 - **Sites Web:** `/storage/emulated/0/GameLibrary-Files/sites/` (partagé avec GameLibrary)
@@ -29,7 +29,7 @@
 - Arcade: MAME 2003 Plus, FBNeo
 
 ### Émulation Web (EmulatorJS)
-- WebView avec serveur HTTP local (port 6666)
+- WebView avec serveur HTTP local (port 7777)
 - Support de toutes les consoles d'EmulatorJS
 
 ### Système de Cheats
@@ -61,7 +61,7 @@ RetroPlay-Android/
 │       │   ├── GameDetailsActivity.java
 │       │   ├── NativeComposeEmulatorActivity.kt
 │       │   ├── WebViewActivity.java
-│       │   ├── WebServer.java (Port 6666)
+│       │   ├── WebServer.java (Port 7777)
 │       │   ├── cheat/ (CheatManager, CheatApplier, etc.)
 │       │   └── gamepad/ (Configs par console)
 │       ├── jniLibs/arm64-v8a/ (19 cores .so)
@@ -83,7 +83,7 @@ RetroPlay-Android/
 - ✅ Conservé: GameListActivity, GameDetailsActivity, NativeComposeEmulatorActivity, WebViewActivity, CheatActivity, BackgroundService
 
 ### 4. Configuration WebServer
-- Port: 8888 → **6666**
+- Port: 8888 → **7777**
 - SITES_DIR: `ChatAI-Files` → `GameLibrary-Files`
 - Routes inchangées: `/gamelibrary/`, `/gamedata/`
 
@@ -107,7 +107,7 @@ Tous les chemins mis à jour:
 ```xml
 <string name="app_name">RetroPlay</string>
 <string name="notification_channel_name">RetroPlay Notifications</string>
-<string name="webserver_config_subtitle">Port 6666</string>
+<string name="webserver_config_subtitle">Port 7777</string>
 ```
 
 ---
@@ -207,7 +207,7 @@ src/main/java/com/swordfish/retrograde/util/
 |--------|----------------|-------------------|
 | **Package** | com.chatai | com.retroplay |
 | **Launcher** | MainActivity (Chat) | GameListActivity (Jeux) |
-| **Port WebServer** | 8888 | 6666 |
+| **Port WebServer** | 8888 | 7777 |
 | **ROMs Dir** | ChatAI-Files | GameLibrary-Data (partagé) |
 | **Fonctions AI** | Oui (KITT, GPT, etc.) | Non (supprimées) |
 | **Activités** | 20+ | 5 (émulation uniquement) |
@@ -226,7 +226,7 @@ src/main/java/com/swordfish/retrograde/util/
 - ✅ **Réutilise l'infrastructure GameLibrary** (pas de duplication)
 - ✅ **Conserve toutes les fonctionnalités d'émulation** de ChatAI
 - ✅ **Supprime toutes les fonctionnalités AI/Chat** inutiles
-- ✅ **Utilise un port unique (6666)** pour éviter les conflits
+- ✅ **Utilise un port unique (7777)** pour éviter les conflits
 
 **L'application est prête à être testée et utilisée ! 🎮**
 

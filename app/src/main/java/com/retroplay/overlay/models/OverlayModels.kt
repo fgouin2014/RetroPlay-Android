@@ -252,7 +252,7 @@ data class AdvancedOverlaySettings(
     val showInputsPort: Int = 0,               // Port à afficher (0 = all)
     // Lightgun options
     val lightgunPort: Int = 0,                 // Port du lightgun (0-3)
-    val lightgunTriggerOnTouch: Boolean = false,  // Déclencher au touch (vs release)
+    val lightgunTriggerOnTouch: Boolean = true,   // Déclencher au touch (vs release) - TRUE comme RetroArch officiel
     val lightgunTriggerDelay: Int = 0,         // Délai avant déclenchement (ms)
     val lightgunAllowOffscreen: Boolean = true,   // Permettre tir hors écran
     val lightgunTwoTouchInput: Int = 0,        // Action pour 2 doigts (0=none, 1=start, 2=select, etc.)
@@ -382,7 +382,7 @@ object OverlayPreferenceManager {
             showInputs = showInputsMode,
             showInputsPort = prefs.getInt("overlay_${console}_show_inputs_port", 0),
             lightgunPort = prefs.getInt("overlay_${console}_lightgun_port", 0),
-            lightgunTriggerOnTouch = prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", false),
+            lightgunTriggerOnTouch = prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", true),  // TRUE comme RetroArch officiel
             lightgunTriggerDelay = prefs.getInt("overlay_${console}_lightgun_trigger_delay", 0),
             lightgunAllowOffscreen = prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true),
             lightgunTwoTouchInput = prefs.getInt("overlay_${console}_lightgun_two_touch", 0),

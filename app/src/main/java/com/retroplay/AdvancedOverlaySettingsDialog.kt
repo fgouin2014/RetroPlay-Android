@@ -50,7 +50,7 @@ fun AdvancedOverlaySettingsDialog(
     
     // Lightgun options
     var lightgunPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_lightgun_port", 0)) }
-    var lightgunTriggerOnTouch by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", false)) }
+    var lightgunTriggerOnTouch by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", true)) }  // ← TRUE comme RetroArch officiel
     var lightgunTriggerDelay by remember { mutableStateOf(prefs.getInt("overlay_${console}_lightgun_trigger_delay", 0)) }
     var lightgunAllowOffscreen by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true)) }
     

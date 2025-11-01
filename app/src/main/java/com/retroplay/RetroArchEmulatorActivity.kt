@@ -377,12 +377,84 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     }
     
     /**
-     * Gestion des touches Zapper - Émule le bouton A au port 2 (Zapper port)
-     * Port 1 (index 0) = Manette standard (Start/Select pour menus)
-     * Port 2 (index 1) = Zapper (Button A pour tirer)
+     * Envoie un signal de trigger lightgun au core
+     * Simule un appui/relâchement rapide du bouton A sur le port lightgun
      * 
-     * Filtre les touches pour ne capturer QUE la zone centrale (35%-65% de largeur)
+     * @param port Port du lightgun (index 0-3)
+     * @param delayMs Délai avant déclenchement (0 = immédiat)
      */
+    private fun sendLightgunTrigger(port: Int, delayMs: Int) {
+        val sendTrigger = Runnable {
+            // Envoyer un pulse rapide de BUTTON_A (DOWN puis UP)
+            retroView.sendKeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BUTTON_A, port)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                retroView.sendKeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BUTTON_A, port)
+            }, 50)  // 50ms pulse
+            
+            Log.d(TAG, "[ZAPPER] Trigger FIRED on port ${port+1} (delay: ${delayMs}ms)")
+        }
+        
+        if (delayMs > 0) {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(sendTrigger, delayMs.toLong())
+        } else {
+            sendTrigger.run()
+        }
+    }
+    
+    /**
+     * Gère les actions multi-touch configurables (2/3/4 doigts)
+     * 
+     * @param event Touch event contenant le nombre de doigts
+     */
+    private fun handleMultiTouchActions(event: android.view.MotionEvent) {
+        val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+        val fingerCount = event.pointerCount
+        
+        if (fingerCount > 1) {
+            val actionId = when (fingerCount) {
+                2 -> lightgunSettings.lightgunTwoTouchInput
+                3 -> lightgunSettings.lightgunThreeTouchInput
+                4 -> lightgunSettings.lightgunFourTouchInput
+                else -> 0
+            }
+            
+            if (actionId > 0) {
+                sendLightgunAction(actionId, lightgunSettings.lightgunPort)
+                Log.d(TAG, "[ZAPPER] Multi-touch: $fingerCount fingers → action $actionId")
+            }
+        }
+    }
+    
+    /**
+     * Envoie une action lightgun configurée (multi-touch)
+     * Mapping selon RetroArch overlay system
+     * 
+     * @param actionId ID de l'action (1=START, 2=SELECT, 3=AUX_A, etc.)
+     * @param port Port du lightgun
+     */
+    private fun sendLightgunAction(actionId: Int, port: Int) {
+        val keyCode = when (actionId) {
+            1 -> android.view.KeyEvent.KEYCODE_BUTTON_START   // LIGHTGUN_START
+            2 -> android.view.KeyEvent.KEYCODE_BUTTON_SELECT  // LIGHTGUN_SELECT
+            3 -> android.view.KeyEvent.KEYCODE_BUTTON_A       // LIGHTGUN_AUX_A
+            4 -> android.view.KeyEvent.KEYCODE_BUTTON_B       // LIGHTGUN_AUX_B
+            5 -> android.view.KeyEvent.KEYCODE_BUTTON_X       // LIGHTGUN_AUX_C
+            6 -> android.view.KeyEvent.KEYCODE_DPAD_UP        // LIGHTGUN_DPAD_UP
+            7 -> android.view.KeyEvent.KEYCODE_DPAD_DOWN      // LIGHTGUN_DPAD_DOWN
+            8 -> android.view.KeyEvent.KEYCODE_DPAD_LEFT      // LIGHTGUN_DPAD_LEFT
+            9 -> android.view.KeyEvent.KEYCODE_DPAD_RIGHT     // LIGHTGUN_DPAD_RIGHT
+            else -> return  // 0 = none
+        }
+        
+        // Envoyer pulse rapide
+        retroView.sendKeyEvent(android.view.KeyEvent.ACTION_DOWN, keyCode, port)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            retroView.sendKeyEvent(android.view.KeyEvent.ACTION_UP, keyCode, port)
+        }, 50)
+        
+        Log.d(TAG, "[ZAPPER] Multi-touch action $actionId sent: keyCode=$keyCode on port ${port+1}")
+    }
+    
     /**
      * Gestion des touches Zapper - Envoie position POINTER + trigger au port 2
      * Port 1 (index 0) = Manette standard (Start/Select pour menus)
@@ -392,14 +464,18 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * 
      * @param event Touch event
      * @param gameViewBounds Bounds exacts du GLRetroView (zone de jeu)
-     * @param triggerOnTouch Si true, tir instantané (DOWN+UP), sinon hold-release
+     * @param triggerOnTouch Si true, tir instantané au DOWN, sinon au UP
      * @param allowOffscreen Si false, clamp position aux bounds
+     * @param triggerDelay Délai en ms avant déclenchement du trigger
+     * @param lightgunPort Port du lightgun (0-3, -1 = tous)
      */
     private fun handleZapperTouch(
         event: android.view.MotionEvent,
         gameViewBounds: androidx.compose.ui.geometry.Rect?,
-        triggerOnTouch: Boolean = false,
-        allowOffscreen: Boolean = true
+        triggerOnTouch: Boolean = true,
+        allowOffscreen: Boolean = true,
+        triggerDelay: Int = 0,
+        lightgunPort: Int = 1
     ): Boolean {
         if (!isZapperGame) {
             return false
@@ -445,24 +521,26 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
                 // Envoyer position POINTER au core
                 // CRITIQUE: Envoyer [0, 1] PAS [-1, +1] !
-                // Port 2 = index 1 dans LibretroDroid (ports indexés à partir de 0)
+                // Utiliser le port configuré (lightgunPort)
                 retroView.sendMotionEvent(
                     com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
                     relativeX,  // 0.0 à 1.0 (LibretroDroid convertit)
                     relativeY,  // 0.0 à 1.0
-                    1  // Port index 1 = Port 2 physique
+                    lightgunPort  // Port configuré (index 0-3)
                 )
                 
-                Log.v(TAG, "[ZAPPER] sendMotionEvent(POINTER, x=$relativeX, y=$relativeY, port=1) | Expected PRESSED=${relativeX >= 0f && relativeY >= 0f}")
+                Log.v(TAG, "[ZAPPER] sendMotionEvent(POINTER, x=$relativeX, y=$relativeY, port=$lightgunPort) | Expected PRESSED=${relativeX >= 0f && relativeY >= 0f}")
                 
                 if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-                    Log.d(TAG, "[ZAPPER] Touch DOWN at (${touchX.toInt()}, ${touchY.toInt()}) → POINTER([0-1]: $relativeX, $relativeY) on port 2")
+                    Log.d(TAG, "[ZAPPER] Touch DOWN at (${touchX.toInt()}, ${touchY.toInt()}) → POINTER([0-1]: $relativeX, $relativeY) on port ${lightgunPort+1}")
                     
-                    // En mode touchscreen (RetroPointer), FCEUmm lit le trigger depuis POINTER_PRESSED
-                    // Pas besoin d'envoyer un bouton séparé
+                    // BRANCHER triggerOnTouch: Si true, envoyer trigger immédiatement au DOWN
                     if (triggerOnTouch) {
-                        Log.d(TAG, "[ZAPPER] Trigger on touch enabled - instant shot")
+                        sendLightgunTrigger(lightgunPort, triggerDelay)
                     }
+                    
+                    // Gérer multi-touch (2/3/4 doigts)
+                    handleMultiTouchActions(event)
                 }
                 return true
             }
@@ -470,6 +548,12 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             android.view.MotionEvent.ACTION_UP -> {
                 // Release POINTER (FCEUmm détecte automatiquement via POINTER_PRESSED=0)
                 Log.d(TAG, "[ZAPPER] Touch UP - POINTER released")
+                
+                // BRANCHER triggerOnTouch: Si false, envoyer trigger au UP (release)
+                if (!triggerOnTouch) {
+                    sendLightgunTrigger(lightgunPort, triggerDelay)
+                }
+                
                 return true
             }
             
@@ -1061,7 +1145,14 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 gameViewBounds = gameViewBounds,  // Passer le state pour capture
                 onZapperTouch = { event ->
                     val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
-                    handleZapperTouch(event, gameViewBounds.value, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)
+                    handleZapperTouch(
+                        event, 
+                        gameViewBounds.value, 
+                        lightgunSettings.lightgunTriggerOnTouch, 
+                        lightgunSettings.lightgunAllowOffscreen,
+                        lightgunSettings.lightgunTriggerDelay,
+                        lightgunSettings.lightgunPort
+                    )
                 },
                 onLoadState = { slot ->
                     loadGameState(slot)

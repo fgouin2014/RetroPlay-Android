@@ -2562,20 +2562,18 @@ private fun GamePadSettingsDialog(
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.TopCenter  // Positionner en haut
+            contentAlignment = Alignment.Center  // Centrer le dialog
         ) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.85f)
-                    .fillMaxHeight(0.8f)  // Limiter hauteur à 80% de l'écran
-                    .padding(top = 40.dp),
+                    .fillMaxHeight(0.85f)  // Limiter hauteur à 85% de l'écran pour forcer scroll
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),  // SCROLL SUR LE CARD
                 colors = CardDefaults.cardColors(containerColor = Color(dialogAlpha))
             ) {
-            // Ajouter ScrollView pour le contenu qui peut être long
+            // Column sans scroll (juste padding)
             Column(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                modifier = Modifier.padding(20.dp),  // PAS de verticalScroll ici
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Titre

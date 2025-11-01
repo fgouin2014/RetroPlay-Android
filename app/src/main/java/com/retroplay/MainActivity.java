@@ -21,21 +21,13 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.provider.Settings;
-import com.retroplay.fragments.KittFragment;
 
-public class MainActivity extends FragmentActivity implements com.retroplay.fragments.KittFragment.KittFragmentListener {
+public class MainActivity extends FragmentActivity {
     private WebView webView;
     private static final String TAG = "MainActivity";
     
     // Serveur web local (SEULEMENT WebServer pour EmulatorJS)
     private WebServer webServer;
-    
-    // Interface KITT
-    private FrameLayout kittFragmentContainer;
-    private FrameLayout kittDrawerContainer;
-    private KittFragment kittFragment;
-    private boolean isKittVisible = false;
-    private boolean isKittPersistent = false;
     
     // Bouton pour accéder aux jeux
     private Button fabGames;
@@ -167,43 +159,6 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
         finish(); // Close MainActivity
     }
 
-    private void setupWebView() {
-        webView = findViewById(R.id.webview);
-
-        WebSettings webSettings = webView.getSettings();
-        webSettings.setJavaScriptEnabled(true);
-        webSettings.setMediaPlaybackRequiresUserGesture(false);
-        webSettings.setAllowFileAccessFromFileURLs(true);
-        webSettings.setAllowUniversalAccessFromFileURLs(true);
-        webSettings.setDomStorageEnabled(true);
-
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                Log.d(TAG, "Page loaded");
-            }
-        });
-
-        webView.loadUrl("file:///android_asset/webapp/index.html");
-    }
-
-    private void setupKittInterface() {
-        kittFragmentContainer = findViewById(R.id.kitt_fragment_container);
-        kittDrawerContainer = findViewById(R.id.kitt_drawer_container);
-        
-        // Create KITT fragment
-        kittFragment = new KittFragment();
-        kittFragment.setKittFragmentListener(this);
-        
-        Log.i(TAG, "KITT interface initialized");
-    }
-    
-    private void setupKittButton() {
-        // KITT button is now integrated in web interface
-        // Functionality is handled by JavaScript
-        Log.i(TAG, "KITT button integrated in web interface");
-    }
     
     private void setupGamesButton() {
         Log.i(TAG, "setupGamesButton started");
@@ -336,79 +291,10 @@ public class MainActivity extends FragmentActivity implements com.retroplay.frag
         }
     }
 
-    public void openKittInterface() {
-        try {
-            if (!isKittVisible) {
-                showKittInterface();
-            } else {
-                hideKittInterface();
-            }
-            Log.i(TAG, "KITT interface " + (isKittVisible ? "shown" : "hidden"));
-        } catch (Exception e) {
-            Log.e(TAG, "Error launching KITT: ", e);
-            Toast.makeText(this, "Error launching KITT", Toast.LENGTH_SHORT).show();
-        }
-    }
-    
-    private void showKittInterface() {
-        if (kittFragmentContainer != null && kittFragment != null) {
-            // Hide WebView
-            webView.setVisibility(View.GONE);
-            
-            // Show KITT container
-            kittFragmentContainer.setVisibility(View.VISIBLE);
-            
-            // Add KITT fragment if not already added
-            if (kittFragment.getParentFragmentManager() == null || 
-                getSupportFragmentManager().findFragmentByTag("kitt_fragment") == null) {
-                
-                FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
-                transaction.replace(R.id.kitt_fragment_container, kittFragment, "kitt_fragment");
-                transaction.commit();
-            }
-            
-            isKittVisible = true;
-            Log.i(TAG, "KITT interface shown");
-        }
-    }
-    
-    public void hideKittInterface() {
-        if (kittFragmentContainer != null) {
-            // Hide KITT container
-            kittFragmentContainer.setVisibility(View.GONE);
-            
-            // Show WebView
-            webView.setVisibility(View.VISIBLE);
-            
-            isKittVisible = false;
-            Log.i(TAG, "KITT interface hidden");
-        }
-    }
-
     @Override
     public void onBackPressed() {
-        if (isKittVisible && !isKittPersistent) {
-            // If KITT is visible and not in persistent mode, hide it
-            hideKittInterface();
-        } else if (isKittVisible && isKittPersistent) {
-            // In persistent mode, don't allow closing KITT with back button
-            Toast.makeText(this, "KITT persistent mode active - Use PERSIST button to disable", Toast.LENGTH_SHORT).show();
-        } else if (webView.canGoBack()) {
-            // If we can go back in WebView
-            webView.goBack();
-        } else {
-            // Otherwise, close app
-            super.onBackPressed();
-        }
-    }
-    
-    public void setKittPersistentMode(boolean persistent) {
-        isKittPersistent = persistent;
-        Log.i(TAG, "KITT persistent mode: " + (persistent ? "enabled" : "disabled"));
-    }
-    
-    public void toggleKittPersistentMode() {
-        setKittPersistentMode(!isKittPersistent);
+        // MainActivity launches GameListActivity immediately, so this should rarely be called
+        super.onBackPressed();
     }
     
     @Override

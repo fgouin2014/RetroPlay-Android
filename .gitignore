@@ -148,3 +148,4 @@ app/src/main/assets/GameLibrary-Data/arcade/media/box2d/*
 app/src/main/assets/GameLibrary-Data/arcade/media/screenshot/*
 !app/src/main/assets/GameLibrary-Data/arcade/media/screenshot/fallback.png
 
+backup_obsolete_files_*/

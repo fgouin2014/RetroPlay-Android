@@ -778,6 +778,15 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         // QuickActionsBar visibility: Charger état
         quickActionsBarVisible.value = prefs.getBoolean("emulation_quick_actions_bar_visible", true)
         
+        // Crosshair Mode: Charger mode d'affichage du crosshair Zapper
+        val savedCrosshairMode = prefs.getString("emulation_crosshair_mode", "RETROPLAY_ONLY") ?: "RETROPLAY_ONLY"
+        crosshairMode.value = try {
+            CrosshairMode.valueOf(savedCrosshairMode)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Invalid crosshair mode: $savedCrosshairMode, using default")
+            CrosshairMode.RETROPLAY_ONLY
+        }
+        
         // Initialiser le file picker AVANT setContent (CRITIQUE pour lifecycle)
         pickCustomCfgLauncher = registerForActivityResult(
             ActivityResultContracts.OpenDocument()
@@ -1289,10 +1298,14 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 onConfigureZapper = {
                     configureZapperManually()  // Configure Zapper et redémarre ROM
                 },
+                onToggleCrosshairMode = {
+                    toggleCrosshairMode()  // Cycle crosshair mode (RetroPlay/FCEUmm/Both/None)
+                },
                 isFastForwardActive = isFastForwardActive.value,
                 audioMuted = audioMuted.value,
                 currentShaderName = currentShader.value.displayName,
                 quickActionsBarVisible = quickActionsBarVisible.value,
+                crosshairMode = crosshairMode.value,
                 showDipSwitchDialog = showDipSwitchDialog,
                 showCoreOptionsDialog = showCoreOptionsDialog,
                 dipSwitches = dipSwitches,
@@ -1740,6 +1753,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     // État pour QuickActionsBar visibility (MutableState pour reactivity Compose)
     private val quickActionsBarVisible = mutableStateOf(true)
     
+    // État pour mode d'affichage du crosshair Zapper (MutableState pour reactivity Compose)
+    private val crosshairMode = mutableStateOf(CrosshairMode.RETROPLAY_ONLY)
+    
     // Gérer les hotkeys RetroArch
     private fun handleHotkey(action: String) {
         Log.i(TAG, "Hotkey triggered: $action")
@@ -1947,6 +1963,35 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
     }
     
+    // Toggle Crosshair Mode (Cycle entre RetroPlay / FCEUmm / Both / None)
+    private fun toggleCrosshairMode() {
+        crosshairMode.value = crosshairMode.value.next()
+        Log.i(TAG, "[CROSSHAIR] Mode: ${crosshairMode.value.displayName}")
+        
+        // Sauvegarder dans SharedPreferences
+        prefs.edit().putString("emulation_crosshair_mode", crosshairMode.value.name).apply()
+        
+        // Si on est en jeu NES, mettre à jour la config du core dynamiquement
+        if (console == "nes") {
+            val config = CoreConfigManager.loadConfig(this, "FCEUmm").toMutableMap()
+            config["fceumm_show_crosshair"] = if (crosshairMode.value.showFCEUmmCrosshair()) "enabled" else "disabled"
+            CoreConfigManager.saveConfig(this, "FCEUmm", config)
+            
+            // Appliquer au core sans redémarrer
+            val nesVariables = config.map { (key, value) -> com.swordfish.libretrodroid.Variable(key, value) }.toTypedArray()
+            retroView.updateVariables(*nesVariables)
+            Log.i(TAG, "[CROSSHAIR] Updated fceumm_show_crosshair = ${config["fceumm_show_crosshair"]}")
+        }
+        
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                "Crosshair: ${crosshairMode.value.displayName}",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    
     // Lifecycle managed by lifecycle.addObserver(retroView)
     
     override fun onDestroy() {
@@ -2058,10 +2103,12 @@ private fun ComposeEmulatorScreen(
     onCycleShader: () -> Unit = {},
     onToggleQuickActionsBar: () -> Unit = {},
     onConfigureZapper: () -> Unit = {},  // TEST: Configure Zapper manuellement
+    onToggleCrosshairMode: () -> Unit = {},  // Toggle Crosshair mode (RetroPlay/FCEUmm/Both/None)
     isFastForwardActive: Boolean = false,
     audioMuted: Boolean = false,
     currentShaderName: String = "None",
-    quickActionsBarVisible: Boolean = true
+    quickActionsBarVisible: Boolean = true,
+    crosshairMode: CrosshairMode = CrosshairMode.RETROPLAY_ONLY
 ) {
     // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
@@ -2252,6 +2299,16 @@ private fun ComposeEmulatorScreen(
                                     }
                                 }
                         )
+                        
+                        // ZapperCrosshair: Réticule personnalisé RetroPlay (si jeu Zapper et mode actif)
+                        if (isZapperGame && crosshairMode.showRetroPlayCrosshair()) {
+                            ZapperCrosshair(
+                                onTouch = { event ->
+                                    onZapperTouch(event)
+                                },
+                                visible = crosshairMode.showRetroPlayCrosshair()
+                            )
+                        }
                         
                         // Overlay RetroArch fullscreen par-dessus (appelé directement, pas via LayoutPair)
                         // Utiliser State pour recharger dynamiquement quand les prefs changent
@@ -2559,12 +2616,16 @@ private fun ComposeEmulatorScreen(
                             onConfigureZapper()  // TEST: Configure Zapper et redémarre ROM
                             closeQuickMenuWithCooldown()
                         },
+                        onToggleCrosshairMode = {
+                            onToggleCrosshairMode()  // Cycle crosshair mode
+                        },
                         overlaysVisible = overlaysVisible.value,
                         isFastForwardActive = isFastForwardActive,
                         audioMuted = audioMuted,
                         currentShaderName = currentShaderName,
                         quickActionsBarVisible = quickActionsBarVisible,
-                        isZapperGame = isZapperGame  // CRITICAL: Afficher bouton Configure Zapper
+                        isZapperGame = isZapperGame,  // CRITICAL: Afficher bouton Configure Zapper
+                        crosshairMode = crosshairMode  // Mode d'affichage du crosshair
                     )
                 }
                 
@@ -3568,12 +3629,14 @@ private fun QuickMenuDialog(
     onCycleShader: () -> Unit = {},        // Quick Win #4
     onToggleQuickActionsBar: () -> Unit = {},  // QuickActionsBar visibility toggle
     onConfigureZapper: () -> Unit = {},    // TEST: Configure Zapper manuellement
+    onToggleCrosshairMode: () -> Unit = {},  // Toggle Crosshair mode (RetroPlay/FCEUmm/Both/None)
     overlaysVisible: Boolean,
     isFastForwardActive: Boolean = false,
     audioMuted: Boolean = false,
     currentShaderName: String = "None",
     quickActionsBarVisible: Boolean = true,
-    isZapperGame: Boolean = false
+    isZapperGame: Boolean = false,
+    crosshairMode: CrosshairMode = CrosshairMode.RETROPLAY_ONLY
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -3716,6 +3779,27 @@ private fun QuickMenuDialog(
                         )
                     ) {
                         Text("CONFIGURE ZAPPER NOW", color = Color.White)
+                    }
+                    
+                    Spacer(Modifier.height(4.dp))
+                    
+                    // Toggle Crosshair Mode (pour debug / comparaison)
+                    androidx.compose.material3.Button(
+                        onClick = onToggleCrosshairMode,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = when (crosshairMode) {
+                                CrosshairMode.RETROPLAY_ONLY -> Color(0xFF4CAF50)
+                                CrosshairMode.FCEUMM_ONLY -> Color(0xFF2196F3)
+                                CrosshairMode.BOTH -> Color(0xFFFF9800)
+                                CrosshairMode.NONE -> Color(0xFF9E9E9E)
+                            }
+                        )
+                    ) {
+                        Text(
+                            "CROSSHAIR: ${crosshairMode.displayName}",
+                            color = Color.White
+                        )
                     }
                     
                     Spacer(Modifier.height(8.dp))

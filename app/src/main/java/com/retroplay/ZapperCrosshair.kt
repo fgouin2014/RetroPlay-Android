@@ -17,10 +17,12 @@ import androidx.compose.ui.input.pointer.pointerInteropFilter
  * S'affiche uniquement pendant que l'utilisateur touche l'écran.
  * 
  * @param onTouch Callback appelé pour chaque événement tactile
+ * @param visible Si false, le crosshair est masqué (pour mode FCEUmm Only ou None)
  */
 @Composable
 fun ZapperCrosshair(
-    onTouch: (MotionEvent) -> Boolean
+    onTouch: (MotionEvent) -> Boolean,
+    visible: Boolean = true
 ) {
     // État pour suivre la position du doigt
     var touchX by remember { mutableStateOf(0f) }
@@ -41,8 +43,8 @@ fun ZapperCrosshair(
                 onTouch(event)
             }
     ) {
-        // Afficher le réticule uniquement quand l'utilisateur touche l'écran
-        if (isTouching) {
+        // Afficher le réticule uniquement quand l'utilisateur touche l'écran ET que visible=true
+        if (isTouching && visible) {
             val crosshairSize = 50f // Longueur des lignes du réticule
             val strokeWidth = 4f
             val centerDotRadius = 6f

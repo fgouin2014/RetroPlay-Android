@@ -958,12 +958,13 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     gameName = gameName,
                     coreOptions = coreOptions,
                     onApply = { modifiedValues ->
-                        // Extraire le coreId
+                        // Extraire le coreId et nom du core
                         val coreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
-                        val gameId = File(romPath).nameWithoutExtension
+                        val coreName = coreId.replace("_libretro_android", "").replaceFirstChar { it.uppercase() }
                         
-                        // Sauvegarder les modifications
-                        CoreVariableManager.saveVariables(this@NativeComposeEmulatorActivity, gameId, coreId, modifiedValues)
+                        // NOUVEAU: Sauvegarder dans le fichier .cfg au lieu de SharedPreferences
+                        CoreConfigManager.saveConfig(this@NativeComposeEmulatorActivity, coreName, modifiedValues)
+                        Log.i(TAG, "[$coreName] Saved ${modifiedValues.size} options to .cfg file")
                         
                         // Appliquer au core
                         val updatedVars = coreOptions.map { opt ->
@@ -980,7 +981,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                         coreOptions.clear()
                         coreOptions.addAll(updatedVars)
                         
-                        Log.i(TAG, "Applied ${modifiedValues.size} core option changes")
+                        Log.i(TAG, "Applied ${modifiedValues.size} core option changes to running core")
                     },
                     onDismiss = { showCoreOptionsDialog.value = false }
                 )

@@ -741,6 +741,17 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         isZapperGame = ZapperGameDetector.isZapperGame(gameName, console)
         if (isZapperGame) {
             Log.i(TAG, "[ZAPPER] Zapper game detected EARLY: $gameName")
+            
+            // Recommandation mode panoramique pour meilleure précision
+            val configuration = resources.configuration
+            val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+            if (isPortrait) {
+                android.widget.Toast.makeText(
+                    this,
+                    "For better Zapper accuracy, use landscape mode",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
         }
         
         Log.i(TAG, "🟢 NativeComposeEmulator starting: $gameName ($console) from $romPath" + 

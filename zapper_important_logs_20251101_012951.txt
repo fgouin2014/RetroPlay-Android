@@ -1,0 +1,194 @@
+﻿
+zapper_test_logs_20251101_012823.txt:129:11-01 01:28:24.663 32667 32667 I ZapperGameDetector: Zapper game detected: Duck Hunt 
+(World) (normalized: duck hunt)
+zapper_test_logs_20251101_012823.txt:130:11-01 01:28:24.663 32667 32667 I RetroArchEmulator: [ZAPPER] Zapper game detected EARLY: 
+Duck Hunt (World)
+zapper_test_logs_20251101_012823.txt:136:11-01 01:28:24.667 32667 32667 I RetroArchEmulator: [INIT] Configuring core variables for 
+console: 'nes', isZapperGame=true
+zapper_test_logs_20251101_012823.txt:137:11-01 01:28:24.667 32667 32667 I RetroArchEmulator: [NES] Configuring core variables for 
+console: 'nes', isZapperGame=true
+zapper_test_logs_20251101_012823.txt:138:11-01 01:28:24.667 32667 32667 I RetroArchEmulator: [NES] Zapper variables set: 
+mode=touchscreen, trigger=enabled, sensor=enabled
+zapper_test_logs_20251101_012823.txt:151:11-01 01:28:24.673 32667 32667 D libretrodroid: Received controller for player 0: 258 
+Zapper
+zapper_test_logs_20251101_012823.txt:155:11-01 01:28:24.673 32667 32667 D libretrodroid: Received controller for player 1: 258 
+Zapper
+zapper_test_logs_20251101_012823.txt:470:11-01 01:28:26.043 32667  1700 D libretrodroid: Received variable fceumm_zapper_mode: 
+Zapper Mode; clightgun|stlightgun|touchscreen|mouse
+zapper_test_logs_20251101_012823.txt:471:11-01 01:28:26.043 32667  1700 D libretrodroid: Assigning variable fceumm_zapper_mode: 
+touchscreen
+zapper_test_logs_20251101_012823.txt:472:11-01 01:28:26.043 32667  1700 D libretrodroid: Received variable fceumm_show_crosshair: 
+Show Zapper Crosshair; enabled|disabled
+zapper_test_logs_20251101_012823.txt:474:11-01 01:28:26.043 32667  1700 D libretrodroid: Received variable fceumm_zapper_tolerance: 
+Zapper Tolerance; 6|0|1|2|3|4|5|7|8|9|10|11|12|13|14|15|16|17|18|19|20
+zapper_test_logs_20251101_012823.txt:475:11-01 01:28:26.043 32667  1700 D libretrodroid: Assigning variable 
+fceumm_zapper_tolerance: 6
+zapper_test_logs_20251101_012823.txt:476:11-01 01:28:26.043 32667  1700 D libretrodroid: Received variable fceumm_zapper_trigger: 
+Invert Zapper Trigger Signal; enabled|disabled
+zapper_test_logs_20251101_012823.txt:477:11-01 01:28:26.043 32667  1700 D libretrodroid: Assigning variable fceumm_zapper_trigger: 
+enabled
+zapper_test_logs_20251101_012823.txt:478:11-01 01:28:26.043 32667  1700 D libretrodroid: Received variable fceumm_zapper_sensor: 
+Invert Zapper Sensor Signal; enabled|disabled
+zapper_test_logs_20251101_012823.txt:479:11-01 01:28:26.043 32667  1700 D libretrodroid: Assigning variable fceumm_zapper_sensor: 
+enabled
+zapper_test_logs_20251101_012823.txt:515:11-01 01:28:26.045 32667  1700 D libretrodroid: Variable requested fceumm_zapper_mode
+zapper_test_logs_20251101_012823.txt:519:11-01 01:28:26.045 32667  1700 D libretrodroid: Variable requested fceumm_zapper_tolerance
+zapper_test_logs_20251101_012823.txt:525:11-01 01:28:26.045 32667  1700 D libretrodroid: Variable requested fceumm_zapper_trigger
+zapper_test_logs_20251101_012823.txt:527:11-01 01:28:26.045 32667  1700 D libretrodroid: Variable requested fceumm_zapper_sensor
+zapper_test_logs_20251101_012823.txt:733:11-01 01:28:26.082 32667 32667 I Libretro Core:  Player 2: Zapper
+zapper_test_logs_20251101_012823.txt:734:11-01 01:28:26.082 32667 32667 I RetroArchEmulator: [NES] Zapper configured as 
+RETRO_DEVICE_ZAPPER (258) on port 2 (index 1)
+zapper_test_logs_20251101_012823.txt:1180:11-01 01:28:26.192 32667  1700 D libretrodroid: Variable requested fceumm_zapper_mode
+zapper_test_logs_20251101_012823.txt:1184:11-01 01:28:26.192 32667  1700 D libretrodroid: Variable requested fceumm_zapper_tolerance
+zapper_test_logs_20251101_012823.txt:1190:11-01 01:28:26.192 32667  1700 D libretrodroid: Variable requested fceumm_zapper_trigger
+zapper_test_logs_20251101_012823.txt:1192:11-01 01:28:26.192 32667  1700 D libretrodroid: Variable requested fceumm_zapper_sensor
+zapper_test_logs_20251101_012823.txt:1233:11-01 01:28:26.192 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1234:11-01 01:28:26.192 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1235:11-01 01:28:26.192 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1297:11-01 01:28:26.210 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1298:11-01 01:28:26.210 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1299:11-01 01:28:26.210 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1321:11-01 01:28:26.226 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1322:11-01 01:28:26.226 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1323:11-01 01:28:26.226 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1337:11-01 01:28:26.243 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1338:11-01 01:28:26.243 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1339:11-01 01:28:26.243 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1353:11-01 01:28:26.259 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1354:11-01 01:28:26.259 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1355:11-01 01:28:26.259 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1368:11-01 01:28:26.276 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1369:11-01 01:28:26.276 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1370:11-01 01:28:26.276 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1383:11-01 01:28:26.293 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1384:11-01 01:28:26.293 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1385:11-01 01:28:26.293 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1399:11-01 01:28:26.309 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1400:11-01 01:28:26.309 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1401:11-01 01:28:26.309 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1414:11-01 01:28:26.326 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1415:11-01 01:28:26.326 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1416:11-01 01:28:26.326 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1429:11-01 01:28:26.342 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1430:11-01 01:28:26.342 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1431:11-01 01:28:26.342 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1445:11-01 01:28:26.359 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1446:11-01 01:28:26.359 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1447:11-01 01:28:26.359 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1460:11-01 01:28:26.376 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1461:11-01 01:28:26.376 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1462:11-01 01:28:26.376 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1475:11-01 01:28:26.392 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1476:11-01 01:28:26.392 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1477:11-01 01:28:26.392 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1493:11-01 01:28:26.410 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1494:11-01 01:28:26.410 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1495:11-01 01:28:26.410 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1508:11-01 01:28:26.426 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1509:11-01 01:28:26.426 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1510:11-01 01:28:26.426 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1524:11-01 01:28:26.443 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1525:11-01 01:28:26.443 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1526:11-01 01:28:26.443 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1539:11-01 01:28:26.459 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1540:11-01 01:28:26.459 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1541:11-01 01:28:26.459 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1554:11-01 01:28:26.476 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1555:11-01 01:28:26.476 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1556:11-01 01:28:26.476 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1569:11-01 01:28:26.493 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1570:11-01 01:28:26.493 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1572:11-01 01:28:26.493 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1585:11-01 01:28:26.509 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1586:11-01 01:28:26.509 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1587:11-01 01:28:26.509 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1600:11-01 01:28:26.526 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1601:11-01 01:28:26.526 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1602:11-01 01:28:26.526 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1616:11-01 01:28:26.543 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1617:11-01 01:28:26.543 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1618:11-01 01:28:26.543 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1631:11-01 01:28:26.560 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1632:11-01 01:28:26.560 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1633:11-01 01:28:26.560 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1646:11-01 01:28:26.576 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1647:11-01 01:28:26.576 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1648:11-01 01:28:26.576 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 PRESSED=0 
+(X=-1.000 Y=-1.000)
+zapper_test_logs_20251101_012823.txt:1661:11-01 01:28:26.593 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 X=-32765 
+(raw=-1.000)
+zapper_test_logs_20251101_012823.txt:1662:11-01 01:28:26.593 32667  1700 D libretrodroid: [NATIVE POINTER] port=1 Y=-32765 
+(raw=-1.000)
+
+

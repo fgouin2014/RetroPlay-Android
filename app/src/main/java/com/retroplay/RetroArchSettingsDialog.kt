@@ -167,22 +167,26 @@ fun RetroArchSettingsDialog(
     }
     
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.85f),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isTransparent) 
-                    Color(0xDD000000).copy(alpha = 0.3f)  // Preview: 30% transparent
-                else 
-                    Color(0xDD000000).copy(alpha = 0.4f)  // Normal: 40% transparent
-            )
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Card(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
+                    .fillMaxWidth(0.95f)
+                    .fillMaxHeight(0.85f)
+                    .verticalScroll(scrollState),  // SCROLL SUR LE CARD
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isTransparent) 
+                        Color(0xDD000000).copy(alpha = 0.3f)  // Preview: 30% transparent
+                    else 
+                        Color(0xDD000000).copy(alpha = 0.4f)  // Normal: 40% transparent
+                )
             ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),  // PAS de fillMaxSize
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                 // Title
                 Text(
                     text = "RetroArch Overlay Settings",
@@ -841,5 +845,6 @@ fun RetroArchSettingsDialog(
             }
         }
     }
+}
 }
 

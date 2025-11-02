@@ -72,6 +72,7 @@ fun RetroArchOverlayScreen(
     showInputsMode: com.retroplay.overlay.models.ShowInputsMode = com.retroplay.overlay.models.ShowInputsMode.NONE,
     hideWhenGamepadConnected: Boolean = false,
     analogRecenterZone: Int = 0,           // Recentrage analog sticks (0-100)
+    isZapperGame: Boolean = false,         // Mode Zapper: ne consommer QUE les touches sur boutons
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"
@@ -123,7 +124,9 @@ fun RetroArchOverlayScreen(
                 }
             }
             .pointerInteropFilter { event ->
-                handleTouchEvent(
+                // CRITIQUE: Retourner true SEULEMENT si un bouton est touché
+                // Sinon retourner false pour laisser passer au Zapper en dessous
+                val buttonWasTouched = handleTouchEvent(
                     event = event,
                     layout = scaledLayout,
                     screenSize = screenSize,
@@ -141,7 +144,16 @@ fun RetroArchOverlayScreen(
                     dpadDiagonalSensitivity = dpadDiagonalSensitivity,
                     abxyDiagonalSensitivity = abxyDiagonalSensitivity
                 )
-                true
+                // Si un bouton a été touché, capturer l'événement
+                // Sinon, laisser passer au Zapper en dessous (pour jeux Duck Hunt)
+                if (isZapperGame) {
+                    // Mode Zapper: Ne consommer QUE si un bouton est touché
+                    // Sinon laisser passer au Zapper en dessous
+                    buttonWasTouched
+                } else {
+                    // Mode normal: toujours consommer
+                    true
+                }
             }
     ) {
         // Canvas unique pour afficher TOUS les boutons
@@ -361,6 +373,9 @@ private fun handleTouchEvent(
     val TAG = "TouchHandler"
     val ANALOG_DEADZONE = 0.15f  // 15% dead zone (zone morte)
     
+    // Track si un bouton/analog a été touché (pour retourner true/false)
+    var buttonOrAnalogTouched = false
+    
     when (event.actionMasked) {
         MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
             val pointerIndex = event.actionIndex
@@ -431,7 +446,7 @@ private fun handleTouchEvent(
                     }
                 }
                 // Ne pas traiter comme bouton normal
-                return true
+                buttonOrAnalogTouched = true
             }
             
             // Si ce n'est pas un analog stick, traiter comme bouton normal
@@ -442,6 +457,11 @@ private fun handleTouchEvent(
             // DEBUG: Log si plusieurs boutons détectés (chevauchement potentiel)
             if (touchedButtons.size > 1) {
                 Log.w(TAG, "OVERLAP: ${touchedButtons.size} buttons detected at ($x,$y): ${touchedButtons.joinToString()}")
+            }
+            
+            // Si au moins un bouton touché, marquer comme "bouton touché"
+            if (touchedButtons.isNotEmpty()) {
+                buttonOrAnalogTouched = true
             }
             
             // Enregistrer les boutons pressés pour ce pointeur
@@ -481,6 +501,7 @@ private fun handleTouchEvent(
                 // Vérifier si ce pointeur est sur un analog stick
                 var handledByAnalog = false
                 
+                // Si ce touch est déjà tracked (analog ou bouton), on le gère
                 if (analogLeftState.value.pointerId == pointerId) {
                     // Ce doigt contrôle le stick gauche
                     val leftStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
@@ -625,7 +646,22 @@ private fun handleTouchEvent(
         }
     }
     
-    return true
+    // Retourner true seulement si un bouton/analog a été touché lors d'un ACTION_DOWN
+    // OU si on est en train de traiter un touch déjà enregistré (MOVE/UP/CANCEL)
+    return when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+            // Pour DOWN: retourner true seulement si un bouton/analog touché
+            buttonOrAnalogTouched
+        }
+        MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+            // Pour MOVE/UP/CANCEL: retourner true si au moins un pointerId est tracked
+            val hasTrackedPointers = pressedButtons.isNotEmpty() || 
+                                   analogLeftState.value.pointerId != null || 
+                                   analogRightState.value.pointerId != null
+            hasTrackedPointers
+        }
+        else -> false
+    }
 }
 
 /**

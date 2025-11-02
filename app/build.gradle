@@ -76,8 +76,8 @@ dependencies {
     // Chrome Custom Tabs (pour PSP uniquement)
     implementation 'androidx.browser:browser:1.7.0'
     
-    // LibretroDroid 0.13.0 (version stable de Lemuroid)
-    implementation 'com.github.Swordfish90:LibretroDroid:0.13.0'
+    // LibretroDroid LOCAL (version modifiée avec logs natifs POINTER)
+    implementation project(':libretrodroid')
     
     // Gson pour JSON parsing
     implementation 'com.google.code.gson:gson:2.10.1'

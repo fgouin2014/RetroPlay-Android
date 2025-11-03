@@ -56,7 +56,14 @@ fun AdvancedOverlaySettingsDialog(
     
     // Mouse options (valeurs par défaut RetroArch officielles)
     var mouseSpeed by remember { mutableStateOf(prefs.getFloat("overlay_${console}_mouse_speed", 1.0f)) }
-    var mouseSwipeThreshold by remember { mutableStateOf(prefs.getFloat("overlay_${console}_mouse_swipe_threshold", 1.0f)) }  // DEFAULT: 1.0 pixels (RetroArch officiel)
+    var mouseSwipeThreshold by remember { mutableStateOf(
+        try {
+            prefs.getFloat("overlay_${console}_mouse_swipe_threshold", 1.0f)
+        } catch (e: ClassCastException) {
+            // Migration: old value was Int, convert to Float
+            prefs.getInt("overlay_${console}_mouse_swipe_threshold", 1).toFloat()
+        }
+    ) }  // DEFAULT: 1.0 pixels (RetroArch officiel)
     var mouseHoldToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", true)) }  // DEFAULT: true (RetroArch officiel)
     var mouseHoldMsec by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_hold_msec", 200)) }  // DEFAULT: 200ms (RetroArch officiel)
     var mouseDoubleTapToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false)) }

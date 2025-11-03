@@ -2501,8 +2501,8 @@ private fun ComposeEmulatorScreen(
                                 // Utiliser advancedSettingsState pour rechargement dynamique
                                 val advancedSettings = advancedSettingsState.value
                                 
-                                // Vérifier si un menu est ouvert
-                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showGamePadSettings.value || showAdvancedOverlaySettings.value
+                                // Vérifier si un menu est ouvert (INCLURE Core Options Dialog!)
+                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showGamePadSettings.value || showAdvancedOverlaySettings.value || showCoreOptionsDialog.value
                                 
                                 // Logique hideInMenu et behindMenu (RetroArch officiel)
                                 val shouldShowOverlay = when {

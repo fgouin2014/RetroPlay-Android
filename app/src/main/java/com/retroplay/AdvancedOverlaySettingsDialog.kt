@@ -211,7 +211,7 @@ fun AdvancedOverlaySettingsDialog(
                             )
                         )
                         Text(
-                            "Recenter analog sticks on first touch (0=no recenter, 100=always)",
+                            "Zone autour du centre où le stick se recentre sur le premier touch (0=centre fixe, 100=recentre partout)",
                             color = Color(0xFF888888),
                             fontSize = 11.sp
                         )

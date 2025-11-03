@@ -1529,13 +1529,30 @@ private fun ComposeEmulatorScreen(
                         // Utiliser State pour recharger dynamiquement quand les prefs changent
                         val overlayPreferenceState = remember { mutableStateOf(com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)) }
                         
+                        // Utiliser State pour recharger dynamiquement les advanced settings
+                        val advancedSettingsState = remember { mutableStateOf(com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)) }
+                        
                         // CRITIQUE: Garder une référence forte au listener pour éviter le garbage collection
                         val preferenceListener = remember {
                             android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
                                 android.util.Log.d("ComposeEmulator", "⚙️ Preference changed: key='$key' | console='$console'")
                                 val matchesOverlay = key?.startsWith("overlay_$console") == true
                                 val matchesVariant = key == "gamepad_${console}_variant"
-                                android.util.Log.d("ComposeEmulator", "  matchesOverlay=$matchesOverlay, matchesVariant=$matchesVariant")
+                                // Détecter les advanced settings (sensibilité, opacity, recenter, etc.)
+                                val matchesAdvanced = key?.startsWith("overlay_${console}_dpad_diagonal_sensitivity") == true ||
+                                                    key?.startsWith("overlay_${console}_abxy_diagonal_sensitivity") == true ||
+                                                    key?.startsWith("overlay_${console}_analog_recenter_zone") == true ||
+                                                    key?.startsWith("overlay_${console}_opacity") == true ||
+                                                    key?.startsWith("overlay_${console}_aspect_adjust") == true ||
+                                                    key?.startsWith("overlay_${console}_hide_in_menu") == true ||
+                                                    key?.startsWith("overlay_${console}_behind_menu") == true ||
+                                                    key?.startsWith("overlay_${console}_hide_when_gamepad") == true ||
+                                                    key?.startsWith("overlay_${console}_show_inputs") == true ||
+                                                    key?.startsWith("overlay_${console}_show_inputs_port") == true ||
+                                                    key?.startsWith("overlay_${console}_lightgun") == true ||
+                                                    key?.startsWith("overlay_${console}_mouse") == true
+                                
+                                android.util.Log.d("ComposeEmulator", "  matchesOverlay=$matchesOverlay, matchesVariant=$matchesVariant, matchesAdvanced=$matchesAdvanced")
                                 
                                 if (matchesOverlay || matchesVariant) {
                                     val newPref = com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)
@@ -1543,6 +1560,12 @@ private fun ComposeEmulatorScreen(
                                     android.util.Log.i("ComposeEmulator", "🔄 Overlay preference reloaded for $console: overlay='${newPref?.overlayName}' landscape='${newPref?.landscapeLayout}' portrait='${newPref?.portraitLayout}'")
                                     // Reset currentRetroArchLayout pour forcer l'utilisation de la nouvelle préférence
                                     currentRetroArchLayout = null
+                                }
+                                
+                                if (matchesAdvanced) {
+                                    val newAdvanced = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+                                    advancedSettingsState.value = newAdvanced
+                                    android.util.Log.i("ComposeEmulator", "🔄 Advanced settings reloaded: dpadSens=${newAdvanced.dpadDiagonalSensitivity} abxySens=${newAdvanced.abxyDiagonalSensitivity} recenter=${newAdvanced.analogRecenterZone} opacity=${newAdvanced.opacity}")
                                 }
                             }
                         }
@@ -1618,10 +1641,8 @@ private fun ComposeEmulatorScreen(
                                     }
                                 }
                                 
-                                // Charger advanced settings
-                                val advancedSettings = remember(console) {
-                                    com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
-                                }
+                                // Utiliser advancedSettingsState pour rechargement dynamique
+                                val advancedSettings = advancedSettingsState.value
                                 
                                 // key() force le recompose quand layoutName OU orientation change
                                 // Afficher seulement si overlaysVisible est true

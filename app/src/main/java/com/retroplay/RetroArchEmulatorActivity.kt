@@ -561,6 +561,11 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             Log.w(TAG, "[ZAPPER] Cannot get aspect ratio from core, using NES default (256:240)")
             256f / 240f  // Fallback NES
         }
+        
+        // Récupérer les dimensions de rendu du core (pour debug)
+        val gameWidth = try { retroView.getGameGeometryWidth() } catch (e: Exception) { 256 }
+        val gameHeight = try { retroView.getGameGeometryHeight() } catch (e: Exception) { 240 }
+        
         val screenAspectRatio = bounds.width / bounds.height
         
         val actualViewport = if (screenAspectRatio > coreAspectRatio) {
@@ -603,12 +608,25 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         val libretroX = ((relativeX - 0.5f) * 2.0f * 32767f).toInt()  // Conversion LibretroDroid
         val libretroY = ((relativeY - 0.5f) * 2.0f * 32767f).toInt()
         
-        // Conversion FCEUmm (simulation de libretro.c ligne 2454-2455)
-        // offset_y = (crop_overscan_v_top * 0x133) + 1, généralement = 1
-        val fceummOffsetX = -1  // crop_overscan_h_left * 0x120 - 1 (généralement -1 si crop=0)
-        val fceummOffsetY = 1   // crop_overscan_v_top * 0x133 + 1 (généralement 1 si crop=0)
-        val fceummX = ((libretroX + (32767 + fceummOffsetX)) * 256) / ((32767 + fceummOffsetX) * 2)
-        val fceummY = ((libretroY + (32767 + fceummOffsetY)) * 240) / ((32767 + fceummOffsetY) * 2)
+        // Conversion FCEUmm (simulation de libretro.c ligne 2442-2443, 2454-2455)
+        // Lire les valeurs de crop overscan depuis le .cfg
+        val config = if (console == "nes") {
+            CoreConfigManager.loadConfig(this, "FCEUmm")
+        } else {
+            emptyMap()
+        }
+        val cropTop = config["fceumm_overscan_v_top"]?.toIntOrNull() ?: 8
+        val cropLeft = config["fceumm_overscan_h_left"]?.toIntOrNull() ?: 0
+        
+        val fceummOffsetX = (cropLeft * 0x120) - 1  // Ex: (0 * 0x120) - 1 = -1
+        val fceummOffsetY = (cropTop * 0x133) + 1   // Ex: (8 * 0x133) + 1 = 2457
+        
+        // max_width et max_height dans FCEUmm = dimensions APRÈS crop
+        val maxWidth = gameWidth   // 256 (pas de crop horizontal)
+        val maxHeight = gameHeight // 224 (avec crop 8+8) ou 240 (sans crop)
+        
+        val fceummX = ((libretroX + (32767 + fceummOffsetX)) * maxWidth) / ((32767 + fceummOffsetX) * 2)
+        val fceummY = ((libretroY + (32767 + fceummOffsetY)) * maxHeight) / ((32767 + fceummOffsetY) * 2)
         
         // DEBUG: Calculer où FCEUmm va dessiner le crosshair (NES coords 0-255, 0-239)
         // Le crosshair FCEUmm est dessiné à FCEU_DrawGunSight(buf, mousedata[0], mousedata[1])
@@ -616,9 +634,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         // CONVERSION INVERSE: Où FCEUmm pense qu'on vise en pixels écran (pour debug)
         // fceummX/Y sont en coordonnées NES (0-255, 0-239)
-        // Pour convertir en pixels viewport: fceummY / 240.0 * viewportHeight + viewportTop
-        val fceummCrosshairXInViewport = (fceummX / 256.0f) * viewportWidth + viewportLeft
-        val fceummCrosshairYInViewport = (fceummY / 240.0f) * viewportHeight + viewportTop
+        // max_height dans FCEUmm = gameHeight (224 avec crop, 240 sans crop)
+        // Pour convertir en pixels viewport: fceummY / gameHeight * viewportHeight + viewportTop
+        val fceummCrosshairXInViewport = (fceummX / gameWidth.toFloat()) * viewportWidth + viewportLeft
+        val fceummCrosshairYInViewport = (fceummY / gameHeight.toFloat()) * viewportHeight + viewportTop
         val fceummCrosshairXOnScreen = fceummCrosshairXInViewport + bounds.left
         val fceummCrosshairYOnScreen = fceummCrosshairYInViewport + bounds.top
         
@@ -637,20 +656,25 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 )
                 
                 if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-                    // NOUVEAU: Envoyer MOUSE BUTTON LEFT (trigger)
-                    // RetroArch Android mappe le trigger Zapper à Mouse Button 1 (clic gauche)
-                    retroView.sendMouseButton(
-                        com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                        true,  // Pressed
-                        lightgunPort
-                    )
-                    Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $lightgunPort")
+                    // Déclencher le trigger selon l'option triggerOnTouch
+                    if (triggerOnTouch) {
+                        // NOUVEAU: Envoyer MOUSE BUTTON LEFT (trigger)
+                        // RetroArch Android mappe le trigger Zapper à Mouse Button 1 (clic gauche)
+                        retroView.sendMouseButton(
+                            com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                            true,  // Pressed
+                            lightgunPort
+                        )
+                        Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $lightgunPort (triggerOnTouch=true)")
+                    } else {
+                        Log.i(TAG, "[ZAPPER] Touch DOWN registered, waiting for UP to trigger (triggerOnTouch=false)")
+                    }
                     
                     Log.d(TAG, "[ZAPPER CONVERSIONS]")
                     Log.d(TAG, "  1. Touch écran (raw):      (${touchX.toInt()}, ${touchY.toInt()})")
                     Log.d(TAG, "  2. GLRetroView bounds:     left=${bounds.left.toInt()}, top=${bounds.top.toInt()}, right=${bounds.right.toInt()}, bottom=${bounds.bottom.toInt()}")
                     Log.d(TAG, "  3. Touch in View coords:   (${touchXInView.toInt()}, ${touchYInView.toInt()})")
-                    Log.d(TAG, "  4. Core Aspect Ratio:      $coreAspectRatio (screen: $screenAspectRatio)")
+                    Log.d(TAG, "  4. Game Geometry:          ${gameWidth}x${gameHeight} (ratio: $coreAspectRatio, crop: top=$cropTop bottom=${config["fceumm_overscan_v_bottom"] ?: "8"})")
                     Log.d(TAG, "  5. Viewport LibretroDroid: left=${viewport.left}, top=${viewport.top}, right=${viewport.right}, bottom=${viewport.bottom}")
                     Log.d(TAG, "  6. Viewport CORRECTED:     left=${actualViewport.left}, top=${actualViewport.top}, right=${actualViewport.right}, bottom=${actualViewport.bottom}")
                     Log.d(TAG, "  7. Viewport pixels (View): left=${viewportLeft.toInt()}, top=${viewportTop.toInt()}, right=${viewportRight.toInt()}, bottom=${viewportBottom.toInt()}")
@@ -658,12 +682,13 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     Log.d(TAG, "  9. Clamped to viewport:    (${clampedX.toInt()}, ${clampedY.toInt()})")
                     Log.d(TAG, "  10. Relative [0-1]:        ($relativeX, $relativeY)")
                     Log.d(TAG, "  11. Libretro int16:        ($libretroX, $libretroY)")
-                    Log.d(TAG, "  12. FCEUmm NES [0-255]x[0-239]: ($fceummX, $fceummY)")
-                    val nesValid = fceummX in 0..255 && fceummY in 0..239
-                    Log.d(TAG, "  13. NES coords valid?      $nesValid")
-                    Log.d(TAG, "  14. FCEUmm crosshair (screen): (${fceummCrosshairXOnScreen.toInt()}, ${fceummCrosshairYOnScreen.toInt()})")
-                    Log.d(TAG, "  15. Delta (touch - FCEUmm): (${deltaX.toInt()}px, ${deltaY.toInt()}px) ${if (deltaY > 0) "FCEUmm trop BAS" else if (deltaY < 0) "FCEUmm trop HAUT" else "ALIGNÉ"}")
-                    Log.d(TAG, "  16. Port: $lightgunPort | PRESSED: ${relativeX >= 0f && relativeY >= 0f}")
+                    Log.d(TAG, "  12. FCEUmm offsets:        X=$fceummOffsetX Y=$fceummOffsetY")
+                    Log.d(TAG, "  13. FCEUmm NES [0-${maxWidth-1}]x[0-${maxHeight-1}]: ($fceummX, $fceummY)")
+                    val nesValid = fceummX in 0 until maxWidth && fceummY in 0 until maxHeight
+                    Log.d(TAG, "  14. NES coords valid?      $nesValid")
+                    Log.d(TAG, "  15. FCEUmm crosshair (screen): (${fceummCrosshairXOnScreen.toInt()}, ${fceummCrosshairYOnScreen.toInt()})")
+                    Log.d(TAG, "  16. Delta (touch - FCEUmm): (${deltaX.toInt()}px, ${deltaY.toInt()}px) ${if (deltaY > 0) "FCEUmm trop BAS" else if (deltaY < 0) "FCEUmm trop HAUT" else "ALIGNÉ"}")
+                    Log.d(TAG, "  17. Port: $lightgunPort | PRESSED: ${relativeX >= 0f && relativeY >= 0f}")
                     
                     // NOTE: En mode RetroPointer, le trigger est AUTOMATIQUE via POINTER_PRESSED
                     // FCEUmm lit: input_cb(port, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED)
@@ -677,6 +702,21 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             }
             
             android.view.MotionEvent.ACTION_UP -> {
+                // Si triggerOnTouch = false, déclencher le trigger MAINTENANT (au release)
+                if (!triggerOnTouch) {
+                    retroView.sendMouseButton(
+                        com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                        true,  // Pressed
+                        lightgunPort
+                    )
+                    Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $lightgunPort (triggerOnTouch=false, firing on UP)")
+                    
+                    // Attendre triggerDelay si configuré
+                    if (triggerDelay > 0) {
+                        Thread.sleep(triggerDelay.toLong())
+                    }
+                }
+                
                 // CRITIQUE: Envoyer coordonnées NÉGATIVES pour forcer POINTER_PRESSED = 0
                 // LibretroDroid calcule: POINTER_PRESSED = (X >= 0 && Y >= 0) ? 1 : 0
                 // Si on ne fait pas ça, les coordonnées restent en mémoire et POINTER_PRESSED reste à 1!
@@ -688,7 +728,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 )
                 Log.d(TAG, "[ZAPPER] Touch UP - POINTER reset to (-1, -1), POINTER_PRESSED now FALSE")
                 
-                // NOUVEAU: Release MOUSE BUTTON LEFT
+                // Release MOUSE BUTTON LEFT
                 retroView.sendMouseButton(
                     com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
                     false,  // Released
@@ -2361,6 +2401,9 @@ private fun ComposeEmulatorScreen(
                         // Utiliser State pour recharger dynamiquement quand les prefs changent
                         val overlayPreferenceState = remember { mutableStateOf(com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)) }
                         
+                        // Utiliser State pour recharger dynamiquement les advanced settings
+                        val advancedSettingsState = remember { mutableStateOf(com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)) }
+                        
                         // CRITIQUE: Garder une référence forte au listener pour éviter le garbage collection
                         val preferenceListener = remember {
                             android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -2368,7 +2411,21 @@ private fun ComposeEmulatorScreen(
                                 val matchesOverlay = key?.startsWith("overlay_$console") == true
                                 val matchesVariant = key == "gamepad_${console}_variant"
                                 val matchesDebug = key == "overlay_debug_mode"
-                                android.util.Log.d("ComposeEmulator", "  matchesOverlay=$matchesOverlay, matchesVariant=$matchesVariant, matchesDebug=$matchesDebug")
+                                // Détecter les advanced settings (sensibilité, opacity, recenter, etc.)
+                                val matchesAdvanced = key?.startsWith("overlay_${console}_dpad_diagonal_sensitivity") == true ||
+                                                    key?.startsWith("overlay_${console}_abxy_diagonal_sensitivity") == true ||
+                                                    key?.startsWith("overlay_${console}_analog_recenter_zone") == true ||
+                                                    key?.startsWith("overlay_${console}_opacity") == true ||
+                                                    key?.startsWith("overlay_${console}_aspect_adjust") == true ||
+                                                    key?.startsWith("overlay_${console}_hide_in_menu") == true ||
+                                                    key?.startsWith("overlay_${console}_behind_menu") == true ||
+                                                    key?.startsWith("overlay_${console}_hide_when_gamepad") == true ||
+                                                    key?.startsWith("overlay_${console}_show_inputs") == true ||
+                                                    key?.startsWith("overlay_${console}_show_inputs_port") == true ||
+                                                    key?.startsWith("overlay_${console}_lightgun") == true ||
+                                                    key?.startsWith("overlay_${console}_mouse") == true
+                                
+                                android.util.Log.d("ComposeEmulator", "  matchesOverlay=$matchesOverlay, matchesVariant=$matchesVariant, matchesDebug=$matchesDebug, matchesAdvanced=$matchesAdvanced")
                                 
                                 if (matchesOverlay || matchesVariant) {
                                     val newPref = com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)
@@ -2381,6 +2438,12 @@ private fun ComposeEmulatorScreen(
                                 if (matchesDebug) {
                                     debugModeState.value = prefs.getBoolean("overlay_debug_mode", false)
                                     android.util.Log.d("ComposeEmulator", "Debug mode changed: ${debugModeState.value}")
+                                }
+                                
+                                if (matchesAdvanced) {
+                                    val newAdvanced = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+                                    advancedSettingsState.value = newAdvanced
+                                    android.util.Log.i("ComposeEmulator", "🔄 Advanced settings reloaded: dpadSens=${newAdvanced.dpadDiagonalSensitivity} abxySens=${newAdvanced.abxyDiagonalSensitivity} recenter=${newAdvanced.analogRecenterZone} opacity=${newAdvanced.opacity}")
                                 }
                             }
                         }
@@ -2435,10 +2498,8 @@ private fun ComposeEmulatorScreen(
                             if (layoutName != null) {
                                 overlayConfig?.layouts?.get(layoutName)?.let { overlayLayout ->
                                 
-                                // Charger advanced settings
-                                val advancedSettings = remember(console) {
-                                    com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
-                                }
+                                // Utiliser advancedSettingsState pour rechargement dynamique
+                                val advancedSettings = advancedSettingsState.value
                                 
                                 // key() force le recompose quand layoutName OU orientation change
                                 // Afficher seulement si overlaysVisible est true

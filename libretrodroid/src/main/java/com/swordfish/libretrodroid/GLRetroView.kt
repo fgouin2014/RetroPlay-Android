@@ -225,6 +225,22 @@ class GLRetroView(
     fun getAspectRatio(): Float {
         return LibretroDroid.getAspectRatio()
     }
+    
+    /**
+     * Get the game render width from the core geometry
+     * @return Width in pixels, e.g. 256 for NES
+     */
+    fun getGameGeometryWidth(): Int {
+        return LibretroDroid.getGameGeometryWidth()
+    }
+    
+    /**
+     * Get the game render height from the core geometry
+     * @return Height in pixels, e.g. 240 for NES
+     */
+    fun getGameGeometryHeight(): Int {
+        return LibretroDroid.getGameGeometryHeight()
+    }
 
     fun getAvailableDisks() = runOnGLThread { LibretroDroid.availableDisks() }
     fun getCurrentDisk() = runOnGLThread { LibretroDroid.currentDisk() }

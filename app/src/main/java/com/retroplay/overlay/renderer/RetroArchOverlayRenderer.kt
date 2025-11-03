@@ -44,7 +44,9 @@ data class AnalogStickState(
     val pointerId: Int? = null,  // ID du doigt qui contrôle ce stick
     val isActivated: Boolean = false,  // true si le stick a été touché (permet hitbox étendue)
     val visualOffsetX: Float = 0f,  // Offset visuel pour movable (pixels)
-    val visualOffsetY: Float = 0f   // Offset visuel pour movable (pixels)
+    val visualOffsetY: Float = 0f,   // Offset visuel pour movable (pixels)
+    val recenterOffsetX: Float = 0f,  // Offset du centre si recentré (pixels)
+    val recenterOffsetY: Float = 0f   // Offset du centre si recentré (pixels)
 )
 
 @Composable
@@ -142,7 +144,8 @@ fun RetroArchOverlayScreen(
                     swapAnalogSticks = swapAnalogSticks,
                     invertAnalogY = invertAnalogY,
                     dpadDiagonalSensitivity = dpadDiagonalSensitivity,
-                    abxyDiagonalSensitivity = abxyDiagonalSensitivity
+                    abxyDiagonalSensitivity = abxyDiagonalSensitivity,
+                    analogRecenterZone = analogRecenterZone
                 )
                 // Si un bouton a été touché, capturer l'événement
                 // Sinon, laisser passer au Zapper en dessous (pour jeux Duck Hunt)
@@ -368,7 +371,8 @@ private fun handleTouchEvent(
     swapAnalogSticks: Boolean = false,
     invertAnalogY: Boolean = false,
     dpadDiagonalSensitivity: Int = 50,
-    abxyDiagonalSensitivity: Int = 50
+    abxyDiagonalSensitivity: Int = 50,
+    analogRecenterZone: Int = 0  // 0-100: zone de recentrage (% du radius)
 ): Boolean {
     val TAG = "TouchHandler"
     val ANALOG_DEADZONE = 0.15f  // 15% dead zone (zone morte)
@@ -407,18 +411,49 @@ private fun handleTouchEvent(
             
             if (analogStick != null) {
                 // C'est un analog stick
-                val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
+                val centerX = analogStick.x * screenSize.width
+                val centerY = analogStick.y * screenSize.height
+                val radius = analogStick.width * screenSize.width * layout.rangeModifier
+                
+                // Vérifier si c'est le premier touch (pas encore activé) et si dans la zone de recentrage
+                val isFirstTouch = when (analogStick.type) {
+                    OverlayButtonType.ANALOG_LEFT -> !analogLeftState.value.isActivated
+                    OverlayButtonType.ANALOG_RIGHT -> !analogRightState.value.isActivated
+                    else -> false
+                }
+                
+                val distanceFromCenter = kotlin.math.sqrt((x - centerX).pow(2) + (y - centerY).pow(2))
+                val recenterThreshold = radius * (analogRecenterZone / 100f)
+                
+                // Calculer l'offset de recentrage (0 si hors zone ou déjà activé)
+                val (recenterOffsetX, recenterOffsetY) = if (isFirstTouch && analogRecenterZone > 0 && distanceFromCenter <= recenterThreshold) {
+                    // Recentrer: utiliser la position du touch comme nouveau centre
+                    val offsetX = x - centerX
+                    val offsetY = y - centerY
+                    Pair(offsetX, offsetY)
+                } else {
+                    // Utiliser l'offset existant si déjà activé
+                    when (analogStick.type) {
+                        OverlayButtonType.ANALOG_LEFT -> Pair(analogLeftState.value.recenterOffsetX, analogLeftState.value.recenterOffsetY)
+                        OverlayButtonType.ANALOG_RIGHT -> Pair(analogRightState.value.recenterOffsetX, analogRightState.value.recenterOffsetY)
+                        else -> Pair(0f, 0f)
+                    }
+                }
+                
+                // Calculer les valeurs avec le centre recentré si nécessaire
+                val effectiveCenterX = centerX + recenterOffsetX
+                val effectiveCenterY = centerY + recenterOffsetY
+                val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY, effectiveCenterX, effectiveCenterY)
+                
                 if (values != null) {
                     // Calculer l'offset visuel pour movable buttons
                     val (visualOffsetX, visualOffsetY) = if (analogStick.movable) {
-                        val centerX = analogStick.x * screenSize.width
-                        val centerY = analogStick.y * screenSize.height
                         // Range de BASE en pixels (sans modifiers, juste width/height)
                         // RetroArch limite le delta visuel au range de base, pas au range étendu pour hitbox
                         val baseRangeX = analogStick.width * screenSize.width
                         val baseRangeY = analogStick.height * screenSize.height
-                        val dx = x - centerX
-                        val dy = y - centerY
+                        val dx = x - effectiveCenterX
+                        val dy = y - effectiveCenterY
                         // Limiter l'offset visuel au range de base (clamp chaque axe)
                         val clampedDx = dx.coerceIn(-baseRangeX, baseRangeX)
                         val clampedDy = dy.coerceIn(-baseRangeY, baseRangeY)
@@ -431,16 +466,16 @@ private fun handleTouchEvent(
                     // Appliquer swap si demandé : LEFT devient RIGHT et RIGHT devient LEFT
                     when (analogStick.type) {
                         OverlayButtonType.ANALOG_LEFT -> {
-                            analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true, visualOffsetX, visualOffsetY)
+                            analogLeftState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true, visualOffsetX, visualOffsetY, recenterOffsetX, recenterOffsetY)
                             val actionName = if (swapAnalogSticks) "analog_right" else "analog_left"
                             onAnalogMove(actionName, values.first, values.second)
-                            Log.d(TAG, "Analog LEFT (sent as $actionName): x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
+                            Log.d(TAG, "Analog LEFT (sent as $actionName): x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}${if (recenterOffsetX != 0f || recenterOffsetY != 0f) " [RECENTERED: $recenterOffsetX, $recenterOffsetY]" else ""}")
                         }
                         OverlayButtonType.ANALOG_RIGHT -> {
-                            analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true, visualOffsetX, visualOffsetY)
+                            analogRightState.value = AnalogStickState(values.first, values.second, pointerId, isActivated = true, visualOffsetX, visualOffsetY, recenterOffsetX, recenterOffsetY)
                             val actionName = if (swapAnalogSticks) "analog_left" else "analog_right"
                             onAnalogMove(actionName, values.first, values.second)
-                            Log.d(TAG, "Analog RIGHT (sent as $actionName): x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}")
+                            Log.d(TAG, "Analog RIGHT (sent as $actionName): x=${String.format("%.2f", values.first)}, y=${String.format("%.2f", values.second)}${if (recenterOffsetX != 0f || recenterOffsetY != 0f) " [RECENTERED: $recenterOffsetX, $recenterOffsetY]" else ""}")
                         }
                         else -> {}
                     }
@@ -504,14 +539,15 @@ private fun handleTouchEvent(
                 // Si ce touch est déjà tracked (analog ou bouton), on le gère
                 if (analogLeftState.value.pointerId == pointerId) {
                     // Ce doigt contrôle le stick gauche
-                    val leftStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
+                        val leftStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_LEFT }
                     if (leftStick != null) {
-                        val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
+                        val centerX = leftStick.x * screenSize.width + analogLeftState.value.recenterOffsetX
+                        val centerY = leftStick.y * screenSize.height + analogLeftState.value.recenterOffsetY
+                        val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY, centerX, centerY)
                         if (values != null) {
                             // Calculer l'offset visuel pour movable buttons
                             val (visualOffsetX, visualOffsetY) = if (leftStick.movable) {
-                                val centerX = leftStick.x * screenSize.width
-                                val centerY = leftStick.y * screenSize.height
+                                // Utiliser le centre effectif (avec recentrage)
                                 val baseRangeX = leftStick.width * screenSize.width
                                 val baseRangeY = leftStick.height * screenSize.height
                                 val dx = x - centerX
@@ -533,14 +569,15 @@ private fun handleTouchEvent(
                 
                 if (analogRightState.value.pointerId == pointerId) {
                     // Ce doigt contrôle le stick droit
-                    val rightStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
+                        val rightStick = layout.buttons.find { it.type == OverlayButtonType.ANALOG_RIGHT }
                     if (rightStick != null) {
-                        val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY)
+                        val centerX = rightStick.x * screenSize.width + analogRightState.value.recenterOffsetX
+                        val centerY = rightStick.y * screenSize.height + analogRightState.value.recenterOffsetY
+                        val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY, centerX, centerY)
                         if (values != null) {
                             // Calculer l'offset visuel pour movable buttons
                             val (visualOffsetX, visualOffsetY) = if (rightStick.movable) {
-                                val centerX = rightStick.x * screenSize.width
-                                val centerY = rightStick.y * screenSize.height
+                                // Utiliser le centre effectif (avec recentrage)
                                 val baseRangeX = rightStick.width * screenSize.width
                                 val baseRangeY = rightStick.height * screenSize.height
                                 val dx = x - centerX
@@ -677,11 +714,14 @@ private fun calculateAnalogValues(
     screenSize: IntSize,
     deadzone: Float,
     layoutRangeMod: Float = 1.5f,
-    invertY: Boolean = false
+    invertY: Boolean = false,
+    centerX: Float? = null,  // Centre X personnalisé (pour recentrage)
+    centerY: Float? = null   // Centre Y personnalisé (pour recentrage)
 ): Pair<Float, Float>? {
     // Centre du stick en pixels (x_shift, y_shift dans RetroArch)
-    val centerX = button.x * screenSize.width
-    val centerY = button.y * screenSize.height
+    // Utiliser le centre personnalisé si fourni (pour recentrage), sinon utiliser le centre du layout
+    val effectiveCenterX = centerX ?: (button.x * screenSize.width)
+    val effectiveCenterY = centerY ?: (button.y * screenSize.height)
     
     // Range (rayon) en pixels pour le calcul des valeurs
     // Utiliser layout.rangeModifier (même que le rendu visuel) pour cohérence
@@ -689,8 +729,9 @@ private fun calculateAnalogValues(
     val rangeY = button.height * screenSize.height * layoutRangeMod
     
     // Distance depuis le centre (x_dist, y_dist dans RetroArch)
-    val xDist = touchX - centerX
-    val yDist = touchY - centerY
+    // Utiliser le centre effectif pour recentrage
+    val xDist = touchX - effectiveCenterX
+    val yDist = touchY - effectiveCenterY
     
     // Valeurs normalisées comme RetroArch
     val xVal = xDist / rangeX

@@ -489,6 +489,18 @@ float LibretroDroid::getAspectRatio() {
     return gameAspectRatio > 0 ? gameAspectRatio : defaultAspectRatio;
 }
 
+unsigned int LibretroDroid::getGameGeometryWidth() {
+    // Priorité: Géométrie dynamique (si mise à jour par le core) > Géométrie de base (au démarrage)
+    unsigned int dynamicWidth = Environment::getInstance().getGameGeometryWidth();
+    return dynamicWidth > 0 ? dynamicWidth : baseGameWidth;
+}
+
+unsigned int LibretroDroid::getGameGeometryHeight() {
+    // Priorité: Géométrie dynamique (si mise à jour par le core) > Géométrie de base (au démarrage)
+    unsigned int dynamicHeight = Environment::getInstance().getGameGeometryHeight();
+    return dynamicHeight > 0 ? dynamicHeight : baseGameHeight;
+}
+
 void LibretroDroid::refreshAspectRatio() {
     video->updateAspectRatio(getAspectRatio());
 }
@@ -604,6 +616,8 @@ void LibretroDroid::afterGameLoad() {
     updateAudioSampleRateMultiplier();
 
     defaultAspectRatio = findDefaultAspectRatio(system_av_info);
+    baseGameWidth = system_av_info.geometry.base_width;
+    baseGameHeight = system_av_info.geometry.base_height;
 }
 
 float LibretroDroid::findDefaultAspectRatio(const retro_system_av_info& system_av_info) {

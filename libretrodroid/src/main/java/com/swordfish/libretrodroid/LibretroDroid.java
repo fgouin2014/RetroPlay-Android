@@ -156,6 +156,18 @@ public class LibretroDroid {
      * @return Aspect ratio (width/height), e.g. 1.33 for 4:3
      */
     public static native float getAspectRatio();
+    
+    /**
+     * Get the game render width (from core geometry)
+     * @return Width in pixels, e.g. 256 for NES
+     */
+    public static native int getGameGeometryWidth();
+    
+    /**
+     * Get the game render height (from core geometry)
+     * @return Height in pixels, e.g. 240 for NES
+     */
+    public static native int getGameGeometryHeight();
 
     public static native Controller[][] getControllers();
     public static native void setControllerType(int port, int type);

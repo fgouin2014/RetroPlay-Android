@@ -594,6 +594,20 @@ JNIEXPORT jfloat JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_getAspec
     return LibretroDroid::getInstance().getAspectRatio();
 }
 
+JNIEXPORT jint JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_getGameGeometryWidth(
+    JNIEnv* env,
+    jclass obj
+) {
+    return LibretroDroid::getInstance().getGameGeometryWidth();
+}
+
+JNIEXPORT jint JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_getGameGeometryHeight(
+    JNIEnv* env,
+    jclass obj
+) {
+    return LibretroDroid::getInstance().getGameGeometryHeight();
+}
+
 }
 
 }

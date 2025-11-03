@@ -108,6 +108,9 @@ public:
 
     void refreshAspectRatio();
     float getAspectRatio();
+    
+    unsigned int getGameGeometryWidth();
+    unsigned int getGameGeometryHeight();
 
     bool requiresVideoRefresh() const;
     void clearRequiresVideoRefresh();
@@ -170,6 +173,8 @@ private:
     bool ambientMode = false;
 
     float defaultAspectRatio = 1.0;
+    unsigned int baseGameWidth = 0;
+    unsigned int baseGameHeight = 0;
     bool dirtyVideo = false;
 
     std::unique_ptr<Core> core;

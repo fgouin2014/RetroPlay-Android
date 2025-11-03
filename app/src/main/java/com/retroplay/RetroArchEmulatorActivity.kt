@@ -546,23 +546,47 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         val viewport = retroView.viewport  // RectF(left, top, right, bottom) normalisé [0-1]
         
-        // CORRECTION PORTRAIT: bounds.top négatif signifie que le View déborde en haut
-        // Exemple: bounds.top=-537, bounds.bottom=1803 → Hauteur View = 2340px
-        // Touch Y=1170 (centre écran 2340/2) doit mapper à 0.5 (centre jeu)
-        // Actuellement: relative = 1170/1803=0.65 ❌ → Devrait être 1170/2340=0.5 ✓
-        val offsetY = if (bounds.top < 0) -bounds.top else 0f  // 537 en portrait
-        val visualTop = 0f  
-        val visualBottom = bounds.bottom + offsetY  // 1803 + 537 = 2340 (vraie hauteur)
-        val visualHeight = visualBottom - visualTop  // 2340
+        // CORRECTION PORTRAIT: Convertir touchY (coordonnées ÉCRAN) en coordonnées VIEW
+        // bounds.top peut être négatif (View déborde en haut de l'écran)
+        // Exemple: bounds.top=-537, bounds.bottom=1803, touchY=1170 (centre écran)
+        // touchYInView = 1170 - (-537) = 1707 (coordonnées dans le View)
+        val touchXInView = touchX - bounds.left
+        val touchYInView = touchY - bounds.top
         
-        // Appliquer le viewport (si letterboxing)
-        val viewportTop = visualTop + (viewport.top * visualHeight)
-        val viewportBottom = visualTop + (viewport.bottom * visualHeight)
-        val viewportLeft = bounds.left + (viewport.left * bounds.width)
-        val viewportRight = bounds.left + (viewport.right * bounds.width)
+        // CORRECTION VIEWPORT: LibretroDroid retourne (0,0,1,1) même avec letterboxing!
+        // Récupérer le VRAI ratio d'aspect depuis le core (au lieu de deviner)
+        val coreAspectRatio = try {
+            retroView.getAspectRatio()
+        } catch (e: Exception) {
+            Log.w(TAG, "[ZAPPER] Cannot get aspect ratio from core, using NES default (256:240)")
+            256f / 240f  // Fallback NES
+        }
+        val screenAspectRatio = bounds.width / bounds.height
         
-        val clampedX = touchX.coerceIn(viewportLeft, viewportRight)
-        val clampedY = touchY.coerceIn(viewportTop, viewportBottom)
+        val actualViewport = if (screenAspectRatio > coreAspectRatio) {
+            // Écran plus large que le jeu → Bandes noires à gauche/droite
+            val gameWidth = bounds.height * coreAspectRatio
+            val letterboxWidth = (bounds.width - gameWidth) / 2f
+            val left = letterboxWidth / bounds.width
+            val right = 1f - left
+            android.graphics.RectF(left, 0f, right, 1f)
+        } else {
+            // Écran plus haut que le jeu → Bandes noires en haut/bas (portrait typique)
+            val gameHeight = bounds.width / coreAspectRatio
+            val letterboxHeight = (bounds.height - gameHeight) / 2f
+            val top = letterboxHeight / bounds.height
+            val bottom = 1f - top
+            android.graphics.RectF(0f, top, 1f, bottom)
+        }
+        
+        // Appliquer le viewport CORRIGÉ (si letterboxing)
+        val viewportTop = actualViewport.top * bounds.height
+        val viewportBottom = actualViewport.bottom * bounds.height
+        val viewportLeft = actualViewport.left * bounds.width
+        val viewportRight = actualViewport.right * bounds.width
+        
+        val clampedX = touchXInView.coerceIn(viewportLeft, viewportRight)
+        val clampedY = touchYInView.coerceIn(viewportTop, viewportBottom)
         
         val viewportWidth = viewportRight - viewportLeft
         val viewportHeight = viewportBottom - viewportTop
@@ -575,14 +599,32 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         // POINTER_PRESSED = (X >= 0 && Y >= 0) donc on DOIT envoyer [0, 1] !
         
         // CALCULS DÉTAILLÉS pour debug (simulation des conversions)
+        // LibretroDroid: result = 2.0 * (relativeY - 0.5f) * 32767
         val libretroX = ((relativeX - 0.5f) * 2.0f * 32767f).toInt()  // Conversion LibretroDroid
         val libretroY = ((relativeY - 0.5f) * 2.0f * 32767f).toInt()
         
         // Conversion FCEUmm (simulation de libretro.c ligne 2454-2455)
-        val fceummOffsetX = 0  // crop_overscan_h_left * 0x120 - 1 (généralement 0)
-        val fceummOffsetY = 0  // crop_overscan_v_top * 0x133 + 1 (généralement 0)
-        val fceummX = ((libretroX + (0x7FFF + fceummOffsetX)) * 256) / ((0x7FFF + fceummOffsetX) * 2)
-        val fceummY = ((libretroY + (0x7FFF + fceummOffsetY)) * 240) / ((0x7FFF + fceummOffsetY) * 2)
+        // offset_y = (crop_overscan_v_top * 0x133) + 1, généralement = 1
+        val fceummOffsetX = -1  // crop_overscan_h_left * 0x120 - 1 (généralement -1 si crop=0)
+        val fceummOffsetY = 1   // crop_overscan_v_top * 0x133 + 1 (généralement 1 si crop=0)
+        val fceummX = ((libretroX + (32767 + fceummOffsetX)) * 256) / ((32767 + fceummOffsetX) * 2)
+        val fceummY = ((libretroY + (32767 + fceummOffsetY)) * 240) / ((32767 + fceummOffsetY) * 2)
+        
+        // DEBUG: Calculer où FCEUmm va dessiner le crosshair (NES coords 0-255, 0-239)
+        // Le crosshair FCEUmm est dessiné à FCEU_DrawGunSight(buf, mousedata[0], mousedata[1])
+        // Donc si crosshair est "trop bas" → fceummY est trop grand → relativeY trop grand
+        
+        // CONVERSION INVERSE: Où FCEUmm pense qu'on vise en pixels écran (pour debug)
+        // fceummX/Y sont en coordonnées NES (0-255, 0-239)
+        // Pour convertir en pixels viewport: fceummY / 240.0 * viewportHeight + viewportTop
+        val fceummCrosshairXInViewport = (fceummX / 256.0f) * viewportWidth + viewportLeft
+        val fceummCrosshairYInViewport = (fceummY / 240.0f) * viewportHeight + viewportTop
+        val fceummCrosshairXOnScreen = fceummCrosshairXInViewport + bounds.left
+        val fceummCrosshairYOnScreen = fceummCrosshairYInViewport + bounds.top
+        
+        // Calculer l'écart entre notre touch et où FCEUmm pense qu'on vise
+        val deltaX = touchX - fceummCrosshairXOnScreen
+        val deltaY = touchY - fceummCrosshairYOnScreen
         
         when (event.actionMasked) {
             android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
@@ -605,18 +647,23 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $lightgunPort")
                     
                     Log.d(TAG, "[ZAPPER CONVERSIONS]")
-                    Log.d(TAG, "  1. Touch écran (raw):    (${touchX.toInt()}, ${touchY.toInt()})")
-                    Log.d(TAG, "  2. GLRetroView bounds:   left=${bounds.left.toInt()}, top=${bounds.top.toInt()}, right=${bounds.right.toInt()}, bottom=${bounds.bottom.toInt()}")
-                    Log.d(TAG, "  3. Viewport [0-1]:       left=${viewport.left}, top=${viewport.top}, right=${viewport.right}, bottom=${viewport.bottom}")
-                    Log.d(TAG, "  4. Viewport pixels:      left=${viewportLeft.toInt()}, top=${viewportTop.toInt()}, right=${viewportRight.toInt()}, bottom=${viewportBottom.toInt()}")
-                    Log.d(TAG, "  5. Touch dans viewport?  $isInGameArea")
-                    Log.d(TAG, "  6. Clamped to viewport:  (${clampedX.toInt()}, ${clampedY.toInt()})")
-                    Log.d(TAG, "  7. Relative [0-1]:       ($relativeX, $relativeY)")
-                    Log.d(TAG, "  8. Libretro int16:       ($libretroX, $libretroY)")
-                    Log.d(TAG, "  9. FCEUmm NES [0-255]x[0-239]: ($fceummX, $fceummY)")
+                    Log.d(TAG, "  1. Touch écran (raw):      (${touchX.toInt()}, ${touchY.toInt()})")
+                    Log.d(TAG, "  2. GLRetroView bounds:     left=${bounds.left.toInt()}, top=${bounds.top.toInt()}, right=${bounds.right.toInt()}, bottom=${bounds.bottom.toInt()}")
+                    Log.d(TAG, "  3. Touch in View coords:   (${touchXInView.toInt()}, ${touchYInView.toInt()})")
+                    Log.d(TAG, "  4. Core Aspect Ratio:      $coreAspectRatio (screen: $screenAspectRatio)")
+                    Log.d(TAG, "  5. Viewport LibretroDroid: left=${viewport.left}, top=${viewport.top}, right=${viewport.right}, bottom=${viewport.bottom}")
+                    Log.d(TAG, "  6. Viewport CORRECTED:     left=${actualViewport.left}, top=${actualViewport.top}, right=${actualViewport.right}, bottom=${actualViewport.bottom}")
+                    Log.d(TAG, "  7. Viewport pixels (View): left=${viewportLeft.toInt()}, top=${viewportTop.toInt()}, right=${viewportRight.toInt()}, bottom=${viewportBottom.toInt()}")
+                    Log.d(TAG, "  8. Touch dans viewport?    $isInGameArea")
+                    Log.d(TAG, "  9. Clamped to viewport:    (${clampedX.toInt()}, ${clampedY.toInt()})")
+                    Log.d(TAG, "  10. Relative [0-1]:        ($relativeX, $relativeY)")
+                    Log.d(TAG, "  11. Libretro int16:        ($libretroX, $libretroY)")
+                    Log.d(TAG, "  12. FCEUmm NES [0-255]x[0-239]: ($fceummX, $fceummY)")
                     val nesValid = fceummX in 0..255 && fceummY in 0..239
-                    Log.d(TAG, "  10. NES coords valid?    $nesValid")
-                    Log.d(TAG, "  11. Port: $lightgunPort | PRESSED: ${relativeX >= 0f && relativeY >= 0f}")
+                    Log.d(TAG, "  13. NES coords valid?      $nesValid")
+                    Log.d(TAG, "  14. FCEUmm crosshair (screen): (${fceummCrosshairXOnScreen.toInt()}, ${fceummCrosshairYOnScreen.toInt()})")
+                    Log.d(TAG, "  15. Delta (touch - FCEUmm): (${deltaX.toInt()}px, ${deltaY.toInt()}px) ${if (deltaY > 0) "FCEUmm trop BAS" else if (deltaY < 0) "FCEUmm trop HAUT" else "ALIGNÉ"}")
+                    Log.d(TAG, "  16. Port: $lightgunPort | PRESSED: ${relativeX >= 0f && relativeY >= 0f}")
                     
                     // NOTE: En mode RetroPointer, le trigger est AUTOMATIQUE via POINTER_PRESSED
                     // FCEUmm lit: input_cb(port, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED)

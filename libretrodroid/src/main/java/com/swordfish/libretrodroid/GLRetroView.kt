@@ -217,6 +217,14 @@ class GLRetroView(
             LibretroDroid.updateVariable(it)
         }
     }
+    
+    /**
+     * Get the aspect ratio of the currently loaded game from the core
+     * @return Aspect ratio (width/height), e.g. 1.33 for 4:3
+     */
+    fun getAspectRatio(): Float {
+        return LibretroDroid.getAspectRatio()
+    }
 
     fun getAvailableDisks() = runOnGLThread { LibretroDroid.availableDisks() }
     fun getCurrentDisk() = runOnGLThread { LibretroDroid.currentDisk() }

@@ -390,7 +390,12 @@ object OverlayPreferenceManager {
             lightgunThreeTouchInput = prefs.getInt("overlay_${console}_lightgun_three_touch", 0),
             lightgunFourTouchInput = prefs.getInt("overlay_${console}_lightgun_four_touch", 0),
             mouseSpeed = prefs.getFloat("overlay_${console}_mouse_speed", 1.0f),  // DEFAULT_INPUT_OVERLAY_MOUSE_SPEED
-            mouseSwipeThreshold = prefs.getFloat("overlay_${console}_mouse_swipe_threshold", 1.0f),  // DEFAULT_INPUT_OVERLAY_MOUSE_SWIPE_THRESHOLD
+            mouseSwipeThreshold = try {
+                prefs.getFloat("overlay_${console}_mouse_swipe_threshold", 1.0f)
+            } catch (e: ClassCastException) {
+                // Migration: old value was Int, convert to Float
+                prefs.getInt("overlay_${console}_mouse_swipe_threshold", 1).toFloat()
+            },  // DEFAULT_INPUT_OVERLAY_MOUSE_SWIPE_THRESHOLD
             mouseHoldToDrag = prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", true),  // DEFAULT_INPUT_OVERLAY_MOUSE_HOLD_TO_DRAG
             mouseHoldMsec = prefs.getInt("overlay_${console}_mouse_hold_msec", 200),  // DEFAULT_INPUT_OVERLAY_MOUSE_HOLD_MSEC
             mouseDoubleTapToDrag = prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false),  // DEFAULT_INPUT_OVERLAY_MOUSE_DTAP_TO_DRAG

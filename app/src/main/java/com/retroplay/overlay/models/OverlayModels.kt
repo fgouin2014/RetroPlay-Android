@@ -260,7 +260,7 @@ data class AdvancedOverlaySettings(
     val lightgunFourTouchInput: Int = 0,       // Action pour 4 doigts
     // Mouse options
     val mouseSpeed: Float = 1.0f,              // Vitesse souris (0.1-5.0)
-    val mouseSwipeThreshold: Int = 10,         // Seuil swipe (pixels)
+    val mouseSwipeThreshold: Float = 1.0f,     // Seuil swipe (pixels, float dans RetroArch)
     val mouseHoldToDrag: Boolean = false,      // Maintenir pour drag
     val mouseHoldMsec: Int = 500,              // Durée hold (ms)
     val mouseDoubleTapToDrag: Boolean = false, // Double-tap pour drag
@@ -371,30 +371,31 @@ object OverlayPreferenceManager {
         }
         
         return AdvancedOverlaySettings(
-            dpadDiagonalSensitivity = prefs.getInt("overlay_${console}_dpad_diagonal_sensitivity", 50),
-            abxyDiagonalSensitivity = prefs.getInt("overlay_${console}_abxy_diagonal_sensitivity", 50),
-            analogRecenterZone = prefs.getInt("overlay_${console}_analog_recenter_zone", 0),
-            opacity = prefs.getFloat("overlay_${console}_opacity", 1.0f),
-            aspectAdjust = prefs.getFloat("overlay_${console}_aspect_adjust", 0.0f),
-            hideInMenu = prefs.getBoolean("overlay_${console}_hide_in_menu", false),
-            behindMenu = prefs.getBoolean("overlay_${console}_behind_menu", false),
-            hideWhenGamepadConnected = prefs.getBoolean("overlay_${console}_hide_when_gamepad", false),
+            // DEFAULT VALUES from RetroArch config.def.h (c:\repos\RetroArch-master\config.def.h)
+            dpadDiagonalSensitivity = prefs.getInt("overlay_${console}_dpad_diagonal_sensitivity", 80),  // DEFAULT_OVERLAY_DPAD_DIAGONAL_SENSITIVITY
+            abxyDiagonalSensitivity = prefs.getInt("overlay_${console}_abxy_diagonal_sensitivity", 50),  // DEFAULT_OVERLAY_ABXY_DIAGONAL_SENSITIVITY
+            analogRecenterZone = prefs.getInt("overlay_${console}_analog_recenter_zone", 0),  // DEFAULT_INPUT_OVERLAY_ANALOG_RECENTER_ZONE
+            opacity = prefs.getFloat("overlay_${console}_opacity", 0.7f),  // DEFAULT_INPUT_OVERLAY_OPACITY
+            aspectAdjust = prefs.getFloat("overlay_${console}_aspect_adjust", 0.0f),  // DEFAULT_INPUT_OVERLAY_ASPECT_ADJUST_*
+            hideInMenu = prefs.getBoolean("overlay_${console}_hide_in_menu", true),  // DEFAULT_OVERLAY_HIDE_IN_MENU
+            behindMenu = prefs.getBoolean("overlay_${console}_behind_menu", false),  // DEFAULT_OVERLAY_BEHIND_MENU
+            hideWhenGamepadConnected = prefs.getBoolean("overlay_${console}_hide_when_gamepad", false),  // DEFAULT_OVERLAY_HIDE_WHEN_GAMEPAD_CONNECTED
             showInputs = showInputsMode,
-            showInputsPort = prefs.getInt("overlay_${console}_show_inputs_port", 0),
-            lightgunPort = prefs.getInt("overlay_${console}_lightgun_port", 0),
-            lightgunTriggerOnTouch = prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", true),  // TRUE comme RetroArch officiel
-            lightgunTriggerDelay = prefs.getInt("overlay_${console}_lightgun_trigger_delay", 0),
-            lightgunAllowOffscreen = prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true),
-            lightgunTwoTouchInput = prefs.getInt("overlay_${console}_lightgun_two_touch", 0),
+            showInputsPort = prefs.getInt("overlay_${console}_show_inputs_port", 0),  // DEFAULT_OVERLAY_SHOW_INPUTS_PORT
+            lightgunPort = prefs.getInt("overlay_${console}_lightgun_port", -1),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_PORT (-1 = all ports)
+            lightgunTriggerOnTouch = prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", true),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_TRIGGER_ON_TOUCH
+            lightgunTriggerDelay = prefs.getInt("overlay_${console}_lightgun_trigger_delay", 1),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_TRIGGER_DELAY
+            lightgunAllowOffscreen = prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_ALLOW_OFFSCREEN
+            lightgunTwoTouchInput = prefs.getInt("overlay_${console}_lightgun_two_touch", 0),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_MULTI_TOUCH_INPUT
             lightgunThreeTouchInput = prefs.getInt("overlay_${console}_lightgun_three_touch", 0),
             lightgunFourTouchInput = prefs.getInt("overlay_${console}_lightgun_four_touch", 0),
-            mouseSpeed = prefs.getFloat("overlay_${console}_mouse_speed", 1.0f),
-            mouseSwipeThreshold = prefs.getInt("overlay_${console}_mouse_swipe_threshold", 10),
-            mouseHoldToDrag = prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", false),
-            mouseHoldMsec = prefs.getInt("overlay_${console}_mouse_hold_msec", 500),
-            mouseDoubleTapToDrag = prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false),
-            mouseDtapMsec = prefs.getInt("overlay_${console}_mouse_dtap_msec", 300),
-            showMouseCursor = prefs.getBoolean("overlay_${console}_show_mouse_cursor", true)
+            mouseSpeed = prefs.getFloat("overlay_${console}_mouse_speed", 1.0f),  // DEFAULT_INPUT_OVERLAY_MOUSE_SPEED
+            mouseSwipeThreshold = prefs.getFloat("overlay_${console}_mouse_swipe_threshold", 1.0f),  // DEFAULT_INPUT_OVERLAY_MOUSE_SWIPE_THRESHOLD
+            mouseHoldToDrag = prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", true),  // DEFAULT_INPUT_OVERLAY_MOUSE_HOLD_TO_DRAG
+            mouseHoldMsec = prefs.getInt("overlay_${console}_mouse_hold_msec", 200),  // DEFAULT_INPUT_OVERLAY_MOUSE_HOLD_MSEC
+            mouseDoubleTapToDrag = prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false),  // DEFAULT_INPUT_OVERLAY_MOUSE_DTAP_TO_DRAG
+            mouseDtapMsec = prefs.getInt("overlay_${console}_mouse_dtap_msec", 200),  // DEFAULT_INPUT_OVERLAY_MOUSE_DTAP_MSEC
+            showMouseCursor = prefs.getBoolean("overlay_${console}_show_mouse_cursor", false)  // DEFAULT_OVERLAY_SHOW_MOUSE_CURSOR
         )
     }
     

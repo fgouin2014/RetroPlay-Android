@@ -2501,9 +2501,22 @@ private fun ComposeEmulatorScreen(
                                 // Utiliser advancedSettingsState pour rechargement dynamique
                                 val advancedSettings = advancedSettingsState.value
                                 
+                                // Vérifier si un menu est ouvert
+                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showGamePadSettings.value || showAdvancedOverlaySettings.value
+                                
+                                // Logique hideInMenu et behindMenu (RetroArch officiel)
+                                val shouldShowOverlay = when {
+                                    !overlaysVisible.value -> false  // Overlay désactivé manuellement
+                                    !isMenuOpen -> true  // Pas de menu ouvert → afficher
+                                    advancedSettings.hideInMenu -> false  // Menu ouvert + hideInMenu=true → cacher
+                                    // Si on arrive ici: menu ouvert + hideInMenu=false
+                                    // behindMenu détermine le Z-order (pas implémenté visuellement, mais on affiche)
+                                    else -> true
+                                }
+                                
                                 // key() force le recompose quand layoutName OU orientation change
-                                // Afficher seulement si overlaysVisible est true
-                                if (overlaysVisible.value) {
+                                // Afficher selon la logique hideInMenu/behindMenu
+                                if (shouldShowOverlay) {
                                     androidx.compose.runtime.key(layoutName, isLandscape) {
                                         com.retroplay.overlay.renderer.RetroArchOverlayScreen(
                                         layout = overlayLayout,

@@ -32,15 +32,15 @@ fun AdvancedOverlaySettingsDialog(
     context: Context,
     prefs: SharedPreferences
 ) {
-    // Load current advanced settings
-    var dpadDiagonalSensitivity by remember { mutableStateOf(prefs.getInt("overlay_${console}_dpad_diagonal_sensitivity", 50)) }
+    // Load current advanced settings (avec valeurs par défaut RetroArch officielles)
+    var dpadDiagonalSensitivity by remember { mutableStateOf(prefs.getInt("overlay_${console}_dpad_diagonal_sensitivity", 80)) }  // DEFAULT: 80 (RetroArch officiel)
     var abxyDiagonalSensitivity by remember { mutableStateOf(prefs.getInt("overlay_${console}_abxy_diagonal_sensitivity", 50)) }
     var analogRecenterZone by remember { mutableStateOf(prefs.getInt("overlay_${console}_analog_recenter_zone", 0)) }
     
-    var opacity by remember { mutableStateOf(prefs.getFloat("overlay_${console}_opacity", 1.0f)) }
+    var opacity by remember { mutableStateOf(prefs.getFloat("overlay_${console}_opacity", 0.7f)) }  // DEFAULT: 0.7 (RetroArch officiel)
     var aspectAdjust by remember { mutableStateOf(prefs.getFloat("overlay_${console}_aspect_adjust", 0.0f)) }
     
-    var hideInMenu by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_hide_in_menu", false)) }
+    var hideInMenu by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_hide_in_menu", true)) }  // DEFAULT: true (RetroArch officiel)
     var behindMenu by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_behind_menu", false)) }
     var hideWhenGamepad by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_hide_when_gamepad", false)) }
     
@@ -48,20 +48,20 @@ fun AdvancedOverlaySettingsDialog(
     var showInputs by remember { mutableStateOf(com.retroplay.overlay.models.ShowInputsMode.valueOf(showInputsString)) }
     var showInputsPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_show_inputs_port", 0)) }
     
-    // Lightgun options
-    var lightgunPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_lightgun_port", 0)) }
-    var lightgunTriggerOnTouch by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", true)) }  // ← TRUE comme RetroArch officiel
-    var lightgunTriggerDelay by remember { mutableStateOf(prefs.getInt("overlay_${console}_lightgun_trigger_delay", 0)) }
+    // Lightgun options (valeurs par défaut RetroArch officielles)
+    var lightgunPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_lightgun_port", -1)) }  // DEFAULT: -1 (all ports)
+    var lightgunTriggerOnTouch by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", true)) }
+    var lightgunTriggerDelay by remember { mutableStateOf(prefs.getInt("overlay_${console}_lightgun_trigger_delay", 1)) }  // DEFAULT: 1 frame (RetroArch officiel)
     var lightgunAllowOffscreen by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true)) }
     
-    // Mouse options
+    // Mouse options (valeurs par défaut RetroArch officielles)
     var mouseSpeed by remember { mutableStateOf(prefs.getFloat("overlay_${console}_mouse_speed", 1.0f)) }
-    var mouseSwipeThreshold by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_swipe_threshold", 10)) }
-    var mouseHoldToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", false)) }
-    var mouseHoldMsec by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_hold_msec", 500)) }
+    var mouseSwipeThreshold by remember { mutableStateOf(prefs.getFloat("overlay_${console}_mouse_swipe_threshold", 1.0f)) }  // DEFAULT: 1.0 pixels (RetroArch officiel)
+    var mouseHoldToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", true)) }  // DEFAULT: true (RetroArch officiel)
+    var mouseHoldMsec by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_hold_msec", 200)) }  // DEFAULT: 200ms (RetroArch officiel)
     var mouseDoubleTapToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false)) }
-    var mouseDtapMsec by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_dtap_msec", 300)) }
-    var showMouseCursor by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_show_mouse_cursor", true)) }
+    var mouseDtapMsec by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_dtap_msec", 200)) }  // DEFAULT: 200ms (RetroArch officiel)
+    var showMouseCursor by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_show_mouse_cursor", false)) }  // DEFAULT: false (RetroArch officiel)
     
     // Preview transparency state
     var isTransparent by remember { mutableStateOf(false) }
@@ -84,7 +84,7 @@ fun AdvancedOverlaySettingsDialog(
             .putInt("overlay_${console}_lightgun_trigger_delay", lightgunTriggerDelay)
             .putBoolean("overlay_${console}_lightgun_allow_offscreen", lightgunAllowOffscreen)
             .putFloat("overlay_${console}_mouse_speed", mouseSpeed)
-            .putInt("overlay_${console}_mouse_swipe_threshold", mouseSwipeThreshold)
+            .putFloat("overlay_${console}_mouse_swipe_threshold", mouseSwipeThreshold)
             .putBoolean("overlay_${console}_mouse_hold_to_drag", mouseHoldToDrag)
             .putInt("overlay_${console}_mouse_hold_msec", mouseHoldMsec)
             .putBoolean("overlay_${console}_mouse_dtap_to_drag", mouseDoubleTapToDrag)
@@ -611,12 +611,12 @@ fun AdvancedOverlaySettingsDialog(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Swipe Threshold", color = Color.White, fontSize = 14.sp)
-                        Text("${mouseSwipeThreshold}px", color = Color(0xFFFFEB3B), fontSize = 14.sp)
+                        Text(String.format("%.1fpx", mouseSwipeThreshold), color = Color(0xFFFFEB3B), fontSize = 14.sp)
                     }
-                    Slider(
-                        value = mouseSwipeThreshold.toFloat(),
-                        onValueChange = { mouseSwipeThreshold = it.toInt() },
-                        valueRange = 1f..50f,
+                        Slider(
+                            value = mouseSwipeThreshold,
+                            onValueChange = { mouseSwipeThreshold = it },
+                            valueRange = 0.1f..10.0f,
                         colors = SliderDefaults.colors(
                             thumbColor = Color(0xFFFFEB3B),
                             activeTrackColor = Color(0xFFFFEB3B),

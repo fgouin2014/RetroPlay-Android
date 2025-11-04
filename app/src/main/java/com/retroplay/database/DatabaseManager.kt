@@ -21,8 +21,29 @@ object DatabaseManager {
             
             val crc32 = CRC32()
             val buffer = ByteArray(8192)
+            var skipBytes = 0
+            
+            // NES ROMs: Skip 16-byte iNES header (starts with "NES\x1A")
+            if (file.name.endsWith(".nes", ignoreCase = true)) {
+                FileInputStream(file).use { fis ->
+                    val header = ByteArray(4)
+                    if (fis.read(header) == 4 && 
+                        header[0] == 'N'.code.toByte() && 
+                        header[1] == 'E'.code.toByte() && 
+                        header[2] == 'S'.code.toByte() && 
+                        header[3] == 0x1A.toByte()) {
+                        skipBytes = 16  // Skip iNES header
+                        Log.d(TAG, "NES ROM detected, skipping 16-byte iNES header")
+                    }
+                }
+            }
             
             FileInputStream(file).use { fis ->
+                // Skip header if needed
+                if (skipBytes > 0) {
+                    fis.skip(skipBytes.toLong())
+                }
+                
                 var bytesRead: Int
                 while (fis.read(buffer).also { bytesRead = it } != -1) {
                     crc32.update(buffer, 0, bytesRead)
@@ -30,7 +51,7 @@ object DatabaseManager {
             }
             
             val crcValue = crc32.value.toString(16).uppercase().padStart(8, '0')
-            Log.d(TAG, "CRC32 calculated for ${file.name}: $crcValue")
+            Log.d(TAG, "CRC32 calculated for ${file.name}: $crcValue (skipBytes=$skipBytes)")
             return crcValue
             
         } catch (e: Exception) {

@@ -926,6 +926,37 @@ public class GameDetailsActivity extends AppCompatActivity {
      * Lance l'emulateur avec une ROM deja extraite ou en cache
      */
     private void launchWithCachedRom(String romPath, int slot) {
+        // === DATABASE LOOKUP (NEW) ===
+        // Calculate CRC32 and lookup game metadata
+        String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
+        if (gameCRC != null) {
+            Log.i(TAG, "ROM CRC32: " + gameCRC);
+            
+            com.retroplay.database.GameInfo gameInfo = com.retroplay.database.DatabaseManager.INSTANCE.lookupGame(gameCRC, game.getConsole());
+            if (gameInfo != null) {
+                Log.i(TAG, "✅ Game identified from database:");
+                Log.i(TAG, "  Name: " + gameInfo.getName());
+                Log.i(TAG, "  Genre: " + gameInfo.getGenre());
+                Log.i(TAG, "  Developer: " + gameInfo.getDeveloper());
+                Log.i(TAG, "  Year: " + gameInfo.getReleaseYear());
+                Log.i(TAG, "  " + gameInfo.getDisplayInfo());
+                
+                // Check cheats available
+                java.io.File cheatFile = com.retroplay.database.DatabaseManager.INSTANCE.getCheatsPath(gameInfo, game.getConsole());
+                if (cheatFile != null && cheatFile.exists()) {
+                    int cheatCount = countCheatsInFile(cheatFile);
+                    Log.i(TAG, "  🎮 " + cheatCount + " cheats available!");
+                    
+                    // Show notification
+                    Toast.makeText(this, 
+                        cheatCount + " cheats available • " + gameInfo.getDisplayInfo(), 
+                        Toast.LENGTH_LONG).show();
+                }
+            } else {
+                Log.w(TAG, "⚠️ Game not found in database (CRC: " + gameCRC + ")");
+            }
+        }
+        
         // Determine which emulator activity to use based on user preference
         Class<?> emulatorActivity = getEmulatorActivityClass(game.getConsole());
         
@@ -935,6 +966,12 @@ public class GameDetailsActivity extends AppCompatActivity {
         intent.putExtra("gameId", game.getId());
         intent.putExtra("console", game.getConsole());
         intent.putExtra("loadSlot", slot);
+        
+        // Pass database metadata if available
+        if (gameCRC != null) {
+            intent.putExtra("gameCRC", gameCRC);
+        }
+        
         startActivity(intent);
     }
     

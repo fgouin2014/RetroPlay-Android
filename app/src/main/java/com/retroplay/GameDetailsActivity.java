@@ -144,27 +144,77 @@ public class GameDetailsActivity extends AppCompatActivity {
         consoleDefaultInfo = findViewById(R.id.consoleDefaultInfo);
     }
     
-           private void populateGameDetails() {
-               // Titre du jeu
-               gameTitle.setText(game.getName());
-               gameTitle.setTypeface(null, Typeface.BOLD);
-               
-               // Description
-               gameDescription.setText(game.getDesc());
-               
-               // Genre
-               gameGenre.setText(game.getGenre());
-               
-               // Nombre de joueurs
-               gamePlayers.setText("👥 " + game.getPlayers() + "P");
-               
-               // Date de sortie
-               String releaseDate = formatReleaseDate(game.getReleasedate());
-               gameReleaseDate.setText(releaseDate);
-               
-               // Images
-               loadGameImages();
-           }
+    private void populateGameDetails() {
+        // Titre du jeu
+        gameTitle.setText(game.getName());
+        gameTitle.setTypeface(null, Typeface.BOLD);
+        
+        // === DATABASE LOOKUP (NEW) ===
+        // Calculate CRC and enrich metadata from database
+        String fileName = game.getFile();
+        if (fileName.startsWith("http://") || fileName.startsWith("https://")) {
+            fileName = fileName.substring(fileName.lastIndexOf("/") + 1);
+        }
+        String consoleDir = getRealConsoleDirectory(game.getConsole());
+        String romPath = "/storage/emulated/0/GameLibrary-Data/" + consoleDir + "/" + fileName;
+        
+        String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
+        com.retroplay.database.GameInfo dbGameInfo = null;
+        
+        if (gameCRC != null) {
+            dbGameInfo = com.retroplay.database.DatabaseManager.INSTANCE.lookupGame(gameCRC, game.getConsole());
+            if (dbGameInfo != null) {
+                Log.i(TAG, "✅ Database metadata found: " + dbGameInfo.getDisplayInfo());
+            }
+        }
+        
+        // Description - Ajouter CRC si disponible
+        String description = game.getDesc();
+        if (gameCRC != null) {
+            description += "\n\n💾 CRC32: " + gameCRC;
+            if (dbGameInfo != null) {
+                description += " ✅";  // Checkmark si trouvé dans database
+            } else {
+                description += " ⚠️";  // Warning si non trouvé
+            }
+        }
+        gameDescription.setText(description);
+        
+        // Genre - Utiliser database si disponible, sinon gamelist.json
+        String displayGenre = (dbGameInfo != null && dbGameInfo.getGenre() != null) 
+            ? "🎭 " + dbGameInfo.getGenre() 
+            : game.getGenre();
+        gameGenre.setText(displayGenre);
+        
+        // Nombre de joueurs - Utiliser database si disponible
+        int maxPlayers = (dbGameInfo != null) ? dbGameInfo.getMaxPlayers() : Integer.parseInt(game.getPlayers().replaceAll("[^0-9]", ""));
+        String playersText = "👥 " + maxPlayers + "P";
+        if (dbGameInfo != null && dbGameInfo.getHasAnalog()) {
+            playersText += " • Analog";
+        }
+        if (dbGameInfo != null && dbGameInfo.getHasRumble()) {
+            playersText += " • Rumble";
+        }
+        gamePlayers.setText(playersText);
+        
+        // Date de sortie - Utiliser database si disponible
+        String releaseDate;
+        if (dbGameInfo != null && dbGameInfo.getReleaseYear() != null) {
+            releaseDate = "📅 " + dbGameInfo.getReleaseYear();
+            if (dbGameInfo.getReleaseMonth() != null) {
+                releaseDate += "-" + String.format("%02d", dbGameInfo.getReleaseMonth());
+            }
+            if (dbGameInfo.getDeveloper() != null) {
+                releaseDate += " • 🏢 " + dbGameInfo.getDeveloper();
+            }
+        } else {
+            releaseDate = formatReleaseDate(game.getReleasedate());
+        }
+        gameReleaseDate.setText(releaseDate);
+        
+        // Images
+        loadGameImages();
+    }
     
     private void loadGameImages() {
         // Screenshot image (top)

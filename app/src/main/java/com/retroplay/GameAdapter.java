@@ -46,12 +46,25 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Game game = games.get(position);
         
-        // Set game data
+        // Set game data with database enrichment hint
         holder.title.setText(game.getTitle());
-        holder.genreChip.setText(game.getGenre());
+        
+        // Genre - Show DB icon if we expect it's in database
+        String genreText = game.getGenre();
+        // Note: We don't calculate CRC here (too slow for RecyclerView)
+        // Database info will be shown in GameDetailsActivity
+        holder.genreChip.setText(genreText);
+        
         holder.playersInfo.setText("👥 " + game.getPlayers() + "P");
         holder.releaseYear.setText(extractYear(game.getReleasedate()));
-        holder.description.setText(game.getDesc());
+        
+        // Description - Add hint that database info available in details
+        String desc = game.getDesc();
+        if (desc != null && desc.length() > 100) {
+            desc = desc.substring(0, 100) + "...";
+        }
+        desc += "\n💾 DB info in details";
+        holder.description.setText(desc);
         
         // Show loading progress
         holder.loadingProgress.setVisibility(View.VISIBLE);

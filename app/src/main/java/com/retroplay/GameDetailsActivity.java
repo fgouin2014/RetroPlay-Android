@@ -286,6 +286,26 @@ public class GameDetailsActivity extends AppCompatActivity {
     }
     
     /**
+     * Count number of cheats in a .cht file
+     */
+    private int countCheatsInFile(java.io.File cheatFile) {
+        try {
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(cheatFile));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().startsWith("cheats =")) {
+                    reader.close();
+                    return Integer.parseInt(line.split("=")[1].trim());
+                }
+            }
+            reader.close();
+        } catch (Exception e) {
+            Log.e(TAG, "Error counting cheats: " + e.getMessage());
+        }
+        return 0;
+    }
+    
+    /**
      * Mappe le nom de console au vrai nom de repertoire sur le device
      * Resout les problemes de duplication (lynx/atarilynx, sms/mastersystem, etc.)
      */
@@ -486,6 +506,37 @@ public class GameDetailsActivity extends AppCompatActivity {
         
         Log.i(TAG, "ROM path: " + romPath);
         
+        // === DATABASE LOOKUP (NEW) ===
+        // Calculate CRC32 and lookup game metadata
+        String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
+        if (gameCRC != null) {
+            Log.i(TAG, "ROM CRC32: " + gameCRC);
+            
+            com.retroplay.database.GameInfo gameInfo = com.retroplay.database.DatabaseManager.INSTANCE.lookupGame(gameCRC, game.getConsole());
+            if (gameInfo != null) {
+                Log.i(TAG, "✅ Game identified from database:");
+                Log.i(TAG, "  Name: " + gameInfo.getName());
+                Log.i(TAG, "  Genre: " + gameInfo.getGenre());
+                Log.i(TAG, "  Developer: " + gameInfo.getDeveloper());
+                Log.i(TAG, "  Year: " + gameInfo.getReleaseYear());
+                Log.i(TAG, "  " + gameInfo.getDisplayInfo());
+                
+                // Check cheats available
+                java.io.File cheatFile = com.retroplay.database.DatabaseManager.INSTANCE.getCheatsPath(gameInfo, game.getConsole());
+                if (cheatFile != null && cheatFile.exists()) {
+                    int cheatCount = countCheatsInFile(cheatFile);
+                    Log.i(TAG, "  🎮 " + cheatCount + " cheats available!");
+                    
+                    // Show notification
+                    Toast.makeText(this, 
+                        cheatCount + " cheats available • " + gameInfo.getDisplayInfo(), 
+                        Toast.LENGTH_LONG).show();
+                }
+            } else {
+                Log.w(TAG, "⚠️ Game not found in database (CRC: " + gameCRC + ")");
+            }
+        }
+        
         // Determine which emulator activity to use based on user preference
         Class<?> emulatorActivity = getEmulatorActivityClass(game.getConsole());
         
@@ -495,6 +546,11 @@ public class GameDetailsActivity extends AppCompatActivity {
         intent.putExtra("gameId", game.getId());
         intent.putExtra("console", game.getConsole());
         intent.putExtra("loadSlot", slot);  // 0 = nouvelle partie, 1-5 = charger slot
+        
+        // Pass database metadata if available
+        if (gameCRC != null) {
+            intent.putExtra("gameCRC", gameCRC);
+        }
         
         startActivity(intent);
     }

@@ -107,6 +107,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var cheatApplier: com.retroplay.cheat.CheatApplier
     private var currentCoreFilePath: String? = null
+    private var gameCRC: String? = null  // Database CRC (if available)
     
     // Zapper support (NES light gun)
     private var isZapperGame: Boolean = false
@@ -126,6 +127,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     // États pour DIP Switches et Core Options
     private val showDipSwitchDialog = mutableStateOf(false)
     private val showCoreOptionsDialog = mutableStateOf(false)
+    private val showGameInfoDialog = mutableStateOf(false)
     private var allCoreVariables = mutableStateListOf<CoreVariable>()
     private val dipSwitches = mutableStateListOf<CoreVariable>()
     private val coreOptions = mutableStateListOf<CoreVariable>()
@@ -820,6 +822,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         console = intent.getStringExtra("console") ?: "psx"
         gameName = intent.getStringExtra("gameName") ?: "Game"
+        gameCRC = intent.getStringExtra("gameCRC")  // Database CRC (may be null)
         val gameId = intent.getStringExtra("gameId") ?: gameName  // Use gameName as fallback
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
         
@@ -1337,6 +1340,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 showGamePadSettings = showGamePadSettings,
                 showAdvancedOverlaySettings = showAdvancedOverlaySettings,
                 showQuickMenu = showQuickMenu,
+                showGameInfoDialog = showGameInfoDialog,
+                gameCRC = gameCRC,
                 overlaysVisible = overlaysVisible,
                 initialVariant = savedVariant,
                 cheatApplier = cheatApplier,
@@ -1587,6 +1592,20 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                         Log.i(TAG, "Applied ${modifiedValues.size} core option changes to running core")
                     },
                     onDismiss = { showCoreOptionsDialog.value = false }
+                )
+            }
+            
+            // === GAME INFO DIALOG (Database) ===
+            if (showGameInfoDialog.value) {
+                val gameCRC = intent.getStringExtra("gameCRC")
+                val gameInfo = gameCRC?.let { com.retroplay.database.DatabaseManager.lookupGame(it, console) }
+                val cheatFile = gameInfo?.let { com.retroplay.database.DatabaseManager.getCheatsPath(it, console) }
+                
+                GameInfoDialog(
+                    gameInfo = gameInfo,
+                    gameCRC = gameCRC,
+                    cheatFile = cheatFile,
+                    onDismiss = { showGameInfoDialog.value = false }
                 )
             }
         }
@@ -2168,6 +2187,8 @@ private fun ComposeEmulatorScreen(
     showGamePadSettings: MutableState<Boolean>,
     showAdvancedOverlaySettings: MutableState<Boolean>,
     showQuickMenu: MutableState<Boolean>,
+    showGameInfoDialog: MutableState<Boolean>,
+    gameCRC: String?,
     overlaysVisible: MutableState<Boolean>,
     initialVariant: GamePadLayoutManager.LayoutVariant,
     cheatApplier: com.retroplay.cheat.CheatApplier,
@@ -2707,6 +2728,10 @@ private fun ComposeEmulatorScreen(
                             showQuickMenu.value = false
                             showAdvancedOverlaySettings.value = true
                         },
+                        onGameInfo = {
+                            showQuickMenu.value = false
+                            showGameInfoDialog.value = true
+                        },
                         onSaveState = { slot ->
                             closeQuickMenuWithCooldown()  // Fermer avec cooldown
                             onSaveState(slot)
@@ -2746,7 +2771,8 @@ private fun ComposeEmulatorScreen(
                         currentShaderName = currentShaderName,
                         quickActionsBarVisible = quickActionsBarVisible,
                         isZapperGame = isZapperGame,  // CRITICAL: Afficher bouton Configure Zapper
-                        crosshairMode = crosshairMode  // Mode d'affichage du crosshair
+                        crosshairMode = crosshairMode,  // Mode d'affichage du crosshair
+                        hasGameInfo = (gameCRC != null)  // Database info available
                     )
                 }
                 
@@ -3742,6 +3768,7 @@ private fun QuickMenuDialog(
     onHideOverlay: () -> Unit,
     onSettings: () -> Unit,
     onAdvancedSettings: () -> Unit = {},  // Nouveau callback
+    onGameInfo: () -> Unit = {},  // NEW: Show game database info
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
     onQuit: () -> Unit,
@@ -3757,7 +3784,8 @@ private fun QuickMenuDialog(
     currentShaderName: String = "None",
     quickActionsBarVisible: Boolean = true,
     isZapperGame: Boolean = false,
-    crosshairMode: CrosshairMode = CrosshairMode.RETROPLAY_ONLY
+    crosshairMode: CrosshairMode = CrosshairMode.RETROPLAY_ONLY,
+    hasGameInfo: Boolean = false  // NEW: If database info available
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -3875,6 +3903,19 @@ private fun QuickMenuDialog(
                         if (audioMuted) "AUDIO: MUTED" else "AUDIO: ON",
                         color = Color.White
                     )
+                }
+                
+                // Bouton Game Info (si database info disponible)
+                if (hasGameInfo) {
+                    androidx.compose.material3.Button(
+                        onClick = onGameInfo,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF9C27B0)
+                        )
+                    ) {
+                        Text("📊 GAME INFO", color = Color.White)
+                    }
                 }
                 
                 // Bouton Settings (ouvrir le menu complet)

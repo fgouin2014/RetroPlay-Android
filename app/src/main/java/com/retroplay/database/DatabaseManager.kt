@@ -9,6 +9,7 @@ import java.util.zip.ZipFile
 object DatabaseManager {
     private const val TAG = "DatabaseManager"
     private const val DATABASE_BASE_PATH = "/storage/emulated/0/RetroPlay-Data/database/rdb"
+    private const val CACHE_BASE_PATH = "/storage/emulated/0/RetroPlay-Data/database/cache"
     
     private val gameCache = mutableMapOf<String, MutableMap<String, GameInfo>>()
     
@@ -165,7 +166,6 @@ object DatabaseManager {
         }
         
         val consoleName = getConsoleFullName(console)
-        Log.i(TAG, "Loading database for $consoleName from .rdb...")
         
         // Look for .rdb file in RetroPlay-Data/database/rdb/
         val rdbFile = File("$DATABASE_BASE_PATH/$consoleName.rdb")
@@ -176,17 +176,72 @@ object DatabaseManager {
             return
         }
         
+        // Check if we have a disk cache
+        val cacheDir = File(CACHE_BASE_PATH)
+        if (!cacheDir.exists()) cacheDir.mkdirs()
+        
+        val cacheFile = File("$CACHE_BASE_PATH/$consoleName.cache")
+        val cacheValid = cacheFile.exists() && cacheFile.lastModified() >= rdbFile.lastModified()
+        
+        val games: Map<String, GameInfo> = if (cacheValid) {
+            // Load from cache (much faster!)
+            Log.i(TAG, "Loading database for $consoleName from disk cache...")
+            try {
+                loadFromCache(cacheFile, console)
+            } catch (e: Exception) {
+                Log.w(TAG, "Cache corrupted, re-parsing .rdb: ${e.message}")
+                parseAndCache(rdbFile, cacheFile, console)
+            }
+        } else {
+            // Parse .rdb and save to cache
+            Log.i(TAG, "Loading database for $consoleName from .rdb (no cache)...")
+            parseAndCache(rdbFile, cacheFile, console)
+        }
+        
+        gameCache[console] = games.toMutableMap()
+        
+        Log.i(TAG, "✅ Database loaded for $consoleName: ${games.size} games")
+    }
+    
+    private fun parseAndCache(rdbFile: File, cacheFile: File, console: String): Map<String, GameInfo> {
         // Parse .rdb file with RdbParser
         val games = RdbParser.parseRdbFile(rdbFile)
         
         // Update console field for all games
         val consoleMap = games.mapValues { (_, game) ->
             game.copy(console = console)
-        }.toMutableMap()
+        }
         
-        gameCache[console] = consoleMap
+        // Save to disk cache
+        try {
+            saveToCache(cacheFile, consoleMap)
+            Log.d(TAG, "💾 Cached ${consoleMap.size} games to ${cacheFile.name}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to save cache: ${e.message}")
+        }
         
-        Log.i(TAG, "✅ Database loaded for $consoleName: ${consoleMap.size} games from ${rdbFile.name}")
+        return consoleMap
+    }
+    
+    private fun saveToCache(cacheFile: File, games: Map<String, GameInfo>) {
+        cacheFile.outputStream().use { fos ->
+            java.io.ObjectOutputStream(fos).use { oos ->
+                oos.writeObject(games)
+            }
+        }
+    }
+    
+    @Suppress("UNCHECKED_CAST")
+    private fun loadFromCache(cacheFile: File, console: String): Map<String, GameInfo> {
+        val startTime = System.currentTimeMillis()
+        cacheFile.inputStream().use { fis ->
+            java.io.ObjectInputStream(fis).use { ois ->
+                val games = ois.readObject() as Map<String, GameInfo>
+                val elapsed = System.currentTimeMillis() - startTime
+                Log.i(TAG, "📦 Loaded ${games.size} games from cache in ${elapsed}ms (vs ~3000ms from .rdb)")
+                return games
+            }
+        }
     }
     
     fun getCheatsPath(gameInfo: GameInfo, console: String): File? {

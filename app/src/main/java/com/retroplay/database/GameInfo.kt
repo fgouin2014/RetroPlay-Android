@@ -1,5 +1,7 @@
 package com.retroplay.database
 
+import java.io.Serializable
+
 /**
  * Game information from libretro-database
  * 
@@ -28,7 +30,7 @@ data class GameInfo(
     val hasAnalog: Boolean = false,     // Analog sticks required
     val isHack: Boolean = false,        // Fan translation/mod
     val isHomebrew: Boolean = false     // Independent game
-) {
+) : Serializable {
     /**
      * Check if this game benefits from Run-Ahead
      * (Fighting, Platformer, Shoot'em Up = high priority)

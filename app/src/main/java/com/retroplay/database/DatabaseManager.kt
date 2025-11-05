@@ -78,6 +78,8 @@ object DatabaseManager {
                 val entry = zip.entries().asSequence().firstOrNull { entry ->
                     !entry.isDirectory && (
                         entry.name.endsWith(".nes", ignoreCase = true) ||
+                        entry.name.endsWith(".unh", ignoreCase = true) ||  // UnHeadered NES
+                        entry.name.endsWith(".unf", ignoreCase = true) ||  // UnHeadered FDS
                         entry.name.endsWith(".sfc", ignoreCase = true) ||
                         entry.name.endsWith(".smc", ignoreCase = true) ||
                         entry.name.endsWith(".gb", ignoreCase = true) ||

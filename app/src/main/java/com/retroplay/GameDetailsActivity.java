@@ -187,7 +187,19 @@ public class GameDetailsActivity extends AppCompatActivity {
         gameGenre.setText(displayGenre);
         
         // Nombre de joueurs - Utiliser database si disponible
-        int maxPlayers = (dbGameInfo != null) ? dbGameInfo.getMaxPlayers() : Integer.parseInt(game.getPlayers().replaceAll("[^0-9]", ""));
+        int maxPlayers = 1; // Default
+        if (dbGameInfo != null) {
+            maxPlayers = dbGameInfo.getMaxPlayers();
+        } else {
+            String playersStr = game.getPlayers().replaceAll("[^0-9]", "");
+            if (!playersStr.isEmpty()) {
+                try {
+                    maxPlayers = Integer.parseInt(playersStr);
+                } catch (NumberFormatException e) {
+                    maxPlayers = 1; // Fallback
+                }
+            }
+        }
         String playersText = "👥 " + maxPlayers + "P";
         if (dbGameInfo != null && dbGameInfo.getHasAnalog()) {
             playersText += " • Analog";

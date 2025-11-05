@@ -1668,9 +1668,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             if (showSmartConfigDialog.value) {
                 SmartConfigDialog(
                     onDismiss = { showSmartConfigDialog.value = false },
-                    onSettingsChanged = { newSettings ->
-                        Log.i(TAG, "Smart Config settings changed: $newSettings")
-                        Toast.makeText(this, "Smart Config settings saved", Toast.LENGTH_SHORT).show()
+                    onSettingsChanged = {
+                        Log.i(TAG, "Smart Config settings saved to retroplay.cfg")
+                        Toast.makeText(this, "Smart Config saved to retroplay.cfg", Toast.LENGTH_SHORT).show()
                     }
                 )
             }

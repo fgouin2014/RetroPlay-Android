@@ -19,10 +19,14 @@ import com.retroplay.smartconfig.SmartConfigSettings
 @Composable
 fun SmartConfigDialog(
     onDismiss: () -> Unit,
-    onSettingsChanged: (SmartConfigSettings) -> Unit
+    onSettingsChanged: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var settings by remember { mutableStateOf(SmartConfigPreferences.getSettings(context)) }
+    
+    // Load from retroplay.cfg file instead of SharedPreferences
+    var config by remember { 
+        mutableStateOf(com.retroplay.config.RetroPlayConfigManager.loadConfig())
+    }
     
     Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -81,9 +85,9 @@ fun SmartConfigDialog(
                         }
                         
                         Switch(
-                            checked = settings.enabled,
+                            checked = config.smartConfigEnabled,
                             onCheckedChange = { 
-                                settings = settings.copy(enabled = it)
+                                config = config.copy(smartConfigEnabled = it)
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color(0xFF4CAF50),
@@ -95,7 +99,7 @@ fun SmartConfigDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     // Feature toggles (only shown if globally enabled)
-                    if (settings.enabled) {
+                    if (config.smartConfigEnabled) {
                         Text(
                             text = "AUTO-APPLY FEATURES",
                             fontSize = 14.sp,
@@ -108,8 +112,8 @@ fun SmartConfigDialog(
                             title = "⚡ Run-Ahead (Input Lag Reduction)",
                             description = "Automatically set Run-Ahead frames based on genre\n" +
                                     "Fighting: 4 frames, Platformer: 2 frames, RPG: 0 frames",
-                            enabled = settings.autoApplyRunAhead,
-                            onToggle = { settings = settings.copy(autoApplyRunAhead = it) },
+                            enabled = config.smartConfigAutoRunAhead,
+                            onToggle = { config = config.copy(smartConfigAutoRunAhead = it) },
                             badge = "EXPERIMENTAL",
                             badgeColor = Color(0xFFFF9800)
                         )
@@ -121,8 +125,8 @@ fun SmartConfigDialog(
                             title = "⏪ Rewind Buffer",
                             description = "Automatically set Rewind buffer size based on console and genre\n" +
                                     "Platformer: Large buffer, Fighting: Small buffer",
-                            enabled = settings.autoApplyRewind,
-                            onToggle = { settings = settings.copy(autoApplyRewind = it) },
+                            enabled = config.smartConfigAutoRewind,
+                            onToggle = { config = config.copy(smartConfigAutoRewind = it) },
                             badge = "EXPERIMENTAL",
                             badgeColor = Color(0xFFFF9800)
                         )
@@ -134,8 +138,8 @@ fun SmartConfigDialog(
                             title = "🎮 Optimal Overlay",
                             description = "Automatically select best overlay based on game requirements\n" +
                                     "PSX Racing: Analog sticks, Fighting: 6-button layout",
-                            enabled = settings.autoApplyOverlay,
-                            onToggle = { settings = settings.copy(autoApplyOverlay = it) },
+                            enabled = config.smartConfigAutoOverlay,
+                            onToggle = { config = config.copy(smartConfigAutoOverlay = it) },
                             badge = "USER CHOICE",
                             badgeColor = Color(0xFF2196F3)
                         )
@@ -166,9 +170,9 @@ fun SmartConfigDialog(
                             }
                             
                             Switch(
-                                checked = settings.showOSDNotifications,
+                                checked = config.smartConfigShowOSD,
                                 onCheckedChange = { 
-                                    settings = settings.copy(showOSDNotifications = it)
+                                    config = config.copy(smartConfigShowOSD = it)
                                 },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color(0xFF2196F3),
@@ -225,8 +229,8 @@ fun SmartConfigDialog(
                         
                         Button(
                             onClick = {
-                                SmartConfigPreferences.saveSettings(context, settings)
-                                onSettingsChanged(settings)
+                                com.retroplay.config.RetroPlayConfigManager.saveConfig(config)
+                                onSettingsChanged()
                                 onDismiss()
                             },
                             modifier = Modifier.weight(1f),

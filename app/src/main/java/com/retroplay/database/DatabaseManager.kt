@@ -4,6 +4,7 @@ import android.util.Log
 import java.io.File
 import java.io.FileInputStream
 import java.util.zip.CRC32
+import java.util.zip.ZipFile
 
 object DatabaseManager {
     private const val TAG = "DatabaseManager"
@@ -17,6 +18,11 @@ object DatabaseManager {
             if (!file.exists()) {
                 Log.e(TAG, "File not found: $filePath")
                 return null
+            }
+            
+            // If file is a ZIP, extract and calculate CRC on ROM inside
+            if (file.name.endsWith(".zip", ignoreCase = true) || file.name.endsWith(".7z", ignoreCase = true)) {
+                return calculateCRC32FromArchive(file)
             }
             
             val crc32 = CRC32()
@@ -56,6 +62,80 @@ object DatabaseManager {
             
         } catch (e: Exception) {
             Log.e(TAG, "Error calculating CRC32 for $filePath: ${e.message}", e)
+            null
+        }
+    }
+    
+    private fun calculateCRC32FromArchive(archiveFile: File): String? {
+        return try {
+            if (!archiveFile.name.endsWith(".zip", ignoreCase = true)) {
+                Log.w(TAG, "Only .zip archives supported for now (not .7z)")
+                return null
+            }
+            
+            ZipFile(archiveFile).use { zip ->
+                // Find first ROM file in the archive
+                val entry = zip.entries().asSequence().firstOrNull { entry ->
+                    !entry.isDirectory && (
+                        entry.name.endsWith(".nes", ignoreCase = true) ||
+                        entry.name.endsWith(".sfc", ignoreCase = true) ||
+                        entry.name.endsWith(".smc", ignoreCase = true) ||
+                        entry.name.endsWith(".gb", ignoreCase = true) ||
+                        entry.name.endsWith(".gbc", ignoreCase = true) ||
+                        entry.name.endsWith(".gba", ignoreCase = true) ||
+                        entry.name.endsWith(".bin", ignoreCase = true) ||
+                        entry.name.endsWith(".gen", ignoreCase = true) ||
+                        entry.name.endsWith(".md", ignoreCase = true)
+                    )
+                }
+                
+                if (entry == null) {
+                    Log.w(TAG, "No ROM file found in archive: ${archiveFile.name}")
+                    return null
+                }
+                
+                Log.d(TAG, "Found ROM in archive: ${entry.name}")
+                
+                // Read the ROM from the ZIP and calculate CRC
+                zip.getInputStream(entry).use { stream ->
+                    val crc32 = CRC32()
+                    val buffer = ByteArray(8192)
+                    var skipBytes = 0
+                    
+                    // Check if NES ROM with iNES header
+                    if (entry.name.endsWith(".nes", ignoreCase = true)) {
+                        // Read first 4 bytes to check for iNES header
+                        val header = ByteArray(4)
+                        val headerRead = stream.read(header)
+                        
+                        if (headerRead == 4 && 
+                            header[0] == 'N'.code.toByte() && 
+                            header[1] == 'E'.code.toByte() && 
+                            header[2] == 'S'.code.toByte() && 
+                            header[3] == 0x1A.toByte()) {
+                            // Skip remaining 12 bytes of iNES header (already read 4)
+                            stream.skip(12)
+                            skipBytes = 16
+                            Log.d(TAG, "iNES header detected in ${entry.name}, skipping 16 bytes")
+                        } else {
+                            // Not iNES, include those 4 bytes we just read
+                            crc32.update(header, 0, 4)
+                        }
+                    }
+                    
+                    // Calculate CRC on the rest of the data
+                    var bytesRead: Int
+                    while (stream.read(buffer).also { bytesRead = it } != -1) {
+                        crc32.update(buffer, 0, bytesRead)
+                    }
+                    
+                    val crcValue = crc32.value.toString(16).uppercase().padStart(8, '0')
+                    Log.d(TAG, "CRC32 from ZIP: ${archiveFile.name} → ${entry.name} = $crcValue (skipBytes=$skipBytes)")
+                    return crcValue
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating CRC from archive: ${e.message}", e)
             null
         }
     }

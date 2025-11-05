@@ -151,40 +151,15 @@ public class GameDetailsActivity extends AppCompatActivity {
         
         // === DATABASE LOOKUP (NEW) ===
         // Calculate CRC and enrich metadata from database
+        // ALWAYS use original file (ZIP or ROM) for accurate CRC matching
         String fileName = game.getFile();
         if (fileName.startsWith("http://") || fileName.startsWith("https://")) {
             fileName = fileName.substring(fileName.lastIndexOf("/") + 1);
         }
         String consoleDir = getRealConsoleDirectory(game.getConsole());
+        String romPath = "/storage/emulated/0/GameLibrary-Data/" + consoleDir + "/" + fileName;
         
-        // For archives, check if cached ROM exists (better CRC accuracy)
-        String romPath;
-        boolean isArchive = fileName.endsWith(".zip") || fileName.endsWith(".7z");
-        if (isArchive) {
-            // Check for cached extracted ROM
-            String simpleName = game.getName().replaceAll("\\s*\\(.*?\\)\\s*", "").trim();
-            String cachedRomPath = "/storage/emulated/0/GameLibrary-Data/.cache/" + consoleDir + "/" + simpleName;
-            
-            // Try common NES extension
-            if (game.getConsole().equals("nes")) {
-                cachedRomPath += ".nes";
-            } else {
-                cachedRomPath += ".rom"; // Generic fallback
-            }
-            
-            java.io.File cachedFile = new java.io.File(cachedRomPath);
-            if (cachedFile.exists()) {
-                romPath = cachedRomPath;
-                Log.d(TAG, "Using cached ROM for CRC: " + cachedRomPath);
-            } else {
-                // Fallback to archive (will calculate on ZIP, less accurate)
-                romPath = "/storage/emulated/0/GameLibrary-Data/" + consoleDir + "/" + fileName;
-                Log.d(TAG, "Cached ROM not found, using archive: " + romPath);
-            }
-        } else {
-            romPath = "/storage/emulated/0/GameLibrary-Data/" + consoleDir + "/" + fileName;
-        }
-        
+        Log.d(TAG, "[DB] Calculating CRC for original file: " + romPath);
         String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
         com.retroplay.database.GameInfo dbGameInfo = null;
         

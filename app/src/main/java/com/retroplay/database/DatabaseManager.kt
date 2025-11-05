@@ -18,6 +18,7 @@ object DatabaseManager {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     // Progress callback for loading
+    // Kotlin automatically generates setter: onLoadProgress = ... (Java: setOnLoadProgress(...))
     var onLoadProgress: ((String, Int, Int) -> Unit)? = null
     
     fun calculateCRC32(filePath: String): String? {
@@ -178,6 +179,23 @@ object DatabaseManager {
                 }
             }
             onLoadProgress?.invoke("", consoles.size, consoles.size) // Complete
+        }
+    }
+    
+    /**
+     * Java-friendly async lookup with callback (for use from Java/Android Activities)
+     * Uses coroutines internally but exposes Java-friendly callback interface
+     */
+    fun lookupGameAsyncJava(
+        crc: String,
+        console: String,
+        onProgress: ((String) -> Unit)? = null,
+        onComplete: (GameInfo?) -> Unit
+    ) {
+        scope.launch {
+            onProgress?.invoke("Loading database...")
+            val result = lookupGameAsync(crc, console)
+            onComplete(result)
         }
     }
     

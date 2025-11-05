@@ -154,6 +154,46 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
         // Charger les jeux
         loadGames();
+        
+        // Preload databases in background (for faster game info lookup)
+        preloadDatabases();
+    }
+    
+    /**
+     * Preload major console databases in background for faster game info lookup
+     */
+    private void preloadDatabases() {
+        // List of major consoles to preload (most commonly used)
+        java.util.List<String> majorConsoles = java.util.Arrays.asList(
+            "nes",      // Nintendo Entertainment System
+            "snes",     // Super Nintendo
+            "genesis",  // Sega Genesis
+            "gba",      // Game Boy Advance
+            "gbc",      // Game Boy Color
+            "gb",       // Game Boy
+            "n64",      // Nintendo 64
+            "psx"       // PlayStation
+        );
+        
+        Log.i(TAG, "[DB] Starting background preload of databases for " + majorConsoles.size() + " consoles");
+        
+        // Set up progress callback (optional, for logging)
+        com.retroplay.database.DatabaseManager.INSTANCE.setOnLoadProgress(
+            new kotlin.jvm.functions.Function3<String, Integer, Integer, kotlin.Unit>() {
+                @Override
+                public kotlin.Unit invoke(String console, Integer current, Integer total) {
+                    if (console.isEmpty()) {
+                        Log.i(TAG, "[DB] ✅ Preload complete: " + total + " databases loaded");
+                    } else {
+                        Log.d(TAG, "[DB] Preloading: " + console + " (" + current + "/" + total + ")");
+                    }
+                    return kotlin.Unit.INSTANCE;
+                }
+            }
+        );
+        
+        // Start async preload (non-blocking)
+        com.retroplay.database.DatabaseManager.INSTANCE.preloadDatabasesAsync(majorConsoles);
     }
     
     @Override

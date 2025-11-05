@@ -56,6 +56,9 @@ public class GameDetailsActivity extends AppCompatActivity {
     private TextView consoleDefaultInfo;
     private String currentConsole;
     private String currentGameId;
+    
+    // Database loading progress
+    private android.app.ProgressDialog progressDialog;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -149,7 +152,10 @@ public class GameDetailsActivity extends AppCompatActivity {
         gameTitle.setText(game.getName());
         gameTitle.setTypeface(null, Typeface.BOLD);
         
-        // === DATABASE LOOKUP (NEW) ===
+        // Images (load immediately, don't wait for database)
+        loadGameImages();
+        
+        // === DATABASE LOOKUP (ASYNC) ===
         // Calculate CRC and enrich metadata from database
         // ALWAYS use original file (ZIP or ROM) for accurate CRC matching
         String fileName = game.getFile();
@@ -159,15 +165,67 @@ public class GameDetailsActivity extends AppCompatActivity {
         String consoleDir = getRealConsoleDirectory(game.getConsole());
         String romPath = "/storage/emulated/0/GameLibrary-Data/" + consoleDir + "/" + fileName;
         
-        Log.d(TAG, "[DB] Calculating CRC for original file: " + romPath);
-        String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
-        com.retroplay.database.GameInfo dbGameInfo = null;
+        // Show progress dialog
+        progressDialog = new android.app.ProgressDialog(this);
+        progressDialog.setMessage("Loading game metadata...");
+        progressDialog.setCancelable(false);
+        progressDialog.show();
         
-        if (gameCRC != null) {
-            dbGameInfo = com.retroplay.database.DatabaseManager.INSTANCE.lookupGame(gameCRC, game.getConsole());
-            if (dbGameInfo != null) {
-                Log.i(TAG, "✅ Database metadata found: " + dbGameInfo.getDisplayInfo());
+        // Calculate CRC on background thread
+        new Thread(() -> {
+            Log.d(TAG, "[DB] Calculating CRC for original file: " + romPath);
+            String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
+            
+            // Lookup game info async (with progress callback)
+            if (gameCRC != null) {
+                final String finalGameCRC = gameCRC; // Make final for lambda
+                com.retroplay.database.DatabaseManager.INSTANCE.lookupGameAsyncJava(
+                    finalGameCRC,
+                    game.getConsole(),
+                    new kotlin.jvm.functions.Function1<String, kotlin.Unit>() {
+                        @Override
+                        public kotlin.Unit invoke(String progressMessage) {
+                            // Update progress on UI thread
+                            runOnUiThread(() -> {
+                                if (progressDialog != null && progressDialog.isShowing()) {
+                                    progressDialog.setMessage(progressMessage);
+                                }
+                            });
+                            return kotlin.Unit.INSTANCE;
+                        }
+                    },
+                    new kotlin.jvm.functions.Function1<com.retroplay.database.GameInfo, kotlin.Unit>() {
+                        @Override
+                        public kotlin.Unit invoke(com.retroplay.database.GameInfo dbGameInfo) {
+                            // Update UI on main thread
+                            runOnUiThread(() -> {
+                                if (progressDialog != null && progressDialog.isShowing()) {
+                                    progressDialog.dismiss();
+                                }
+                                updateGameDetailsWithMetadata(finalGameCRC, dbGameInfo);
+                            });
+                            return kotlin.Unit.INSTANCE;
+                        }
+                    }
+                );
+            } else {
+                // No CRC, just update UI
+                runOnUiThread(() -> {
+                    if (progressDialog != null && progressDialog.isShowing()) {
+                        progressDialog.dismiss();
+                    }
+                    updateGameDetailsWithMetadata(null, null);
+                });
             }
+        }).start();
+    }
+    
+    /**
+     * Update game details UI with database metadata
+     */
+    private void updateGameDetailsWithMetadata(String gameCRC, com.retroplay.database.GameInfo dbGameInfo) {
+        if (dbGameInfo != null) {
+            Log.i(TAG, "✅ Database metadata found: " + dbGameInfo.getDisplayInfo());
         }
         
         // Description - Ajouter CRC si disponible
@@ -225,9 +283,6 @@ public class GameDetailsActivity extends AppCompatActivity {
             releaseDate = formatReleaseDate(game.getReleasedate());
         }
         gameReleaseDate.setText(releaseDate);
-        
-        // Images
-        loadGameImages();
     }
     
     private void loadGameImages() {

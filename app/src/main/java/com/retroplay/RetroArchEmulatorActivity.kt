@@ -130,6 +130,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private val showCoreOptionsDialog = mutableStateOf(false)
     private val showGameInfoDialog = mutableStateOf(false)
     private val showCheatsDialog = mutableStateOf(false)
+    private val showSmartConfigDialog = mutableStateOf(false)
     private var allCoreVariables = mutableStateListOf<CoreVariable>()
     private val dipSwitches = mutableStateListOf<CoreVariable>()
     private val coreOptions = mutableStateListOf<CoreVariable>()
@@ -1344,6 +1345,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 showQuickMenu = showQuickMenu,
                 showGameInfoDialog = showGameInfoDialog,
                 showCheatsDialog = showCheatsDialog,
+                showSmartConfigDialog = showSmartConfigDialog,
                 gameCRC = gameCRC,
                 loadedCheats = loadedCheats,
                 overlaysVisible = overlaysVisible,
@@ -1660,6 +1662,17 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                         }
                     )
                 }
+            }
+            
+            // === SMART CONFIG DIALOG ===
+            if (showSmartConfigDialog.value) {
+                SmartConfigDialog(
+                    onDismiss = { showSmartConfigDialog.value = false },
+                    onSettingsChanged = { newSettings ->
+                        Log.i(TAG, "Smart Config settings changed: $newSettings")
+                        Toast.makeText(this, "Smart Config settings saved", Toast.LENGTH_SHORT).show()
+                    }
+                )
             }
         }
     }
@@ -2254,6 +2267,7 @@ private fun ComposeEmulatorScreen(
     showQuickMenu: MutableState<Boolean>,
     showGameInfoDialog: MutableState<Boolean>,
     showCheatsDialog: MutableState<Boolean>,
+    showSmartConfigDialog: MutableState<Boolean>,
     gameCRC: String?,
     loadedCheats: List<com.retroplay.cheat.CheatManager.Cheat>,
     overlaysVisible: MutableState<Boolean>,
@@ -2887,6 +2901,10 @@ private fun ComposeEmulatorScreen(
                             showMainMenu.value = false
                             showCoreOptionsDialog.value = true
                         },
+                        onSmartConfig = {
+                            showMainMenu.value = false
+                            showSmartConfigDialog.value = true
+                        },
                         hasDipSwitches = dipSwitches.isNotEmpty(),
                         hasCoreOptions = coreOptions.isNotEmpty()
                     )
@@ -3160,6 +3178,7 @@ private fun MainMenuDialog(
     onChangeCore: () -> Unit,
     onDipSwitches: () -> Unit,
     onCoreOptions: () -> Unit,
+    onSmartConfig: () -> Unit = {},  // Smart Config callback
     hasDipSwitches: Boolean,
     hasCoreOptions: Boolean
 ) {
@@ -3250,6 +3269,14 @@ private fun MainMenuDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Advanced Overlay Settings", color = Color(0xFFFF9800))
+                    }
+                    
+                    // Smart Config Settings
+                    TextButton(
+                        onClick = onSmartConfig,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("💡 Smart Config", color = Color(0xFF4CAF50))
                     }
                     
                     // Change Core

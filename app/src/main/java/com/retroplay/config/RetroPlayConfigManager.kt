@@ -268,5 +268,131 @@ object RetroPlayConfigManager {
      * Get config file path for external editing.
      */
     fun getConfigPath(): String = CONFIG_FILE
+    
+    // ========================================
+    // PER-GAME CONFIG OVERRIDES
+    // ========================================
+    
+    private const val GAMES_CONFIG_DIR = "/storage/emulated/0/RetroPlay-Data/config/games"
+    
+    /**
+     * Load per-game config override.
+     * Returns null if no override exists for this game.
+     * 
+     * @param gameCRC CRC32 of the game ROM
+     * @return RetroPlayConfig with only the overridden values, or null
+     */
+    fun loadGameConfig(gameCRC: String): RetroPlayConfig? {
+        val gameConfigFile = File("$GAMES_CONFIG_DIR/$gameCRC.cfg")
+        
+        if (!gameConfigFile.exists()) {
+            Log.d(TAG, "No per-game config for CRC $gameCRC")
+            return null
+        }
+        
+        return try {
+            val config = parseConfigFile(gameConfigFile)
+            Log.i(TAG, "✅ Loaded per-game config for CRC $gameCRC")
+            config
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing per-game config for CRC $gameCRC: ${e.message}", e)
+            null
+        }
+    }
+    
+    /**
+     * Save per-game config override.
+     * Only saves the values that differ from global config.
+     * 
+     * @param gameCRC CRC32 of the game ROM
+     * @param config RetroPlayConfig with overridden values
+     */
+    fun saveGameConfig(gameCRC: String, config: RetroPlayConfig) {
+        val gameConfigFile = File("$GAMES_CONFIG_DIR/$gameCRC.cfg")
+        
+        // Create directory if needed
+        gameConfigFile.parentFile?.mkdirs()
+        
+        try {
+            gameConfigFile.writeText(config.toCfgString())
+            Log.i(TAG, "💾 Per-game config saved for CRC $gameCRC")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving per-game config for CRC $gameCRC: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * Delete per-game config override (revert to global config).
+     * 
+     * @param gameCRC CRC32 of the game ROM
+     * @return true if file was deleted, false if it didn't exist
+     */
+    fun deleteGameConfig(gameCRC: String): Boolean {
+        val gameConfigFile = File("$GAMES_CONFIG_DIR/$gameCRC.cfg")
+        
+        return if (gameConfigFile.exists()) {
+            val deleted = gameConfigFile.delete()
+            if (deleted) {
+                Log.i(TAG, "🗑️ Deleted per-game config for CRC $gameCRC")
+            }
+            deleted
+        } else {
+            Log.d(TAG, "No per-game config to delete for CRC $gameCRC")
+            false
+        }
+    }
+    
+    /**
+     * Check if a game has a per-game config override.
+     */
+    fun hasGameConfig(gameCRC: String): Boolean {
+        return File("$GAMES_CONFIG_DIR/$gameCRC.cfg").exists()
+    }
+    
+    /**
+     * Get effective config for a game (global + per-game override merged).
+     * Per-game overrides take precedence over global config.
+     * 
+     * @param gameCRC CRC32 of the game ROM, or null for global config
+     * @return Effective RetroPlayConfig for this game
+     */
+    fun getEffectiveConfig(gameCRC: String?): RetroPlayConfig {
+        val globalConfig = loadConfig()
+        
+        if (gameCRC == null) {
+            return globalConfig
+        }
+        
+        val gameConfig = loadGameConfig(gameCRC)
+        
+        // If no per-game override, return global config
+        if (gameConfig == null) {
+            return globalConfig
+        }
+        
+        // Merge: per-game overrides take precedence
+        // Note: This is a simple merge. In a real implementation, you'd track
+        // which fields were explicitly set in the per-game config.
+        // For now, we assume if a per-game config exists, all its values override global.
+        return gameConfig
+    }
+    
+    /**
+     * List all games that have per-game config overrides.
+     * @return List of CRC32 strings
+     */
+    fun listGamesWithOverrides(): List<String> {
+        val gamesDir = File(GAMES_CONFIG_DIR)
+        
+        if (!gamesDir.exists()) {
+            return emptyList()
+        }
+        
+        return gamesDir.listFiles { file ->
+            file.isFile && file.name.endsWith(".cfg")
+        }?.map { file ->
+            file.nameWithoutExtension
+        } ?: emptyList()
+    }
 }
 

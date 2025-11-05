@@ -23,7 +23,8 @@ fun GameInfoDialog(
     gameInfo: GameInfo?,
     gameCRC: String?,
     cheatFile: File?,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOpenPerGameConfig: ((String, String) -> Unit)? = null
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -65,6 +66,28 @@ fun GameInfoDialog(
                 }
                 
                 Spacer(modifier = Modifier.height(24.dp))
+                
+                // Per-Game Config button (if CRC is available)
+                if (gameCRC != null && onOpenPerGameConfig != null) {
+                    val hasOverride = com.retroplay.config.RetroPlayConfigManager.hasGameConfig(gameCRC)
+                    
+                    OutlinedButton(
+                        onClick = { 
+                            onOpenPerGameConfig(gameCRC, gameInfo?.name ?: "Unknown Game")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (hasOverride) Color(0xFF4CAF50) else Color(0xFF2196F3)
+                        )
+                    ) {
+                        Text(
+                            text = if (hasOverride) "⚙️ EDIT GAME CONFIG (CUSTOM)" else "⚙️ CONFIGURE THIS GAME",
+                            fontSize = 16.sp
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
                 
                 // Close button
                 Button(

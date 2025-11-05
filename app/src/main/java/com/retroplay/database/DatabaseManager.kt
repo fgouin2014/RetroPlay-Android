@@ -1,6 +1,7 @@
 package com.retroplay.database
 
 import android.util.Log
+import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileInputStream
 import java.util.zip.CRC32
@@ -12,6 +13,12 @@ object DatabaseManager {
     private const val CACHE_BASE_PATH = "/storage/emulated/0/RetroPlay-Data/database/cache"
     
     private val gameCache = mutableMapOf<String, MutableMap<String, GameInfo>>()
+    
+    // Coroutine scope for async operations
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    
+    // Progress callback for loading
+    var onLoadProgress: ((String, Int, Int) -> Unit)? = null
     
     fun calculateCRC32(filePath: String): String? {
         return try {
@@ -143,6 +150,37 @@ object DatabaseManager {
         }
     }
     
+    /**
+     * Async version: Load database with coroutines (non-blocking)
+     */
+    suspend fun loadDatabaseAsync(console: String) = withContext(Dispatchers.IO) {
+        loadDatabase(console)
+    }
+    
+    /**
+     * Async version: Lookup game with coroutines (non-blocking)
+     */
+    suspend fun lookupGameAsync(crc: String, console: String): GameInfo? = withContext(Dispatchers.IO) {
+        lookupGame(crc, console)
+    }
+    
+    /**
+     * Preload all major console databases in background
+     */
+    fun preloadDatabasesAsync(consoles: List<String>) {
+        scope.launch {
+            consoles.forEachIndexed { index, console ->
+                try {
+                    onLoadProgress?.invoke(console, index + 1, consoles.size)
+                    loadDatabase(console)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to preload database for $console: ${e.message}", e)
+                }
+            }
+            onLoadProgress?.invoke("", consoles.size, consoles.size) // Complete
+        }
+    }
+    
     fun lookupGame(crc: String, console: String): GameInfo? {
         val consoleCache = gameCache[console]
         if (consoleCache != null) {
@@ -153,7 +191,7 @@ object DatabaseManager {
             }
         }
         
-        Log.d(TAG, "Cache miss for CRC $crc, loading from DAT files...")
+        Log.d(TAG, "Cache miss for CRC $crc, loading from database...")
         loadDatabase(console)
         
         return gameCache[console]?.get(crc)

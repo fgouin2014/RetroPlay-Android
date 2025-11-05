@@ -221,13 +221,13 @@ object DatabaseManager {
             "gb" -> "Nintendo - Game Boy"
             "psx" -> "Sony - PlayStation"
             "psp" -> "Sony - PlayStation Portable"
-            "genesis" -> "Sega - Mega Drive - Genesis"
+            "genesis", "megadrive" -> "Sega - Mega Drive - Genesis"
             "gamegear" -> "Sega - Game Gear"
-            "mastersystem" -> "Sega - Master System - Mark III"
+            "mastersystem", "sms" -> "Sega - Master System - Mark III"
             "saturn" -> "Sega - Saturn"
             "dreamcast" -> "Sega - Dreamcast"
             "atari2600" -> "Atari - 2600"
-            "lynx" -> "Atari - Lynx"
+            "lynx", "atarilynx" -> "Atari - Lynx"
             else -> console
         }
     }

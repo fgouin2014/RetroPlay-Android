@@ -131,6 +131,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private val showGameInfoDialog = mutableStateOf(false)
     private val showCheatsDialog = mutableStateOf(false)
     private val showSmartConfigDialog = mutableStateOf(false)
+    private val showPerGameConfigDialog = mutableStateOf(false)
+    private var perGameConfigCRC: String? = null
+    private var perGameConfigGameName: String = ""
     private var allCoreVariables = mutableStateListOf<CoreVariable>()
     private val dipSwitches = mutableStateListOf<CoreVariable>()
     private val coreOptions = mutableStateListOf<CoreVariable>()
@@ -240,6 +243,51 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             Log.e(TAG, "Error reading file from URI", e)
             null
         }
+    }
+    
+    /**
+     * Apply per-game configuration overrides (if exists).
+     * This function loads and applies game-specific settings like Run-Ahead, Rewind, etc.
+     * 
+     * NOTE: Currently only logs the config as Run-Ahead/Rewind APIs are not yet exposed
+     * from LibretroDroid native layer. Full implementation will be added when APIs are ready.
+     * 
+     * @param gameCRC CRC32 of the game ROM (may be null if not calculated)
+     */
+    private fun applyPerGameConfig(gameCRC: String?) {
+        if (gameCRC == null) {
+            Log.d(TAG, "[Config] No gameCRC provided, using global config")
+            return
+        }
+        
+        // Load effective config (global + per-game merged)
+        val config = com.retroplay.config.RetroPlayConfigManager.getEffectiveConfig(gameCRC)
+        val hasOverride = com.retroplay.config.RetroPlayConfigManager.hasGameConfig(gameCRC)
+        
+        if (hasOverride) {
+            Log.i(TAG, "[Config] ✅ Per-game config loaded for CRC: $gameCRC")
+            Log.i(TAG, "[Config]   Run-Ahead: ${if (config.runAheadEnabled) "${config.runAheadFrames} frames" else "Disabled"}")
+            Log.i(TAG, "[Config]   Rewind: ${if (config.rewindEnable) "${config.rewindBufferSize / (1024 * 1024)}MB" else "Disabled"}")
+            Log.i(TAG, "[Config]   Fast Forward: ${config.fastforwardRatio}x")
+            Log.i(TAG, "[Config]   VSync: ${if (config.videoVsync) "ON" else "OFF"}")
+        } else {
+            Log.d(TAG, "[Config] Using global config for CRC: $gameCRC")
+        }
+        
+        // TODO: Apply config to emulator once APIs are available
+        // if (config.runAheadEnabled) {
+        //     retroView.setRunAheadFrames(config.runAheadFrames)
+        //     retroView.setRunAheadEnabled(true)
+        // }
+        // if (config.rewindEnable) {
+        //     retroView.setRewindEnabled(true)
+        //     retroView.setRewindBufferSize(config.rewindBufferSize)
+        // }
+        // retroView.setFastForwardRatio(config.fastforwardRatio)
+        // retroView.setVsyncEnabled(config.videoVsync)
+        
+        // For now, we just store the config for future use
+        // The config will be accessible when Run-Ahead/Rewind are implemented
     }
     
     /**
@@ -829,6 +877,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         val gameId = intent.getStringExtra("gameId") ?: gameName  // Use gameName as fallback
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
         
+        // Load per-game config (if exists)
+        applyPerGameConfig(gameCRC)
+        
         // Détecter les jeux Zapper AVANT la création de GLRetroViewData
         // pour pouvoir passer les variables initiales au core
         isZapperGame = ZapperGameDetector.isZapperGame(gameName, console)
@@ -1346,6 +1397,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 showGameInfoDialog = showGameInfoDialog,
                 showCheatsDialog = showCheatsDialog,
                 showSmartConfigDialog = showSmartConfigDialog,
+                showPerGameConfigDialog = showPerGameConfigDialog,
                 gameCRC = gameCRC,
                 loadedCheats = loadedCheats,
                 overlaysVisible = overlaysVisible,
@@ -1611,7 +1663,27 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     gameInfo = gameInfo,
                     gameCRC = gameCRC,
                     cheatFile = cheatFile,
-                    onDismiss = { showGameInfoDialog.value = false }
+                    onDismiss = { showGameInfoDialog.value = false },
+                    onOpenPerGameConfig = { crc, name ->
+                        perGameConfigCRC = crc
+                        perGameConfigGameName = name
+                        showGameInfoDialog.value = false
+                        showPerGameConfigDialog.value = true
+                    }
+                )
+            }
+            
+            // === PER-GAME CONFIG DIALOG ===
+            if (showPerGameConfigDialog.value && perGameConfigCRC != null) {
+                PerGameConfigDialog(
+                    gameCRC = perGameConfigCRC!!,
+                    gameName = perGameConfigGameName,
+                    onDismiss = { showPerGameConfigDialog.value = false },
+                    onSave = {
+                        // Config was saved, reload it if needed
+                        Log.i(TAG, "Per-game config saved for CRC: $perGameConfigCRC")
+                        // TODO: Apply config to running emulator (requires Run-Ahead/Rewind APIs)
+                    }
                 )
             }
             
@@ -2268,6 +2340,7 @@ private fun ComposeEmulatorScreen(
     showGameInfoDialog: MutableState<Boolean>,
     showCheatsDialog: MutableState<Boolean>,
     showSmartConfigDialog: MutableState<Boolean>,
+    showPerGameConfigDialog: MutableState<Boolean>,
     gameCRC: String?,
     loadedCheats: List<com.retroplay.cheat.CheatManager.Cheat>,
     overlaysVisible: MutableState<Boolean>,
@@ -2604,7 +2677,7 @@ private fun ComposeEmulatorScreen(
                                 val advancedSettings = advancedSettingsState.value
                                 
                                 // Vérifier si un menu est ouvert (INCLURE Core Options Dialog!)
-                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showGamePadSettings.value || showAdvancedOverlaySettings.value || showCoreOptionsDialog.value
+                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showGamePadSettings.value || showAdvancedOverlaySettings.value || showCoreOptionsDialog.value || showPerGameConfigDialog.value
                                 
                                 // Logique hideInMenu et behindMenu (RetroArch officiel)
                                 val shouldShowOverlay = when {

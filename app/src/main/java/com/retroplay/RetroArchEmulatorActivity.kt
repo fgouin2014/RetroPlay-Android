@@ -108,6 +108,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private lateinit var cheatApplier: com.retroplay.cheat.CheatApplier
     private var currentCoreFilePath: String? = null
     private var gameCRC: String? = null  // Database CRC (if available)
+    private var loadedCheats = mutableListOf<com.retroplay.cheat.CheatManager.Cheat>()  // Cheats loaded for current game
     
     // Zapper support (NES light gun)
     private var isZapperGame: Boolean = false
@@ -124,10 +125,11 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private val showCoreChangeConfirmDialog = mutableStateOf(false)
     private var coreChangeConfirmMessage = ""
     
-    // États pour DIP Switches et Core Options
+    // États pour DIP Switches, Core Options, Game Info et Cheats
     private val showDipSwitchDialog = mutableStateOf(false)
     private val showCoreOptionsDialog = mutableStateOf(false)
     private val showGameInfoDialog = mutableStateOf(false)
+    private val showCheatsDialog = mutableStateOf(false)
     private var allCoreVariables = mutableStateListOf<CoreVariable>()
     private val dipSwitches = mutableStateListOf<CoreVariable>()
     private val coreOptions = mutableStateListOf<CoreVariable>()
@@ -1341,7 +1343,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 showAdvancedOverlaySettings = showAdvancedOverlaySettings,
                 showQuickMenu = showQuickMenu,
                 showGameInfoDialog = showGameInfoDialog,
+                showCheatsDialog = showCheatsDialog,
                 gameCRC = gameCRC,
+                loadedCheats = loadedCheats,
                 overlaysVisible = overlaysVisible,
                 initialVariant = savedVariant,
                 cheatApplier = cheatApplier,
@@ -1608,6 +1612,39 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     onDismiss = { showGameInfoDialog.value = false }
                 )
             }
+            
+            // === CHEATS DIALOG ===
+            if (showCheatsDialog.value && loadedCheats.isNotEmpty()) {
+                // Get currently enabled cheats (track which are enabled)
+                val enabledIndices = remember { mutableStateOf(loadedCheats.indices.filter { loadedCheats[it].enabled }.toSet()) }
+                
+                CheatsDialog(
+                    cheats = loadedCheats,
+                    gameName = gameName,
+                    enabledCheats = enabledIndices.value,
+                    onCheatToggle = { index, enabled, cheat ->
+                        // Update enabled state
+                        enabledIndices.value = if (enabled) {
+                            enabledIndices.value + index
+                        } else {
+                            enabledIndices.value - index
+                        }
+                        
+                        // Apply/remove cheat immediately using CheatApplier
+                        cheatApplier.toggleCheat(index, enabled, cheat)
+                        
+                        // Update loadedCheats to persist state
+                        loadedCheats[index] = cheat.copy(enabled = enabled)
+                        
+                        Log.i(TAG, if (enabled) "✅ Cheat $index enabled: ${cheat.description}" else "❌ Cheat $index disabled: ${cheat.description}")
+                    },
+                    onDismiss = { 
+                        // Save cheats state on dismiss
+                        saveCheatStates()
+                        showCheatsDialog.value = false
+                    }
+                )
+            }
         }
     }
     
@@ -1774,13 +1811,14 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private fun loadAndApplyCheats() {
         try {
             val cheatManager = com.retroplay.cheat.CheatManager(this)
-            val cheats = cheatManager.loadCheatsForGame(console, gameName, romPath)
+            loadedCheats.clear()
+            loadedCheats.addAll(cheatManager.loadCheatsForGame(console, gameName, romPath))
             
-            if (cheats.isNotEmpty()) {
-                val enabledCount = cheats.count { it.enabled }
+            if (loadedCheats.isNotEmpty()) {
+                val enabledCount = loadedCheats.count { it.enabled }
                 if (enabledCount > 0) {
                     Log.i(TAG, "[$console] Loading $enabledCount active cheat(s) for $gameName")
-                    cheatApplier.applyCheatsList(cheats)
+                    cheatApplier.applyCheatsList(loadedCheats)
                     
                     runOnUiThread {
                         Toast.makeText(this, "[$console] $enabledCount cheat(s) active", Toast.LENGTH_SHORT).show()
@@ -1791,6 +1829,17 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading cheats", e)
+        }
+    }
+    
+    // Sauvegarder l'état des cheats (enabled/disabled) dans le fichier .cht
+    private fun saveCheatStates() {
+        try {
+            val cheatManager = com.retroplay.cheat.CheatManager(this)
+            cheatManager.saveEnabledCheats(console, gameName, loadedCheats)
+            Log.i(TAG, "[$console] Saved cheat states for $gameName")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving cheat states", e)
         }
     }
     
@@ -2188,7 +2237,9 @@ private fun ComposeEmulatorScreen(
     showAdvancedOverlaySettings: MutableState<Boolean>,
     showQuickMenu: MutableState<Boolean>,
     showGameInfoDialog: MutableState<Boolean>,
+    showCheatsDialog: MutableState<Boolean>,
     gameCRC: String?,
+    loadedCheats: List<com.retroplay.cheat.CheatManager.Cheat>,
     overlaysVisible: MutableState<Boolean>,
     initialVariant: GamePadLayoutManager.LayoutVariant,
     cheatApplier: com.retroplay.cheat.CheatApplier,
@@ -2732,6 +2783,10 @@ private fun ComposeEmulatorScreen(
                             showQuickMenu.value = false
                             showGameInfoDialog.value = true
                         },
+                        onCheats = {
+                            showQuickMenu.value = false
+                            showCheatsDialog.value = true
+                        },
                         onSaveState = { slot ->
                             closeQuickMenuWithCooldown()  // Fermer avec cooldown
                             onSaveState(slot)
@@ -2772,7 +2827,8 @@ private fun ComposeEmulatorScreen(
                         quickActionsBarVisible = quickActionsBarVisible,
                         isZapperGame = isZapperGame,  // CRITICAL: Afficher bouton Configure Zapper
                         crosshairMode = crosshairMode,  // Mode d'affichage du crosshair
-                        hasGameInfo = (gameCRC != null)  // Database info available
+                        hasGameInfo = (gameCRC != null),  // Database info available
+                        hasCheats = loadedCheats.isNotEmpty()  // Cheats available
                     )
                 }
                 
@@ -3769,6 +3825,7 @@ private fun QuickMenuDialog(
     onSettings: () -> Unit,
     onAdvancedSettings: () -> Unit = {},  // Nouveau callback
     onGameInfo: () -> Unit = {},  // NEW: Show game database info
+    onCheats: () -> Unit = {},  // NEW: Show cheats dialog
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
     onQuit: () -> Unit,
@@ -3785,7 +3842,8 @@ private fun QuickMenuDialog(
     quickActionsBarVisible: Boolean = true,
     isZapperGame: Boolean = false,
     crosshairMode: CrosshairMode = CrosshairMode.RETROPLAY_ONLY,
-    hasGameInfo: Boolean = false  // NEW: If database info available
+    hasGameInfo: Boolean = false,  // NEW: If database info available
+    hasCheats: Boolean = false  // NEW: If cheats are loaded
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -3915,6 +3973,19 @@ private fun QuickMenuDialog(
                         )
                     ) {
                         Text("📊 GAME INFO", color = Color.White)
+                    }
+                }
+                
+                // Bouton Cheats (si cheats disponibles)
+                if (hasCheats) {
+                    androidx.compose.material3.Button(
+                        onClick = onCheats,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFFD700)
+                        )
+                    ) {
+                        Text("🎮 CHEATS", color = Color.Black)
                     }
                 }
                 

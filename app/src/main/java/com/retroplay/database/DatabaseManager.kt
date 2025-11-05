@@ -8,7 +8,7 @@ import java.util.zip.ZipFile
 
 object DatabaseManager {
     private const val TAG = "DatabaseManager"
-    private const val DATABASE_BASE_PATH = "/storage/emulated/0/GameLibrary-Data/database"
+    private const val DATABASE_BASE_PATH = "/storage/emulated/0/RetroPlay-Data/database/rdb"
     
     private val gameCache = mutableMapOf<String, MutableMap<String, GameInfo>>()
     
@@ -165,64 +165,50 @@ object DatabaseManager {
         }
         
         val consoleName = getConsoleFullName(console)
-        Log.i(TAG, "Loading database for $consoleName...")
+        Log.i(TAG, "Loading database for $consoleName from .rdb...")
         
-        val startTime = System.currentTimeMillis()
-        val consoleMap = mutableMapOf<String, GameInfo>()
+        // Look for .rdb file in RetroPlay-Data/database/rdb/
+        val rdbFile = File("$DATABASE_BASE_PATH/$consoleName.rdb")
         
-        val genreDat = File("$DATABASE_BASE_PATH/metadata/genre/$consoleName.dat")
-        if (genreDat.exists()) {
-            val genreGames = DatParser.parseDatFile(genreDat, console)
-            genreGames.forEach { (crc, game) ->
-                consoleMap[crc] = game
-            }
-            Log.i(TAG, "  Loaded ${genreGames.size} games from genre.dat")
-        } else {
-            Log.w(TAG, "  Genre DAT not found: ${genreDat.absolutePath}")
+        if (!rdbFile.exists()) {
+            Log.w(TAG, "⚠️ RDB file not found: ${rdbFile.absolutePath}")
+            gameCache[console] = mutableMapOf()
+            return
         }
         
-        val developerDat = File("$DATABASE_BASE_PATH/metadata/developer/$consoleName.dat")
-        if (developerDat.exists()) {
-            val developerGames = DatParser.parseDatFile(developerDat, console)
-            developerGames.forEach { (crc, game) ->
-                val existing = consoleMap[crc]
-                if (existing != null) {
-                    consoleMap[crc] = existing.copy(developer = game.developer)
-                }
-            }
-            Log.i(TAG, "  Merged ${developerGames.size} developers")
-        }
+        // Parse .rdb file with RdbParser
+        val games = RdbParser.parseRdbFile(rdbFile)
         
-        val yearDat = File("$DATABASE_BASE_PATH/metadata/releaseyear/$consoleName.dat")
-        if (yearDat.exists()) {
-            val yearGames = DatParser.parseDatFile(yearDat, console)
-            yearGames.forEach { (crc, game) ->
-                val existing = consoleMap[crc]
-                if (existing != null) {
-                    consoleMap[crc] = existing.copy(releaseYear = game.releaseYear)
-                }
-            }
-            Log.i(TAG, "  Merged ${yearGames.size} release years")
-        }
+        // Update console field for all games
+        val consoleMap = games.mapValues { (_, game) ->
+            game.copy(console = console)
+        }.toMutableMap()
         
         gameCache[console] = consoleMap
         
-        val elapsed = System.currentTimeMillis() - startTime
-        Log.i(TAG, "✅ Database loaded for $consoleName: ${consoleMap.size} games in ${elapsed}ms")
+        Log.i(TAG, "✅ Database loaded for $consoleName: ${consoleMap.size} games from ${rdbFile.name}")
     }
     
     fun getCheatsPath(gameInfo: GameInfo, console: String): File? {
         val consoleName = getConsoleFullName(console)
-        val cheatPath = "$DATABASE_BASE_PATH/cht/$consoleName/${gameInfo.name}.cht"
-        val cheatFile = File(cheatPath)
         
-        return if (cheatFile.exists()) {
-            Log.d(TAG, "✅ Cheat file found for ${gameInfo.name}: ${cheatFile.absolutePath}")
-            cheatFile
-        } else {
-            Log.d(TAG, "⚠️ No cheat file for ${gameInfo.name}")
-            null
+        // Try multiple locations for cheat files
+        val cheatLocations = listOf(
+            "/storage/emulated/0/GameLibrary-Data/database/cht/$consoleName/${gameInfo.name}.cht",
+            "/storage/emulated/0/RetroArch/cheats/$consoleName/${gameInfo.name}.cht",
+            "/storage/emulated/0/RetroPlay-Data/database/cht/$consoleName/${gameInfo.name}.cht"
+        )
+        
+        for (path in cheatLocations) {
+            val cheatFile = File(path)
+            if (cheatFile.exists()) {
+                Log.d(TAG, "✅ Cheat file found for ${gameInfo.name}: ${cheatFile.absolutePath}")
+                return cheatFile
+            }
         }
+        
+        Log.d(TAG, "⚠️ No cheat file for ${gameInfo.name}")
+        return null
     }
     
     private fun getConsoleFullName(console: String): String {

@@ -10,6 +10,22 @@
 
 ### ⭐ Nouveaux Audits Complets
 
+#### **AUDIT_LIBRETRODROID_VS_RETROARCH_APIS.md** (563 lignes) 🔥 NOUVEAU
+- **Date:** 5 novembre 2025
+- **Contenu:** Audit comparatif complet LibretroDroid vs RetroArch APIs
+- **Comparaison:** Fonction par fonction, ce qui est exposé vs ce qui manque
+- **Découvertes:** 4 Quick Wins (Rewind, Disk Swapper, Screenshot, Thumbnails) implémentables en Kotlin
+- **Bloqueurs:** Run-Ahead nécessite `setVideoEnabled()` (modif C++)
+- **Status:** ✅ Audit complet, roadmap priorisée
+- **Sections:**
+  - APIs de base Libretro (savestates, cheats, input)
+  - Features Frontend (Run-Ahead, Rewind, Fast Forward)
+  - Audio/Video controls (ce qui manque)
+  - Advanced features (Netplay, Achievements, Recording)
+  - Quick Wins implémentables maintenant (sans C++)
+  - Ce que RetroPlay fait mieux que RetroArch
+  - Plan d'action recommandé (Phase 1-3)
+
 #### **CORE_OPTIONS_VS_GLOBAL_SETTINGS.md** (392 lignes) 🔥 NOUVEAU
 - **Date:** 5 novembre 2025
 - **Contenu:** Architecture complète Core Options vs Global Settings

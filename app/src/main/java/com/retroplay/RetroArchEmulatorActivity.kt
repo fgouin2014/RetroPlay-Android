@@ -1613,37 +1613,53 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 )
             }
             
-            // === CHEATS DIALOG ===
+            // === CHEATS DIALOG (use existing CheatSelectionDialog) ===
             if (showCheatsDialog.value && loadedCheats.isNotEmpty()) {
-                // Get currently enabled cheats (track which are enabled)
-                val enabledIndices = remember { mutableStateOf(loadedCheats.indices.filter { loadedCheats[it].enabled }.toSet()) }
+                val cheatManager = remember { com.retroplay.cheat.CheatManager(this) }
+                var cheats by remember(showCheatsDialog.value) { 
+                    mutableStateOf(loadedCheats)
+                }
                 
-                CheatsDialog(
-                    cheats = loadedCheats,
+                var showAddCheatDialog by remember { mutableStateOf(false) }
+                
+                com.retroplay.cheat.CheatSelectionDialog(
                     gameName = gameName,
-                    enabledCheats = enabledIndices.value,
-                    onCheatToggle = { index, enabled, cheat ->
-                        // Update enabled state
-                        enabledIndices.value = if (enabled) {
-                            enabledIndices.value + index
-                        } else {
-                            enabledIndices.value - index
-                        }
-                        
-                        // Apply/remove cheat immediately using CheatApplier
-                        cheatApplier.toggleCheat(index, enabled, cheat)
-                        
-                        // Update loadedCheats to persist state
-                        loadedCheats[index] = cheat.copy(enabled = enabled)
-                        
-                        Log.i(TAG, if (enabled) "✅ Cheat $index enabled: ${cheat.description}" else "❌ Cheat $index disabled: ${cheat.description}")
+                    console = console,
+                    cheats = cheats,
+                    onDismiss = { showCheatsDialog.value = false },
+                    onCheatsChanged = { updatedCheats ->
+                        cheats = updatedCheats.toMutableList()
+                        // Sauvegarder les modifications
+                        cheatManager.saveEnabledCheats(console, gameName, updatedCheats)
+                        // Appliquer immédiatement au core
+                        cheatApplier.applyCheatsList(updatedCheats)
+                        // Update Activity state
+                        loadedCheats.clear()
+                        loadedCheats.addAll(updatedCheats)
                     },
-                    onDismiss = { 
-                        // Save cheats state on dismiss
-                        saveCheatStates()
-                        showCheatsDialog.value = false
+                    onAddCustomCheat = {
+                        showAddCheatDialog = true
                     }
                 )
+                
+                // Dialog pour ajouter un cheat custom (si disponible)
+                if (showAddCheatDialog) {
+                    // Simple input dialog for custom cheats
+                    AlertDialog(
+                        onDismissRequest = { showAddCheatDialog = false },
+                        title = { Text("Add Custom Cheat") },
+                        text = {
+                            Column {
+                                Text("Feature coming soon - Use Main Menu → Cheat Codes for full editor")
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showAddCheatDialog = false }) {
+                                Text("OK")
+                            }
+                        }
+                    )
+                }
             }
         }
     }

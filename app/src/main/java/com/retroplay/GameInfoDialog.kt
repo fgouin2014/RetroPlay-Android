@@ -203,46 +203,184 @@ private fun GameInfoContent(gameInfo: GameInfo, gameCRC: String?, cheatFile: Fil
             color = Color(0xFF424242)
         )
         
+        SmartConfigSection(gameInfo)
+    }
+}
+
+@Composable
+private fun SmartConfigSection(gameInfo: GameInfo) {
+    Column {
+        // Section Header
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "💡 SMART CONFIG RECOMMENDATIONS",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2196F3)
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Disclaimer
         Text(
-            text = "💡 SMART CONFIG RECOMMENDATIONS",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF2196F3)
+            text = "Based on ${gameInfo.genre ?: "game"} genre analysis • Suggestions only",
+            fontSize = 12.sp,
+            color = Color(0xFF9E9E9E),
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        val smartConfig = com.retroplay.database.SmartConfigManager.getSmartConfig(gameInfo, gameInfo.console)
+        
+        // Run-Ahead Card
+        SmartConfigCard(
+            icon = "⚡",
+            title = "Run-Ahead",
+            enabled = smartConfig.runAheadEnabled,
+            value = if (smartConfig.runAheadEnabled) {
+                "${smartConfig.runAheadFrames} frames"
+            } else {
+                "Disabled"
+            },
+            description = if (smartConfig.runAheadEnabled) {
+                "Reduces input lag by ~${smartConfig.runAheadFrames * 16}ms. Recommended for ${gameInfo.genre} games."
+            } else {
+                "Not recommended for ${gameInfo.genre ?: "this genre"}. May cause instability."
+            },
+            color = if (smartConfig.runAheadEnabled) Color(0xFF4CAF50) else Color(0xFF757575)
         )
         
         Spacer(modifier = Modifier.height(12.dp))
         
-        val smartConfig = com.retroplay.database.SmartConfigManager.getSmartConfig(gameInfo, gameInfo.console)
-        
-        InfoRow(
-            icon = "⚡",
-            label = "Run-Ahead",
-            value = if (smartConfig.runAheadEnabled) {
-                "${smartConfig.runAheadFrames} frames (input lag -${smartConfig.runAheadFrames * 16}ms)"
-            } else {
-                "Not recommended for ${gameInfo.genre}"
-            }
-        )
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        InfoRow(
+        // Rewind Card
+        SmartConfigCard(
             icon = "⏪",
-            label = "Rewind",
+            title = "Rewind",
+            enabled = smartConfig.rewindEnabled,
             value = if (smartConfig.rewindEnabled) {
                 "${smartConfig.rewindBufferSize / 1024 / 1024}MB buffer"
             } else {
-                "Not recommended"
-            }
+                "Disabled"
+            },
+            description = if (smartConfig.rewindEnabled) {
+                "Helpful for puzzle and adventure games. Uses RAM for replay buffer."
+            } else {
+                "Not needed for ${gameInfo.genre ?: "this genre"}. Saves memory and CPU."
+            },
+            color = if (smartConfig.rewindEnabled) Color(0xFFFF9800) else Color(0xFF757575)
         )
         
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         
-        InfoRow(
+        // Overlay Card
+        SmartConfigCard(
             icon = "🎨",
-            label = "Optimal Overlay",
-            value = smartConfig.overlayName
+            title = "Optimal Overlay",
+            enabled = true,
+            value = smartConfig.overlayName,
+            description = "Recommended touch controls layout for ${gameInfo.console} games.",
+            color = Color(0xFF9C27B0)
         )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Info Note
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            color = Color(0xFF263238)
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "ℹ️",
+                    fontSize = 20.sp,
+                    modifier = Modifier.padding(end = 12.dp)
+                )
+                Text(
+                    text = "These are recommendations only. Enable Smart Config in Main Menu to apply automatically.",
+                    fontSize = 13.sp,
+                    color = Color(0xFFB0BEC5),
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmartConfigCard(
+    icon: String,
+    title: String,
+    enabled: Boolean,
+    value: String,
+    description: String,
+    color: Color
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF263238)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            // Icon
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(color.copy(alpha = 0.2f), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = icon,
+                    fontSize = 24.sp
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                // Title and Value
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    
+                    Text(
+                        text = value,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = color
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                // Description
+                Text(
+                    text = description,
+                    fontSize = 13.sp,
+                    color = Color(0xFFB0BEC5),
+                    lineHeight = 18.sp
+                )
+            }
+        }
     }
 }
 

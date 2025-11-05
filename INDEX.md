@@ -10,6 +10,19 @@
 
 ### ⭐ Nouveaux Audits Complets
 
+#### **CORE_OPTIONS_VS_GLOBAL_SETTINGS.md** (392 lignes) 🔥 NOUVEAU
+- **Date:** 5 novembre 2025
+- **Contenu:** Architecture complète Core Options vs Global Settings
+- **Comparaison:** RetroPlay vs RetroArch (`.opt` vs `.cfg` files)
+- **Status:** ✅ Documentation complète, Option 1 implémentée
+- **Sections:**
+  - Core Options (partagées par core)
+  - Global Settings (per-game overrides)
+  - Smart Config (recommandations basées sur metadata)
+  - Comparaison RetroArch vs RetroPlay
+  - Guide d'implémentation complet
+  - Flux de configuration au lancement
+
 #### **AUDIT_RETROARCH_EMULATION_FEATURES.md** (727 lignes) 🔥 NOUVEAU
 - **Date:** 3 novembre 2025
 - **Contenu:** Audit exhaustif des features d'émulation RetroArch (au-delà des overlays)

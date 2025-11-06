@@ -132,11 +132,14 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private val showCheatsDialog = mutableStateOf(false)
     private val showSmartConfigDialog = mutableStateOf(false)
     private val showPerGameConfigDialog = mutableStateOf(false)
+    private val showDiskSwapperDialog = mutableStateOf(false)
     private var perGameConfigCRC: String? = null
     private var perGameConfigGameName: String = ""
     private var allCoreVariables = mutableStateListOf<CoreVariable>()
     private val dipSwitches = mutableStateListOf<CoreVariable>()
     private val coreOptions = mutableStateListOf<CoreVariable>()
+    private var availableDisks = 0
+    private var currentDisk = 0
     
     // File picker pour custom .cfg (initialisé AVANT onCreate avec lateinit)
     private lateinit var pickCustomCfgLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
@@ -859,6 +862,63 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
     }
     
+    /**
+     * Take a screenshot of the current game
+     */
+    private fun takeScreenshot() {
+        lifecycleScope.launch {
+            try {
+                var screenshotBitmap: android.graphics.Bitmap? = null
+                
+                // Capture screenshot from GL thread
+                retroView.queueEvent {
+                    try {
+                        val width = retroView.width
+                        val height = retroView.height
+                        screenshotBitmap = ScreenshotManager.captureScreenshotGL(width, height)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to capture screenshot from GL", e)
+                    }
+                }
+                
+                // Wait a bit for GL thread to finish
+                kotlinx.coroutines.delay(100)
+                
+                screenshotBitmap?.let { bitmap ->
+                    // Save screenshot
+                    val path = ScreenshotManager.saveScreenshot(bitmap, console, gameName)
+                    
+                    // Also save/update thumbnail if we have CRC
+                    gameCRC?.let { crc ->
+                        ScreenshotManager.saveThumbnail(bitmap, crc, console)
+                    }
+                    
+                    runOnUiThread {
+                        if (path != null) {
+                            Toast.makeText(this@RetroArchEmulatorActivity, 
+                                "Screenshot saved", Toast.LENGTH_SHORT).show()
+                            Log.i(TAG, "Screenshot saved: $path")
+                        } else {
+                            Toast.makeText(this@RetroArchEmulatorActivity, 
+                                "Failed to save screenshot", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } ?: run {
+                    runOnUiThread {
+                        Toast.makeText(this@RetroArchEmulatorActivity, 
+                            "Failed to capture screenshot", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Screenshot error", e)
+                runOnUiThread {
+                    Toast.makeText(this@RetroArchEmulatorActivity, 
+                        "Screenshot error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -879,6 +939,33 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         // Load per-game config (if exists)
         applyPerGameConfig(gameCRC)
+        
+        // Auto-generate thumbnail if not exists (5 seconds after game start)
+        gameCRC?.let { crc ->
+            if (!ScreenshotManager.hasThumbnail(crc, console)) {
+                lifecycleScope.launch {
+                    kotlinx.coroutines.delay(5000) // Wait 5 seconds for game to start
+                    var thumbnailBitmap: android.graphics.Bitmap? = null
+                    
+                    retroView.queueEvent {
+                        try {
+                            val width = retroView.width
+                            val height = retroView.height
+                            thumbnailBitmap = ScreenshotManager.captureScreenshotGL(width, height)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to auto-capture thumbnail", e)
+                        }
+                    }
+                    
+                    kotlinx.coroutines.delay(100)
+                    
+                    thumbnailBitmap?.let { bitmap ->
+                        ScreenshotManager.saveThumbnail(bitmap, crc, console)
+                        Log.i(TAG, "Auto-generated thumbnail for $gameName")
+                    }
+                }
+            }
+        }
         
         // Détecter les jeux Zapper AVANT la création de GLRetroViewData
         // pour pouvoir passer les variables initiales au core
@@ -1193,6 +1280,23 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         // Quick Wins: Appliquer l'état audio au démarrage (après création de retroView)
         retroView.audioEnabled = !audioMuted.value
         
+        // Initialize disk info for multi-disc games (PSX, etc.)
+        lifecycleScope.launch {
+            try {
+                retroView.getGLRetroEvents().collect { event ->
+                    if (event is GLRetroView.GLRetroEvents.FrameRendered) {
+                        // Refresh disk info periodically (every 60 frames ~1 second)
+                        if (System.currentTimeMillis() % 1000 < 17) {
+                            availableDisks = retroView.getAvailableDisks()
+                            currentDisk = retroView.getCurrentDisk()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error collecting GLRetroEvents for disk info: ${e.message}")
+            }
+        }
+        
         // === ÉCOUTE DES ERREURS LIBRETRODROID (CHARGEMENT ÉCHOUÉ) ===
         lifecycleScope.launch {
             try {
@@ -1460,6 +1564,12 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 showCoreOptionsDialog = showCoreOptionsDialog,
                 dipSwitches = dipSwitches,
                 coreOptions = coreOptions,
+                showDiskSwapperDialog = showDiskSwapperDialog,
+                availableDisks = availableDisks,
+                currentDisk = currentDisk,
+                onTakeScreenshot = {
+                    takeScreenshot()
+                },
                 onLoadCustomCfg = {
                     // Lancer le file picker pour sélectionner un .cfg
                     pickCustomCfgLauncher.launch(arrayOf("*/*"))
@@ -1744,6 +1854,36 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                         Log.i(TAG, "Smart Config settings saved to retroplay.cfg")
                         Toast.makeText(this, "Smart Config saved to retroplay.cfg", Toast.LENGTH_SHORT).show()
                     }
+                )
+            }
+            
+            // === DISK SWAPPER DIALOG ===
+            if (showDiskSwapperDialog.value && availableDisks > 1) {
+                DiskSwapperDialog(
+                    availableDisks = availableDisks,
+                    currentDiskIndex = currentDisk,
+                    onDiskSelected = { diskIndex ->
+                        lifecycleScope.launch {
+                            try {
+                                retroView.changeDisk(diskIndex)
+                                currentDisk = diskIndex
+                                Toast.makeText(
+                                    this@RetroArchEmulatorActivity, 
+                                    "Swapped to Disk ${diskIndex + 1}", 
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                Log.i(TAG, "Disk swapped to index: $diskIndex")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to swap disk", e)
+                                Toast.makeText(
+                                    this@RetroArchEmulatorActivity, 
+                                    "Failed to swap disk", 
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    },
+                    onDismiss = { showDiskSwapperDialog.value = false }
                 )
             }
         }
@@ -2370,7 +2510,12 @@ private fun ComposeEmulatorScreen(
     audioMuted: Boolean = false,
     currentShaderName: String = "None",
     quickActionsBarVisible: Boolean = true,
-    crosshairMode: CrosshairMode = CrosshairMode.RETROPLAY_ONLY
+    crosshairMode: CrosshairMode = CrosshairMode.RETROPLAY_ONLY,
+    // Disk Swapper & Screenshot
+    showDiskSwapperDialog: MutableState<Boolean>,
+    availableDisks: Int = 0,
+    currentDisk: Int = 0,
+    onTakeScreenshot: () -> Unit = {}
 ) {
     // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
@@ -2677,7 +2822,7 @@ private fun ComposeEmulatorScreen(
                                 val advancedSettings = advancedSettingsState.value
                                 
                                 // Vérifier si un menu est ouvert (INCLURE Core Options Dialog!)
-                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showGamePadSettings.value || showAdvancedOverlaySettings.value || showCoreOptionsDialog.value || showPerGameConfigDialog.value
+                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showGamePadSettings.value || showAdvancedOverlaySettings.value || showCoreOptionsDialog.value || showPerGameConfigDialog.value || showDiskSwapperDialog.value
                                 
                                 // Logique hideInMenu et behindMenu (RetroArch officiel)
                                 val shouldShowOverlay = when {
@@ -2978,8 +3123,17 @@ private fun ComposeEmulatorScreen(
                             showMainMenu.value = false
                             showSmartConfigDialog.value = true
                         },
+                        onDiskSwapper = {
+                            showMainMenu.value = false
+                            showDiskSwapperDialog.value = true
+                        },
+                        onScreenshot = {
+                            showMainMenu.value = false
+                            onTakeScreenshot()
+                        },
                         hasDipSwitches = dipSwitches.isNotEmpty(),
-                        hasCoreOptions = coreOptions.isNotEmpty()
+                        hasCoreOptions = coreOptions.isNotEmpty(),
+                        availableDisks = availableDisks
                     )
                 }
                 
@@ -3252,8 +3406,11 @@ private fun MainMenuDialog(
     onDipSwitches: () -> Unit,
     onCoreOptions: () -> Unit,
     onSmartConfig: () -> Unit = {},  // Smart Config callback
+    onDiskSwapper: () -> Unit = {},  // Disk Swapper callback
+    onScreenshot: () -> Unit = {},  // Screenshot callback
     hasDipSwitches: Boolean,
-    hasCoreOptions: Boolean
+    hasCoreOptions: Boolean,
+    availableDisks: Int = 0  // Number of available disks (multi-disc support)
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var cacheState by remember { mutableStateOf(prefs.getBoolean("cache_enabled_$console", false)) }
@@ -3296,6 +3453,16 @@ private fun MainMenuDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Load Game", color = Color.White)
+                    }
+                    
+                    androidx.compose.material3.HorizontalDivider(color = Color.Gray)
+                    
+                    // Screenshot
+                    TextButton(
+                        onClick = onScreenshot,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Take Screenshot", color = Color(0xFF2196F3))
                     }
                     
                     androidx.compose.material3.HorizontalDivider(color = Color.Gray)
@@ -3350,6 +3517,16 @@ private fun MainMenuDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("💡 Smart Config", color = Color(0xFF4CAF50))
+                    }
+                    
+                    // Disk Swapper (PSX multi-disc games)
+                    if (availableDisks > 1) {
+                        TextButton(
+                            onClick = onDiskSwapper,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Swap Disk ($availableDisks discs)", color = Color(0xFFFF9800))
+                        }
                     }
                     
                     // Change Core

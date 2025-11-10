@@ -2528,6 +2528,10 @@ private fun ComposeEmulatorScreen(
         mutableStateOf(initialVariant)
     }
     
+    LaunchedEffect(console) {
+        ensureRetroArchOverlayPreference(prefs, console, retroView.context)
+    }
+    
     // État pour le switch de layout RetroArch (overrides la préférence)
     var currentRetroArchLayout by remember { mutableStateOf<String?>(null) }
     
@@ -2821,16 +2825,15 @@ private fun ComposeEmulatorScreen(
                                 // Utiliser advancedSettingsState pour rechargement dynamique
                                 val advancedSettings = advancedSettingsState.value
                                 
-                                // Vérifier si un menu est ouvert (INCLURE Core Options Dialog!)
-                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showGamePadSettings.value || showAdvancedOverlaySettings.value || showCoreOptionsDialog.value || showPerGameConfigDialog.value || showDiskSwapperDialog.value
+                                val isOverlayConfiguration = showGamePadSettings.value
+                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showAdvancedOverlaySettings.value || showCoreOptionsDialog.value || showPerGameConfigDialog.value || showDiskSwapperDialog.value
                                 
                                 // Logique hideInMenu et behindMenu (RetroArch officiel)
                                 val shouldShowOverlay = when {
                                     !overlaysVisible.value -> false  // Overlay désactivé manuellement
+                                    isOverlayConfiguration -> true  // Toujours visible pendant la configuration
                                     !isMenuOpen -> true  // Pas de menu ouvert → afficher
                                     advancedSettings.hideInMenu -> false  // Menu ouvert + hideInMenu=true → cacher
-                                    // Si on arrive ici: menu ouvert + hideInMenu=false
-                                    // behindMenu détermine le Z-order (pas implémenté visuellement, mais on affiche)
                                     else -> true
                                 }
                                 
@@ -3165,15 +3168,15 @@ private fun ComposeEmulatorScreen(
                     )
                 }
                 
-                // RetroArch Settings Dialog (simplified - NO Radial gamepad settings)
+                // RetroArch GamePad Settings Dialog
                 if (showGamePadSettings.value) {
                     RetroArchSettingsDialog(
                         console = console,
                         onDismiss = { showGamePadSettings.value = false },
                         context = retroView.context,
                         prefs = prefs,
-                        onLoadCustomCfg = onLoadCustomCfg,
-                        debugModeState = debugModeState
+                        debugModeState = debugModeState,
+                        onLoadCustomCfg = onLoadCustomCfg
                     )
                 }
                 
@@ -4479,4 +4482,51 @@ private fun CoreErrorDialog(
         titleContentColor = Color.White,
         textContentColor = Color.White
     )
+}
+
+private fun ensureRetroArchOverlayPreference(
+    prefs: SharedPreferences,
+    console: String,
+    context: Context
+) {
+    val current = com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)
+    if (current != null) return
+
+    val assetManager = com.retroplay.overlay.assets.OverlayAssetManager(context)
+    val overlays = assetManager.getCompatibleOverlays(console)
+    if (overlays.isEmpty()) return
+
+    val defaultOverlay = overlays.first()
+    val (landscape, portrait) = computeDefaultLayoutsForOverlay(assetManager, defaultOverlay, console, null)
+    val pref = com.retroplay.overlay.models.OverlayPreference(
+        enabled = true,
+        overlayName = defaultOverlay,
+        customCfgName = null,
+        landscapeLayout = landscape,
+        portraitLayout = portrait,
+        autoRotate = true,
+        swapAnalogSticks = false,
+        invertAnalogY = false,
+        scale = 1.0f,
+        xOffset = 0.0f,
+        yOffset = 0.0f,
+        xSeparation = 0.0f,
+        ySeparation = 0.0f
+    )
+    com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
+}
+
+private fun computeDefaultLayoutsForOverlay(
+    assetManager: com.retroplay.overlay.assets.OverlayAssetManager,
+    overlayName: String,
+    console: String,
+    customCfgName: String?
+): Pair<String, String> {
+    val layouts = assetManager.getAvailableLayouts(overlayName, console, customCfgName)
+    val landscape = layouts.firstOrNull { it.contains("landscape", ignoreCase = true) }
+        ?: layouts.firstOrNull()
+        ?: "landscape-A"
+    val portrait = layouts.firstOrNull { it.contains("portrait", ignoreCase = true) }
+        ?: landscape
+    return landscape to portrait
 }

@@ -2,149 +2,214 @@ package com.retroplay
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.retroplay.overlay.assets.OverlayAssetManager
+import com.retroplay.overlay.models.OverlayPreference
+import com.retroplay.overlay.models.OverlayPreferenceManager
+import kotlin.math.abs
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.shape.RoundedCornerShape
 
-/**
- * RetroArch Settings Dialog
- * 
- * Simplified dialog for configuring ONLY RetroArch overlays:
- * - Overlay Package selection (nes-overlay, snes-overlay, etc.)
- * - Landscape layout selection (landscape-A, landscape-B, etc.)
- * - Portrait layout selection (portrait-A, portrait-B, etc.)
- * - Auto-Rotate toggle
- * 
- * NO Radial/Lemuroid gamepad settings (scale, rotation, margin)
- */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RetroArchSettingsDialog(
     console: String,
     onDismiss: () -> Unit,
     context: Context,
     prefs: SharedPreferences,
-    onLoadCustomCfg: (() -> Unit)? = null,  // Callback pour ouvrir file picker
-    debugModeState: androidx.compose.runtime.MutableState<Boolean>  // État debug hitboxes
+    onLoadCustomCfg: (() -> Unit)? = null,
+    debugModeState: MutableState<Boolean>
 ) {
-    // Overlay Asset Manager
-    val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
-    val availableOverlays = remember { assetManager.getCompatibleOverlays(console) }
-    
-    // Load custom browsed overlays (mutableState pour pouvoir supprimer dynamiquement)
-    var customBrowsed by remember { mutableStateOf(com.retroplay.overlay.models.OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()) }
-    
-    // Load current preferences
-    val currentOverlayPref = remember { com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console) }
-    var selectedOverlay by remember { 
-        mutableStateOf(
-            currentOverlayPref?.overlayName ?: 
-            if (availableOverlays.isNotEmpty()) availableOverlays[0] else ""
-        ) 
+    val assetManager = remember { OverlayAssetManager(context) }
+
+    var overlayPackages by remember { mutableStateOf(emptyList<String>()) }
+    var customBrowsed by remember { mutableStateOf(OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()) }
+
+    var selectedOverlay by remember { mutableStateOf("") }
+    var selectedCustomPath by remember { mutableStateOf<String?>(null) }
+    var selectedLandscapeLayout by remember { mutableStateOf("landscape-A") }
+    var selectedPortraitLayout by remember { mutableStateOf("portrait-A") }
+    var autoRotate by remember { mutableStateOf(true) }
+    var swapAnalogSticks by remember { mutableStateOf(false) }
+    var invertAnalogY by remember { mutableStateOf(false) }
+    var scale by remember { mutableStateOf(1.0f) }
+    var xOffset by remember { mutableStateOf(0.0f) }
+    var yOffset by remember { mutableStateOf(0.0f) }
+    var xSeparation by remember { mutableStateOf(0.0f) }
+    var ySeparation by remember { mutableStateOf(0.0f) }
+
+    var isPreviewTransparent by remember { mutableStateOf(false) }
+    val contentScrollState = rememberScrollState()
+
+    LaunchedEffect(console) {
+        overlayPackages = assetManager.getCompatibleOverlays(console)
+        val pref = OverlayPreferenceManager.load(prefs, console)
+        if (pref != null) {
+            selectedOverlay = pref.overlayName
+            selectedCustomPath = pref.customCfgName?.let { "${pref.overlayName}/$it" }
+            selectedLandscapeLayout = pref.landscapeLayout
+            selectedPortraitLayout = pref.portraitLayout
+            autoRotate = pref.autoRotate
+            swapAnalogSticks = pref.swapAnalogSticks
+            invertAnalogY = pref.invertAnalogY
+            scale = pref.scale
+            xOffset = pref.xOffset
+            yOffset = pref.yOffset
+            xSeparation = pref.xSeparation
+            ySeparation = pref.ySeparation
+        } else if (overlayPackages.isNotEmpty()) {
+            val defaultOverlay = overlayPackages.first()
+            val (land, port) = computeDefaultLayouts(assetManager, defaultOverlay, console, null)
+            selectedOverlay = defaultOverlay
+            selectedCustomPath = null
+            selectedLandscapeLayout = land
+            selectedPortraitLayout = port
+            autoRotate = true
+            swapAnalogSticks = false
+            invertAnalogY = false
+            scale = 1.0f
+            xOffset = 0.0f
+            yOffset = 0.0f
+            xSeparation = 0.0f
+            ySeparation = 0.0f
+
+            val defaultPref = OverlayPreference(
+                enabled = true,
+                overlayName = defaultOverlay,
+                customCfgName = null,
+                landscapeLayout = land,
+                portraitLayout = port,
+                autoRotate = true,
+                swapAnalogSticks = false,
+                invertAnalogY = false,
+                scale = 1.0f,
+                xOffset = 0.0f,
+                yOffset = 0.0f,
+                xSeparation = 0.0f,
+                ySeparation = 0.0f
+            )
+            OverlayPreferenceManager.save(prefs, console, defaultPref)
+        }
     }
-    // Separate state for custom overlay path (ex: "flat/nes.cfg")
-    // Initialiser avec le custom actuel si existe
-    var selectedCustomPath by remember { 
-        mutableStateOf<String?>(
-            if (currentOverlayPref?.customCfgName != null) {
-                "${currentOverlayPref.overlayName}/${currentOverlayPref.customCfgName}"
-            } else {
-                null
-            }
-        ) 
-    }
-    
-    var selectedLandscapeLayout by remember { mutableStateOf(currentOverlayPref?.landscapeLayout ?: "landscape-A") }
-    var selectedPortraitLayout by remember { mutableStateOf(currentOverlayPref?.portraitLayout ?: "portrait-A") }
-    var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
-    var swapAnalogSticks by remember { mutableStateOf(currentOverlayPref?.swapAnalogSticks ?: false) }
-    var invertAnalogY by remember { mutableStateOf(currentOverlayPref?.invertAnalogY ?: false) }
-    var scale by remember { mutableStateOf(currentOverlayPref?.scale ?: 1.0f) }
-    var xOffset by remember { mutableStateOf(currentOverlayPref?.xOffset ?: 0.0f) }
-    var yOffset by remember { mutableStateOf(currentOverlayPref?.yOffset ?: 0.0f) }
-    var xSeparation by remember { mutableStateOf(currentOverlayPref?.xSeparation ?: 0.0f) }
-    var ySeparation by remember { mutableStateOf(currentOverlayPref?.ySeparation ?: 0.0f) }
-    
-    // Semi-transparent state for preview (30% transparent for 2 seconds)
-    var isTransparent by remember { mutableStateOf(false) }
-    
-    // Scroll state pour auto-scroll vers la sélection
-    val scrollState = rememberScrollState()
-    var customSectionOffsetY by remember { mutableStateOf(0f) }
-    
-    // Rafraîchir la liste custom ET la sélection quand les SharedPreferences changent (file picker)
+
     DisposableEffect(console) {
-        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "overlay_${console}_custom_browsed") {
-                customBrowsed = com.retroplay.overlay.models.OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()
+                customBrowsed = OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()
             }
-            // Rafraîchir la sélection si overlay_name ou custom_cfg changent (file picker)
             if (key == "overlay_${console}_name" || key == "overlay_${console}_custom_cfg") {
-                val updatedPref = com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)
+                val updatedPref = OverlayPreferenceManager.load(prefs, console)
                 if (updatedPref != null) {
                     selectedOverlay = updatedPref.overlayName
-                    selectedCustomPath = if (updatedPref.customCfgName != null) {
-                        "${updatedPref.overlayName}/${updatedPref.customCfgName}"
-                    } else {
-                        null
-                    }
+                    selectedCustomPath = updatedPref.customCfgName?.let { "${updatedPref.overlayName}/$it" }
                 }
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose {
-            prefs.unregisterOnSharedPreferenceChangeListener(listener)
-        }
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
-    
-    // Auto-scroll vers la section custom quand un custom est sélectionné
-    LaunchedEffect(selectedCustomPath, customSectionOffsetY) {
-        if (selectedCustomPath != null && customSectionOffsetY > 0f) {
-            scrollState.animateScrollTo(customSectionOffsetY.toInt())
-        }
-    }
-    
-    // Sauvegarder le mode debug quand il change
+
     LaunchedEffect(debugModeState.value) {
         prefs.edit()
             .putBoolean("overlay_debug_mode", debugModeState.value)
             .commit()
     }
-    
-    // Available layouts for selected overlay
-    val availableLayouts = remember(selectedOverlay, selectedCustomPath, console) {
+
+    val customCfgName = selectedCustomPath?.substringAfter("/")
+    val availableLayouts = remember(selectedOverlay, customCfgName) {
         if (selectedOverlay.isNotEmpty()) {
-            // Extraire le nom du .cfg custom si applicable
-            val customCfgName = selectedCustomPath?.substringAfter("/")
             assetManager.getAvailableLayouts(selectedOverlay, console, customCfgName)
         } else {
             emptyList()
         }
     }
-    
-    // Save preferences when changed + trigger 30% transparency for 2 seconds
-    LaunchedEffect(selectedOverlay, selectedCustomPath, selectedLandscapeLayout, selectedPortraitLayout, autoRotate, swapAnalogSticks, invertAnalogY, scale, xOffset, yOffset, xSeparation, ySeparation) {
+
+    LaunchedEffect(availableLayouts, selectedLandscapeLayout) {
+        if (availableLayouts.isNotEmpty()) {
+            val landscapeLayouts = availableLayouts.filter { it.contains("landscape", ignoreCase = true) }
+            val portraitLayouts = availableLayouts.filter { it.contains("portrait", ignoreCase = true) }
+
+            if (landscapeLayouts.isNotEmpty() && !landscapeLayouts.contains(selectedLandscapeLayout)) {
+                selectedLandscapeLayout = landscapeLayouts.first()
+            } else if (landscapeLayouts.isEmpty() && !availableLayouts.contains(selectedLandscapeLayout)) {
+                selectedLandscapeLayout = availableLayouts.first()
+            }
+
+            if (portraitLayouts.isNotEmpty() && !portraitLayouts.contains(selectedPortraitLayout)) {
+                selectedPortraitLayout = portraitLayouts.first()
+            } else if (portraitLayouts.isEmpty() && !availableLayouts.contains(selectedPortraitLayout)) {
+                selectedPortraitLayout = selectedLandscapeLayout
+            }
+        }
+    }
+
+    LaunchedEffect(
+        selectedOverlay,
+        selectedCustomPath,
+        selectedLandscapeLayout,
+        selectedPortraitLayout,
+        autoRotate,
+        swapAnalogSticks,
+        invertAnalogY,
+        scale,
+        xOffset,
+        yOffset,
+        xSeparation,
+        ySeparation
+    ) {
         if (selectedOverlay.isNotEmpty()) {
-            // Si c'est un custom, extraire le nom du .cfg (ex: "flat/dreamcast.cfg" → "dreamcast.cfg")
-            val customCfgName = selectedCustomPath?.substringAfter("/")
-            
-            val pref = com.retroplay.overlay.models.OverlayPreference(
+            val pref = OverlayPreference(
                 enabled = true,
                 overlayName = selectedOverlay,
-                customCfgName = customCfgName,  // "dreamcast.cfg" pour custom, null pour standard
+                customCfgName = selectedCustomPath?.substringAfter("/"),
                 landscapeLayout = selectedLandscapeLayout,
                 portraitLayout = selectedPortraitLayout,
                 autoRotate = autoRotate,
@@ -156,16 +221,15 @@ fun RetroArchSettingsDialog(
                 xSeparation = xSeparation,
                 ySeparation = ySeparation
             )
-            com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
-            android.util.Log.i("RetroArchSettings", "Saved overlay pref for $console: overlay='$selectedOverlay' customCfg='$customCfgName' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate swap=$swapAnalogSticks invertY=$invertAnalogY")
-            
-            // Trigger 30% transparency for 2 seconds to preview overlay
-            isTransparent = true
-            kotlinx.coroutines.delay(2000)
-            isTransparent = false
+            OverlayPreferenceManager.save(prefs, console, pref)
+            isPreviewTransparent = true
+            delay(1200)
+            isPreviewTransparent = false
         }
     }
-    
+
+    val containerAlpha = if (isPreviewTransparent) 0.32f else 0.42f
+
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -174,671 +238,422 @@ fun RetroArchSettingsDialog(
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
-                    .fillMaxHeight(0.85f)
-                    .verticalScroll(scrollState),  // SCROLL SUR LE CARD
+                    .fillMaxHeight(0.85f),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isTransparent) 
-                        Color(0xDD000000).copy(alpha = 0.3f)  // Preview: 30% transparent
-                    else 
-                        Color(0xDD000000).copy(alpha = 0.4f)  // Normal: 40% transparent
+                    containerColor = Color(0xFF000000).copy(alpha = containerAlpha)
                 )
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),  // PAS de fillMaxSize
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                // Title
-                Text(
-                    text = "RetroArch Overlay Settings",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFFF9800),
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                
-                Text(
-                    text = "Console: ${console.uppercase()}",
-                    fontSize = 14.sp,
-                    color = Color(0xFFBBBBBB),
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                
-                // Scrollable content
-                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(scrollState)
+                        .padding(20.dp)
+                        .verticalScroll(contentScrollState),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Overlay Package Selection
                     Text(
-                        "Overlay Package",
-                        color = Color(0xFFFF9800),
-                        fontSize = 16.sp,
+                        text = "RetroArch Overlay Settings",
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        color = Color(0xFFFF9800)
                     )
-                    
-                    if (availableOverlays.isEmpty()) {
+                    Text(
+                        text = "Console: ${console.uppercase()}",
+                        fontSize = 14.sp,
+                        color = Color(0xFFBBBBBB)
+                    )
+
+                    HorizontalDivider(color = Color(0xFF444444))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            "No overlays available for this console",
-                            color = Color(0xFF888888),
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        )
-                    } else {
-                        availableOverlays.forEach { overlayName ->
-                            // Standard overlay is selected only if no custom path is active
-                            val isSelected = selectedOverlay == overlayName && selectedCustomPath == null
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .background(
-                                        if (isSelected) Color(0xFF2196F3).copy(alpha = 0.3f) 
-                                        else Color.Transparent
-                                    )
-                                    .border(
-                                        width = 1.dp,
-                                        color = if (isSelected) Color(0xFF2196F3) else Color(0xFF444444)
-                                    )
-                                    .clickable { 
-                                        selectedCustomPath = null  // Clear custom selection
-                                        selectedOverlay = overlayName 
-                                    }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = { 
-                                        selectedCustomPath = null  // Clear custom selection
-                                        selectedOverlay = overlayName 
-                                    },
-                                    colors = RadioButtonDefaults.colors(
-                                        selectedColor = Color(0xFF2196F3),
-                                        unselectedColor = Color(0xFF888888)
-                                    )
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    overlayName,
-                                    color = if (isSelected) Color.White else Color(0xFFBBBBBB),
-                                    fontSize = 14.sp
-                                )
-                            }
-                        }
-                    }
-                    
-                    // Custom Overlays Section (browsed via file picker)
-                    if (customBrowsed.isNotEmpty()) {
-                        Spacer(Modifier.height(16.dp))
-                        
-                        HorizontalDivider(
-                            thickness = 1.dp,
-                            color = Color(0xFF444444),
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                        
-                        Text(
-                            "Custom Overlays (File Picker)",
+                            text = "Overlay Package",
                             color = Color(0xFFFF9800),
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .padding(bottom = 8.dp)
-                                .onGloballyPositioned { coordinates ->
-                                    customSectionOffsetY = coordinates.positionInParent().y
-                                }
+                            fontWeight = FontWeight.SemiBold
                         )
-                        
-                        customBrowsed.forEach { customPath ->
-                            val customOverlayName = customPath.substringBefore("/")
-                            // Compare the FULL path, not just the overlay name
-                            val isSelected = selectedCustomPath == customPath
-                            
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .background(
-                                        if (isSelected) Color(0xFFFF9800).copy(alpha = 0.3f) 
-                                        else Color.Transparent
-                                    )
-                                    .border(
-                                        width = 1.dp,
-                                        color = if (isSelected) Color(0xFFFF9800) else Color(0xFF444444)
-                                    )
-                                    .clickable { 
-                                        selectedCustomPath = customPath
-                                        selectedOverlay = customOverlayName
-                                    }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = { 
-                                        selectedCustomPath = customPath
-                                        selectedOverlay = customOverlayName
-                                    },
-                                    colors = RadioButtonDefaults.colors(
-                                        selectedColor = Color(0xFFFF9800),
-                                        unselectedColor = Color(0xFF888888)
-                                    )
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        customPath,
-                                        color = if (isSelected) Color.White else Color(0xFFBBBBBB),
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "via File Picker",
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                
-                                // Bouton X pour supprimer
-                                IconButton(
-                                    onClick = {
-                                        // Supprimer de la liste
-                                        com.retroplay.overlay.models.OverlayPreferenceManager.removeCustomBrowsed(prefs, console, customPath)
-                                        
-                                        // Mettre à jour la liste locale (recompose automatiquement)
-                                        customBrowsed = com.retroplay.overlay.models.OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()
-                                        
-                                        // Si ce custom était sélectionné, revenir au premier overlay standard
-                                        if (selectedCustomPath == customPath) {
+
+                        if (overlayPackages.isEmpty() && customBrowsed.isEmpty()) {
+                            Text(
+                                text = "No overlays available for this console.",
+                                color = Color(0xFF888888),
+                                fontSize = 13.sp
+                            )
+                        } else {
+                            overlayPackages.forEach { overlayName ->
+                                val isSelected = selectedOverlay == overlayName && selectedCustomPath == null
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
                                             selectedCustomPath = null
-                                            selectedOverlay = if (availableOverlays.isNotEmpty()) availableOverlays[0] else ""
+                                            selectedOverlay = overlayName
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelected) Color(0xFF1B5E20).copy(alpha = 0.4f) else Color(0xFF1C1C1C)
+                                    ),
+                                    border = BorderStroke(1.dp, if (isSelected) Color(0xFF4CAF50) else Color(0xFF2F2F2F))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        RadioButton(
+                                            selected = isSelected,
+                                            onClick = {
+                                                selectedCustomPath = null
+                                                selectedOverlay = overlayName
+                                            },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = Color(0xFF4CAF50),
+                                                unselectedColor = Color(0xFF777777)
+                                            )
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = overlayName,
+                                                color = if (isSelected) Color.White else Color(0xFFCCCCCC),
+                                                fontSize = 14.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                            Text(
+                                                text = "Official RetroArch overlay",
+                                                color = Color(0xFF777777),
+                                                fontSize = 11.sp
+                                            )
                                         }
-                                        
-                                        // NE PAS fermer le dialog! Rester dans le menu pour continuer à choisir
-                                    },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Text(
-                                        "✕",
-                                        color = Color(0xFFFF5252),
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    }
                                 }
                             }
                         }
+
+                        if (customBrowsed.isNotEmpty()) {
+                            HorizontalDivider(color = Color(0xFF333333))
+                            Text(
+                                text = "Custom Overlays (File Picker)",
+                                color = Color(0xFFFF9800),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            customBrowsed.forEach { customPath ->
+                                val overlayName = customPath.substringBefore("/")
+                                val isSelected = selectedCustomPath == customPath
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedCustomPath = customPath
+                                            selectedOverlay = overlayName
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelected) Color(0xFF311B92).copy(alpha = 0.45f) else Color(0xFF1C1C1C)
+                                    ),
+                                    border = BorderStroke(1.dp, if (isSelected) Color(0xFF9575CD) else Color(0xFF2F2F2F))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = isSelected,
+                                            onClick = {
+                                                selectedCustomPath = customPath
+                                                selectedOverlay = overlayName
+                                            },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = Color(0xFF9575CD),
+                                                unselectedColor = Color(0xFF777777)
+                                            )
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = customPath,
+                                                color = if (isSelected) Color.White else Color(0xFFCCCCCC),
+                                                fontSize = 13.sp
+                                            )
+                                            Text(
+                                                text = "Imported from storage",
+                                                color = Color(0xFF777777),
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                        IconButton(onClick = {
+                                            OverlayPreferenceManager.removeCustomBrowsed(prefs, console, customPath)
+                                            customBrowsed = OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()
+                                            if (selectedCustomPath == customPath) {
+                                                selectedCustomPath = null
+                                                if (overlayPackages.isNotEmpty()) {
+                                                    selectedOverlay = overlayPackages.first()
+                                                } else {
+                                                    selectedOverlay = ""
+                                                }
+                                            }
+                                        }) {
+                                            Text(
+                                                text = "X",
+                                                color = Color(0xFFFF5252),
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (onLoadCustomCfg != null) {
+                            TextButton(
+                                onClick = onLoadCustomCfg,
+                                colors = ButtonDefaults.textButtonColors(
+                                    containerColor = Color(0xFF2196F3).copy(alpha = 0.15f)
+                                )
+                            ) {
+                                Text("Load Custom .cfg", color = Color(0xFF90CAF9))
+                            }
+                        }
                     }
-                    
-                    Spacer(Modifier.height(16.dp))
-                    
-                    // Layout Selection (only if overlay is selected and layouts are available)
+
                     if (selectedOverlay.isNotEmpty() && availableLayouts.isNotEmpty()) {
-                        // Landscape Layout
+                        HorizontalDivider(color = Color(0xFF444444))
                         Text(
-                            "Landscape Layout",
+                            text = "Layout Selection",
                             color = Color(0xFFFF9800),
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            fontWeight = FontWeight.SemiBold
                         )
-                        
+
                         val landscapeLayouts = availableLayouts.filter { it.contains("landscape", ignoreCase = true) }
-                        if (landscapeLayouts.isEmpty()) {
-                            Text(
-                                "No landscape layouts available",
-                                color = Color(0xFF888888),
-                                fontSize = 14.sp,
-                                modifier = Modifier.padding(bottom = 16.dp)
-                            )
-                        } else {
-                            landscapeLayouts.forEach { layoutName ->
-                                val isSelected = selectedLandscapeLayout == layoutName
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .background(
-                                            if (isSelected) Color(0xFF4CAF50).copy(alpha = 0.3f) 
-                                            else Color.Transparent
-                                        )
-                                        .border(
-                                            width = 1.dp,
-                                            color = if (isSelected) Color(0xFF4CAF50) else Color(0xFF444444)
-                                        )
-                                        .clickable { selectedLandscapeLayout = layoutName }
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { selectedLandscapeLayout = layoutName },
-                                        colors = RadioButtonDefaults.colors(
-                                            selectedColor = Color(0xFF4CAF50),
-                                            unselectedColor = Color(0xFF888888)
-                                        )
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        layoutName,
-                                        color = if (isSelected) Color.White else Color(0xFFBBBBBB),
-                                        fontSize = 14.sp
-                                    )
-                                }
-                            }
-                        }
-                        
-                        Spacer(Modifier.height(16.dp))
-                        
-                        // Portrait Layout
-                        Text(
-                            "Portrait Layout",
-                            color = Color(0xFFFF9800),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        
                         val portraitLayouts = availableLayouts.filter { it.contains("portrait", ignoreCase = true) }
-                        if (portraitLayouts.isEmpty()) {
-                            Text(
-                                "No portrait layouts available",
-                                color = Color(0xFF888888),
-                                fontSize = 14.sp,
-                                modifier = Modifier.padding(bottom = 16.dp)
-                            )
-                        } else {
-                            portraitLayouts.forEach { layoutName ->
-                                val isSelected = selectedPortraitLayout == layoutName
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .background(
-                                            if (isSelected) Color(0xFFE91E63).copy(alpha = 0.3f) 
-                                            else Color.Transparent
+
+                        if (landscapeLayouts.isNotEmpty()) {
+                            Text("Landscape", color = Color(0xFFBBBBBB), fontSize = 13.sp)
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                landscapeLayouts.forEach { layoutName ->
+                                    val isSelected = selectedLandscapeLayout == layoutName
+                                    TextButton(
+                                        onClick = { selectedLandscapeLayout = layoutName },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            containerColor = if (isSelected) Color(0xFFFF9800) else Color(0xFF2A2A2A)
+                                        ),
+                                        shape = RoundedCornerShape(50),
+                                        border = BorderStroke(1.dp, if (isSelected) Color(0xFFFFC107) else Color(0xFF3A3A3A)),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = layoutDisplayName(layoutName),
+                                            color = if (isSelected) Color.Black else Color(0xFFBDBDBD),
+                                            fontSize = 12.sp,
+                                            maxLines = 1
                                         )
-                                        .border(
-                                            width = 1.dp,
-                                            color = if (isSelected) Color(0xFFE91E63) else Color(0xFF444444)
-                                        )
-                                        .clickable { selectedPortraitLayout = layoutName }
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { selectedPortraitLayout = layoutName },
-                                        colors = RadioButtonDefaults.colors(
-                                            selectedColor = Color(0xFFE91E63),
-                                            unselectedColor = Color(0xFF888888)
-                                        )
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        layoutName,
-                                        color = if (isSelected) Color.White else Color(0xFFBBBBBB),
-                                        fontSize = 14.sp
-                                    )
+                                    }
                                 }
                             }
                         }
-                        
-                        Spacer(Modifier.height(16.dp))
-                        
-                        // Auto-Rotate Toggle
+
+                        if (portraitLayouts.isNotEmpty()) {
+                            Text("Portrait", color = Color(0xFFBBBBBB), fontSize = 13.sp)
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                portraitLayouts.forEach { layoutName ->
+                                    val isSelected = selectedPortraitLayout == layoutName
+                                    TextButton(
+                                        onClick = { selectedPortraitLayout = layoutName },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            containerColor = if (isSelected) Color(0xFFFF9800) else Color(0xFF2A2A2A)
+                                        ),
+                                        shape = RoundedCornerShape(50),
+                                        border = BorderStroke(1.dp, if (isSelected) Color(0xFFFFC107) else Color(0xFF3A3A3A)),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = layoutDisplayName(layoutName),
+                                            color = if (isSelected) Color.Black else Color(0xFFBDBDBD),
+                                            fontSize = 12.sp,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Auto-Rotate Overlay",
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Automatically switch layout based on device orientation",
-                                    color = Color(0xFF888888),
-                                    fontSize = 12.sp
-                                )
-                            }
                             Switch(
                                 checked = autoRotate,
                                 onCheckedChange = { autoRotate = it },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color(0xFF4CAF50),
                                     checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
-                                    uncheckedThumbColor = Color(0xFF888888),
+                                    uncheckedThumbColor = Color(0xFF777777),
                                     uncheckedTrackColor = Color(0xFF444444)
                                 )
                             )
-                        }
-                        
-                        Spacer(Modifier.height(16.dp))
-                        
-                        HorizontalDivider(
-                            thickness = 1.dp,
-                            color = Color(0xFF444444),
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                        
-                        Text(
-                            "Analog Stick Options",
-                            color = Color(0xFFFF9800),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        
-                        // Swap Analog Sticks Toggle
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Swap Left/Right Sticks",
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Swap analog stick L and R positions",
-                                    color = Color(0xFF888888),
-                                    fontSize = 12.sp
-                                )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Auto-switch on rotation", color = Color.White, fontSize = 13.sp)
+                                Text("Switch layouts with device orientation", color = Color(0xFF888888), fontSize = 11.sp)
                             }
-                            Switch(
-                                checked = swapAnalogSticks,
-                                onCheckedChange = { swapAnalogSticks = it },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color(0xFF2196F3),
-                                    checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
-                                    uncheckedThumbColor = Color(0xFF888888),
-                                    uncheckedTrackColor = Color(0xFF444444)
-                                )
-                            )
-                        }
-                        
-                        // Invert Y Axis Toggle
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Invert Y Axis",
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Invert up/down for analog sticks",
-                                    color = Color(0xFF888888),
-                                    fontSize = 12.sp
-                                )
-                            }
-                            Switch(
-                                checked = invertAnalogY,
-                                onCheckedChange = { invertAnalogY = it },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color(0xFFE91E63),
-                                    checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
-                                    uncheckedThumbColor = Color(0xFF888888),
-                                    uncheckedTrackColor = Color(0xFF444444)
-                                )
-                            )
-                        }
-                        
-                        Spacer(Modifier.height(16.dp))
-                        
-                        HorizontalDivider(
-                            thickness = 1.dp,
-                            color = Color(0xFF444444),
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                        
-                        // Auto-Rotate Toggle
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Auto-switch on rotation",
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Switch landscape/portrait layouts automatically",
-                                    color = Color(0xFF888888),
-                                    fontSize = 12.sp
-                                )
-                            }
-                            Switch(
-                                checked = autoRotate,
-                                onCheckedChange = { autoRotate = it },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color(0xFF4CAF50),
-                                    checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
-                                    uncheckedThumbColor = Color(0xFF888888),
-                                    uncheckedTrackColor = Color(0xFF444444)
-                                )
-                            )
-                        }
-                        
-                        // DEBUG Toggle
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "DEBUG: Show hitboxes",
-                                    color = Color(0xFFFFEB3B),
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Display colored hitboxes for debugging",
-                                    color = Color(0xFF888888),
-                                    fontSize = 12.sp
-                                )
-                            }
-                            Switch(
-                                checked = debugModeState.value,
-                                onCheckedChange = { debugModeState.value = it },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color(0xFFFFEB3B),
-                                    checkedTrackColor = Color(0xFFFFEB3B).copy(alpha = 0.5f),
-                                    uncheckedThumbColor = Color(0xFF888888),
-                                    uncheckedTrackColor = Color(0xFF444444)
-                                )
-                            )
-                        }
-                        
-                        Spacer(Modifier.height(16.dp))
-                        
-                        HorizontalDivider(
-                            thickness = 1.dp,
-                            color = Color(0xFF444444),
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                        
-                        Text(
-                            "Position & Scale",
-                            color = Color(0xFFFF9800),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        
-                        // Scale Slider
-                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Scale", color = Color.White, fontSize = 14.sp)
-                                Text("${String.format("%.2f", scale)}x", color = Color(0xFF4CAF50), fontSize = 14.sp)
-                            }
-                            Slider(
-                                value = scale,
-                                onValueChange = { scale = it },
-                                valueRange = 0.5f..1.5f,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Color(0xFF4CAF50),
-                                    activeTrackColor = Color(0xFF4CAF50),
-                                    inactiveTrackColor = Color(0xFF444444)
-                                )
-                            )
-                        }
-                        
-                        // X Offset Slider
-                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("X Offset", color = Color.White, fontSize = 14.sp)
-                                Text(String.format("%.3f", xOffset), color = Color(0xFF2196F3), fontSize = 14.sp)
-                            }
-                            Slider(
-                                value = xOffset,
-                                onValueChange = { newValue ->
-                                    // Snap au centre si proche de 0.0
-                                    xOffset = if (kotlin.math.abs(newValue) < 0.01f) 0.0f else newValue
-                                },
-                                valueRange = -0.2f..0.2f,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Color(0xFF2196F3),
-                                    activeTrackColor = Color(0xFF2196F3),
-                                    inactiveTrackColor = Color(0xFF444444)
-                                )
-                            )
-                        }
-                        
-                        // Y Offset Slider
-                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Y Offset", color = Color.White, fontSize = 14.sp)
-                                Text(String.format("%.3f", yOffset), color = Color(0xFFE91E63), fontSize = 14.sp)
-                            }
-                            Slider(
-                                value = yOffset,
-                                onValueChange = { newValue ->
-                                    // Snap au centre si proche de 0.0
-                                    yOffset = if (kotlin.math.abs(newValue) < 0.01f) 0.0f else newValue
-                                },
-                                valueRange = -0.2f..0.2f,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Color(0xFFE91E63),
-                                    activeTrackColor = Color(0xFFE91E63),
-                                    inactiveTrackColor = Color(0xFF444444)
-                                )
-                            )
-                        }
-                        
-                        // X Separation Slider (espacement interne horizontal)
-                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("X Separation", color = Color.White, fontSize = 14.sp)
-                                Text(String.format("%.3f", xSeparation), color = Color(0xFF00BCD4), fontSize = 14.sp)
-                            }
-                            Slider(
-                                value = xSeparation,
-                                onValueChange = { newValue ->
-                                    xSeparation = if (kotlin.math.abs(newValue) < 0.01f) 0.0f else newValue
-                                },
-                                valueRange = -0.2f..0.2f,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Color(0xFF00BCD4),
-                                    activeTrackColor = Color(0xFF00BCD4),
-                                    inactiveTrackColor = Color(0xFF444444)
-                                )
-                            )
-                        }
-                        
-                        // Y Separation Slider (espacement interne vertical)
-                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Y Separation", color = Color.White, fontSize = 14.sp)
-                                Text(String.format("%.3f", ySeparation), color = Color(0xFF9C27B0), fontSize = 14.sp)
-                            }
-                            Slider(
-                                value = ySeparation,
-                                onValueChange = { newValue ->
-                                    ySeparation = if (kotlin.math.abs(newValue) < 0.01f) 0.0f else newValue
-                                },
-                                valueRange = -0.2f..0.2f,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Color(0xFF9C27B0),
-                                    activeTrackColor = Color(0xFF9C27B0),
-                                    inactiveTrackColor = Color(0xFF444444)
-                                )
-                            )
                         }
                     }
-                }
-                
-                Spacer(Modifier.height(16.dp))
-                
-                // Buttons
-                Column(modifier = Modifier.fillMaxWidth()) {
+
+                    HorizontalDivider(color = Color(0xFF444444))
+                    Text("Analog Options", color = Color(0xFFFF9800), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Switch(
+                            checked = swapAnalogSticks,
+                            onCheckedChange = { swapAnalogSticks = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF2196F3),
+                                checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
+                                uncheckedThumbColor = Color(0xFF777777),
+                                uncheckedTrackColor = Color(0xFF444444)
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Swap Left/Right sticks", color = Color.White, fontSize = 13.sp)
+                            Text("Exchange L and R analog sticks", color = Color(0xFF888888), fontSize = 11.sp)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Switch(
+                            checked = invertAnalogY,
+                            onCheckedChange = { invertAnalogY = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFFE91E63),
+                                checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
+                                uncheckedThumbColor = Color(0xFF777777),
+                                uncheckedTrackColor = Color(0xFF444444)
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Invert Y axis", color = Color.White, fontSize = 13.sp)
+                            Text("Reverse up/down analog input", color = Color(0xFF888888), fontSize = 11.sp)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Switch(
+                            checked = debugModeState.value,
+                            onCheckedChange = { debugModeState.value = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFFFFEB3B),
+                                checkedTrackColor = Color(0xFFFFEB3B).copy(alpha = 0.5f),
+                                uncheckedThumbColor = Color(0xFF777777),
+                                uncheckedTrackColor = Color(0xFF444444)
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Debug hitboxes", color = Color(0xFFFFEB3B), fontSize = 13.sp)
+                            Text("Display overlay hitboxes for tuning", color = Color(0xFF888888), fontSize = 11.sp)
+                        }
+                    }
+
+                    HorizontalDivider(color = Color(0xFF444444))
+                    Text("Position & Scale", color = Color(0xFFFF9800), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SliderWithLabel(
+                            label = "Scale",
+                            value = scale,
+                            onValueChange = { scale = it },
+                            valueRange = 0.5f..1.5f,
+                            displayValue = "${String.format("%.2f", scale)}x",
+                            activeColor = Color(0xFF4CAF50)
+                        )
+                        SliderWithLabel(
+                            label = "X Offset",
+                            value = xOffset,
+                            onValueChange = { xOffset = snapToZero(it) },
+                            valueRange = -0.2f..0.2f,
+                            displayValue = String.format("%.3f", xOffset),
+                            activeColor = Color(0xFF2196F3)
+                        )
+                        SliderWithLabel(
+                            label = "Y Offset",
+                            value = yOffset,
+                            onValueChange = { yOffset = snapToZero(it) },
+                            valueRange = -0.2f..0.2f,
+                            displayValue = String.format("%.3f", yOffset),
+                            activeColor = Color(0xFFE91E63)
+                        )
+                        SliderWithLabel(
+                            label = "X Separation",
+                            value = xSeparation,
+                            onValueChange = { xSeparation = snapToZero(it) },
+                            valueRange = -0.2f..0.2f,
+                            displayValue = String.format("%.3f", xSeparation),
+                            activeColor = Color(0xFF00BCD4)
+                        )
+                        SliderWithLabel(
+                            label = "Y Separation",
+                            value = ySeparation,
+                            onValueChange = { ySeparation = snapToZero(it) },
+                            valueRange = -0.2f..0.2f,
+                            displayValue = String.format("%.3f", ySeparation),
+                            activeColor = Color(0xFF9C27B0)
+                        )
+                    }
+
+                    HorizontalDivider(color = Color(0xFF444444))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // Load Custom .cfg Button
-                        if (onLoadCustomCfg != null) {
-                            Button(
-                                onClick = onLoadCustomCfg,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF2196F3)
-                                )
-                            ) {
-                                Text("Load Custom .cfg", color = Color.White, fontSize = 14.sp)
-                            }
-                        } else {
-                            Spacer(Modifier.width(1.dp))
+                        Button(
+                            onClick = {
+                                if (overlayPackages.isNotEmpty()) {
+                                    val defaultOverlay = overlayPackages.first()
+                                    val (land, port) = computeDefaultLayouts(assetManager, defaultOverlay, console, null)
+                                    selectedOverlay = defaultOverlay
+                                    selectedCustomPath = null
+                                    selectedLandscapeLayout = land
+                                    selectedPortraitLayout = port
+                                    autoRotate = true
+                                    swapAnalogSticks = false
+                                    invertAnalogY = false
+                                    scale = 1.0f
+                                    xOffset = 0.0f
+                                    yOffset = 0.0f
+                                    xSeparation = 0.0f
+                                    ySeparation = 0.0f
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722))
+                        ) {
+                            Text("Reset Overlay", color = Color.White)
                         }
-                        
-                        // Done Button
+
                         Button(
                             onClick = onDismiss,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF4CAF50)
-                            )
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                         ) {
-                            Text("DONE", color = Color.White)
+                            Text("Done", color = Color.White)
                         }
                     }
                 }
@@ -846,5 +661,66 @@ fun RetroArchSettingsDialog(
         }
     }
 }
+
+private fun layoutDisplayName(layoutName: String): String {
+    val lower = layoutName.lowercase()
+    return when {
+        lower.contains("both-analog") -> "Both Analog"
+        lower.contains("left-analog") && lower.contains("menu") -> "Left Analog + Menu"
+        lower.contains("left-analog") -> "Left Analog"
+        lower.contains("right-analog") -> "Right Analog"
+        lower.contains("analog") && lower.contains("menu") -> "Analog + Menu"
+        lower.contains("analog") -> "Analog"
+        lower.contains("menu") -> "Menu"
+        lower.endsWith("-b") -> "Variant B"
+        lower.endsWith("-c") -> "Variant C"
+        else -> "Digital"
+    }
 }
 
+@Composable
+private fun SliderWithLabel(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    displayValue: String,
+    activeColor: Color
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, color = Color.White, fontSize = 13.sp)
+            Text(displayValue, color = activeColor, fontSize = 13.sp)
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            colors = SliderDefaults.colors(
+                thumbColor = activeColor,
+                activeTrackColor = activeColor,
+                inactiveTrackColor = Color(0xFF3A3A3A)
+            )
+        )
+    }
+}
+
+private fun snapToZero(value: Float): Float = if (abs(value) < 0.01f) 0.0f else value
+
+private fun computeDefaultLayouts(
+    assetManager: OverlayAssetManager,
+    overlayName: String,
+    console: String,
+    customCfgName: String?
+): Pair<String, String> {
+    val layouts = assetManager.getAvailableLayouts(overlayName, console, customCfgName)
+    val landscape = layouts.firstOrNull { it.contains("landscape", ignoreCase = true) }
+        ?: layouts.firstOrNull()
+        ?: "landscape-A"
+    val portrait = layouts.firstOrNull { it.contains("portrait", ignoreCase = true) }
+        ?: landscape
+    return landscape to portrait
+}

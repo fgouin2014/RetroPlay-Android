@@ -52,9 +52,12 @@ import androidx.compose.ui.util.lerp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.delay
 import java.io.File
-import com.retroplay.gallery.ScreenshotRepository
 import com.retroplay.ScreenshotManager
+import com.retroplay.gallery.ScreenshotRepository
+import com.retroplay.rewind.RewindManager
+import com.retroplay.config.RetroPlayConfigManager
 
 /**
  * RetroArch Emulator Activity
@@ -112,6 +115,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private var currentCoreFilePath: String? = null
     private var gameCRC: String? = null  // Database CRC (if available)
     private var loadedCheats = mutableListOf<com.retroplay.cheat.CheatManager.Cheat>()  // Cheats loaded for current game
+    private var rewindManager: RewindManager? = null
+    private var retroPlayConfig: RetroPlayConfigManager.RetroPlayConfig = RetroPlayConfigManager.loadConfig()
     
     // Zapper support (NES light gun)
     private var isZapperGame: Boolean = false
@@ -263,12 +268,14 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private fun applyPerGameConfig(gameCRC: String?) {
         if (gameCRC == null) {
             Log.d(TAG, "[Config] No gameCRC provided, using global config")
+            retroPlayConfig = RetroPlayConfigManager.loadConfig()
+            applyRewindSettings()
             return
         }
         
         // Load effective config (global + per-game merged)
-        val config = com.retroplay.config.RetroPlayConfigManager.getEffectiveConfig(gameCRC)
-        val hasOverride = com.retroplay.config.RetroPlayConfigManager.hasGameConfig(gameCRC)
+        val config = RetroPlayConfigManager.getEffectiveConfig(gameCRC)
+        val hasOverride = RetroPlayConfigManager.hasGameConfig(gameCRC)
         
         if (hasOverride) {
             Log.i(TAG, "[Config] ✅ Per-game config loaded for CRC: $gameCRC")
@@ -280,6 +287,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             Log.d(TAG, "[Config] Using global config for CRC: $gameCRC")
         }
         
+        retroPlayConfig = config
+        applyRewindSettings()
+
         // TODO: Apply config to emulator once APIs are available
         // if (config.runAheadEnabled) {
         //     retroView.setRunAheadFrames(config.runAheadFrames)
@@ -294,6 +304,16 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         // For now, we just store the config for future use
         // The config will be accessible when Run-Ahead/Rewind are implemented
+    }
+
+    private fun applyRewindSettings() {
+        val manager = rewindManager ?: return
+        val config = retroPlayConfig
+        manager.configure(
+            enabled = config.rewindEnable,
+            bufferSizeBytes = config.rewindBufferSize,
+            granularity = config.rewindGranularity
+        )
     }
     
     /**
@@ -1249,6 +1269,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
         
         retroView = GLRetroView(this, data)
+        rewindManager = RewindManager(retroView, lifecycleScope)
+        applyRewindSettings()
         lifecycle.addObserver(retroView)
         
         // Quick Wins: Appliquer l'état audio au démarrage (après création de retroView)
@@ -1259,6 +1281,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             try {
                 retroView.getGLRetroEvents().collect { event ->
                     if (event is GLRetroView.GLRetroEvents.FrameRendered) {
+                        rewindManager?.onFrameRendered()
                         // Refresh disk info periodically (every 60 frames ~1 second)
                         if (System.currentTimeMillis() % 1000 < 17) {
                             availableDisks = retroView.getAvailableDisks()
@@ -1510,9 +1533,15 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 onHotkey = { action ->
                     handleHotkey(action)
                 },
+                onHotkeyChange = { action, pressed ->
+                    handleHotkeyChange(action, pressed)
+                },
                 // Quick Wins callbacks
-                onRewindUnavailable = {
-                    this@RetroArchEmulatorActivity.notifyRewindUnavailable()
+                onRewindPress = {
+                    beginRewind()
+                },
+                onRewindRelease = {
+                    endRewind()
                 },
                 onToggleFastForward = {
                     toggleFastForward()
@@ -1558,7 +1587,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 onLoadCustomCfg = {
                     // Lancer le file picker pour sélectionner un .cfg
                     pickCustomCfgLauncher.launch(arrayOf("*/*"))
-                }
+                },
+                rewindManager = rewindManager
             )
             
             // Dialog d'erreur de chargement du core
@@ -2186,9 +2216,11 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             
             // Rewind (nécessite support du core)
             "rewind" -> {
-                Log.i(TAG, "Rewind (not supported by LibretroDroid)")
-                runOnUiThread {
-                    Toast.makeText(this, "Rewind not supported", Toast.LENGTH_SHORT).show()
+                if (beginRewind()) {
+                    lifecycleScope.launch {
+                        delay(250)
+                        endRewind()
+                    }
                 }
             }
             
@@ -2267,6 +2299,30 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 Log.w(TAG, "Unknown hotkey: $action")
             }
         }
+    }
+
+    private fun handleHotkeyChange(action: String, pressed: Boolean) {
+        if (action != "rewind") {
+            return
+        }
+        if (pressed) {
+            beginRewind()
+        } else {
+            endRewind()
+        }
+    }
+
+    private fun beginRewind(): Boolean {
+        val manager = rewindManager ?: return false
+        val started = manager.startRewind()
+        if (!started) {
+            notifyRewindUnavailable()
+        }
+        return started
+    }
+
+    private fun endRewind() {
+        rewindManager?.stopRewind()
     }
     
     // Quick Win #1: Fast Forward Toggle
@@ -2377,7 +2433,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     
     override fun onDestroy() {
         try {
-            Log.i(TAG, "🔴 onDestroy called - cleaning up core")
+            Log.i(TAG, "[LIFECYCLE] onDestroy called - cleaning up core")
+            rewindManager?.reset()
             // Ne pas appeler retroView.onDestroy() manuellement car lifecycle.addObserver le fait déjà
             // Juste logger pour le debug
         } catch (e: Exception) {
@@ -2387,10 +2444,18 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     }
 
     private fun notifyRewindUnavailable() {
+        val manager = rewindManager
+        val message = when {
+            manager == null -> "Rewind not available"
+            !manager.enabled.value -> "Rewind is disabled for this game"
+            !manager.isSupported.value -> "Rewind unsupported by current core"
+            manager.availableStates.value == 0 -> "Rewind buffer is empty"
+            else -> "Rewind not available"
+        }
         runOnUiThread {
             Toast.makeText(
                 this,
-                "Rewind not available in RetroArch mode",
+                message,
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -2491,6 +2556,7 @@ private fun ComposeEmulatorScreen(
     onLoadState: (Int) -> Unit,
     onFinishActivity: () -> Unit,
     onHotkey: (String) -> Unit,  // Callback pour hotkeys
+    onHotkeyChange: (String, Boolean) -> Unit = { _, _ -> },
     showDipSwitchDialog: MutableState<Boolean>,
     showCoreOptionsDialog: MutableState<Boolean>,
     dipSwitches: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
@@ -2517,7 +2583,9 @@ private fun ComposeEmulatorScreen(
     currentDisk: Int = 0,
     onTakeScreenshot: () -> Unit = {},
     onOpenGallery: () -> Unit = {},
-    onRewindUnavailable: () -> Unit = {}
+    onRewindPress: () -> Unit = {},
+    onRewindRelease: () -> Unit = {},
+    rewindManager: RewindManager? = null
 ) {
     // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
@@ -2525,6 +2593,30 @@ private fun ComposeEmulatorScreen(
     val showDebug = remember { prefs.getBoolean("overlay_debug_mode", false) }
     val debugModeState = remember { mutableStateOf(showDebug) }
     
+    val rewindManagerState = rewindManager
+    val rewindEnabled: Boolean
+    val rewindSupported: Boolean
+    val rewindActive: Boolean
+    val rewindBufferCount: Int
+    val rewindSeconds: Float
+    if (rewindManagerState != null) {
+        val enabled by rewindManagerState.enabled.collectAsState(initial = rewindManagerState.enabled.value)
+        val supported by rewindManagerState.isSupported.collectAsState(initial = rewindManagerState.isSupported.value)
+        val active by rewindManagerState.isRewinding.collectAsState(initial = rewindManagerState.isRewinding.value)
+        val available by rewindManagerState.availableStates.collectAsState(initial = rewindManagerState.availableStates.value)
+        rewindEnabled = enabled
+        rewindSupported = supported
+        rewindActive = active
+        rewindBufferCount = available
+        rewindSeconds = if (enabled && supported) rewindManagerState.availableDurationSeconds() else 0f
+    } else {
+        rewindEnabled = false
+        rewindSupported = false
+        rewindActive = false
+        rewindBufferCount = 0
+        rewindSeconds = 0f
+    }
+    val canUseRewind = rewindEnabled && rewindSupported && rewindBufferCount > 0
     // Variante de layout (state mutable)
     var layoutVariant by remember {
         mutableStateOf(initialVariant)
@@ -2619,7 +2711,8 @@ private fun ComposeEmulatorScreen(
                 // Ouvrir le menu principal
                 Log.i("ComposeEmulator", "Menu toggle from RetroArch overlay")
                 showMainMenu.value = true
-            }
+            },
+            onHotkeyChange = onHotkeyChange
         )
     } else {
         // Utiliser getLayout normal pour Lemuroid
@@ -2995,11 +3088,15 @@ private fun ComposeEmulatorScreen(
                         com.retroplay.ui.QuickActionsBar(
                             isFastForwardActive = isFastForwardActive,
                             audioMuted = audioMuted,
-                            isRewindSupported = false,
-                            isRewinding = false,
-                            rewindDurationSeconds = 0f,
-                            onRewindPress = { onRewindUnavailable() },
-                            onRewindRelease = { },
+                            isRewindSupported = canUseRewind,
+                            isRewinding = rewindActive,
+                            rewindDurationSeconds = if (canUseRewind) rewindSeconds else 0f,
+                            onRewindPress = {
+                                onRewindPress()
+                            },
+                            onRewindRelease = {
+                                onRewindRelease()
+                            },
                             onToggleFastForward = onToggleFastForward,
                             onToggleAudioMute = onToggleAudioMute,
                             onQuickSave = { onSaveState(1) },  // Quick save slot 1
@@ -3044,6 +3141,14 @@ private fun ComposeEmulatorScreen(
                         onGameInfo = {
                             showQuickMenu.value = false
                             showGameInfoDialog.value = true
+                        },
+                        onOpenGallery = {
+                            showQuickMenu.value = false
+                            onOpenGallery()
+                        },
+                        onSmartConfig = {
+                            showQuickMenu.value = false
+                            showSmartConfigDialog.value = true
                         },
                         onCheats = {
                             showQuickMenu.value = false
@@ -3090,7 +3195,11 @@ private fun ComposeEmulatorScreen(
                         isZapperGame = isZapperGame,  // CRITICAL: Afficher bouton Configure Zapper
                         crosshairMode = crosshairMode,  // Mode d'affichage du crosshair
                         hasGameInfo = (gameCRC != null),  // Database info available
-                        hasCheats = loadedCheats.isNotEmpty()  // Cheats available
+                        hasGallery = true,
+                        hasCheats = loadedCheats.isNotEmpty(),  // Cheats available
+                        rewindBufferSeconds = rewindSeconds,
+                        isRewindSupported = canUseRewind,
+                        isRewinding = rewindActive
                     )
                 }
                 
@@ -3116,6 +3225,10 @@ private fun ComposeEmulatorScreen(
                         onAdvancedSettings = {
                             showMainMenu.value = false
                             showAdvancedOverlaySettings.value = true
+                        },
+                        onGameInfo = {
+                            showMainMenu.value = false
+                            showGameInfoDialog.value = true
                         },
                         onCheatCodes = {
                             showMainMenu.value = false
@@ -3149,6 +3262,7 @@ private fun ComposeEmulatorScreen(
                             showMainMenu.value = false
                             onOpenGallery()
                         },
+                        hasGameInfo = (gameCRC?.isNotEmpty() == true),
                         hasDipSwitches = dipSwitches.isNotEmpty(),
                         hasCoreOptions = coreOptions.isNotEmpty(),
                         availableDisks = availableDisks
@@ -3419,6 +3533,7 @@ private fun MainMenuDialog(
     onLoadGame: () -> Unit,
     onGamePadSettings: () -> Unit,
     onAdvancedSettings: () -> Unit = {},  // Nouveau callback
+    onGameInfo: () -> Unit = {},
     onCheatCodes: () -> Unit,
     onChangeCore: () -> Unit,
     onDipSwitches: () -> Unit,
@@ -3427,6 +3542,7 @@ private fun MainMenuDialog(
     onDiskSwapper: () -> Unit = {},  // Disk Swapper callback
     onScreenshot: () -> Unit = {},  // Screenshot callback
     onOpenGallery: () -> Unit = {},
+    hasGameInfo: Boolean = false,
     hasDipSwitches: Boolean,
     hasCoreOptions: Boolean,
     availableDisks: Int = 0  // Number of available disks (multi-disc support)
@@ -3476,6 +3592,15 @@ private fun MainMenuDialog(
                     
                     androidx.compose.material3.HorizontalDivider(color = Color.Gray)
                     
+                    if (hasGameInfo) {
+                        TextButton(
+                            onClick = onGameInfo,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Game Info", color = Color(0xFF64B5F6))
+                        }
+                    }
+
                     // Screenshot
                     TextButton(
                         onClick = onScreenshot,
@@ -3542,7 +3667,7 @@ private fun MainMenuDialog(
                         onClick = onSmartConfig,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("💡 Smart Config", color = Color(0xFF4CAF50))
+                        Text("Smart Config", color = Color(0xFF4CAF50))
                     }
                     
                     // Disk Swapper (PSX multi-disc games)
@@ -4144,6 +4269,8 @@ private fun QuickMenuDialog(
     onSettings: () -> Unit,
     onAdvancedSettings: () -> Unit = {},  // Nouveau callback
     onGameInfo: () -> Unit = {},  // NEW: Show game database info
+    onOpenGallery: () -> Unit = {},
+    onSmartConfig: () -> Unit = {},
     onCheats: () -> Unit = {},  // NEW: Show cheats dialog
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
@@ -4162,7 +4289,11 @@ private fun QuickMenuDialog(
     isZapperGame: Boolean = false,
     crosshairMode: CrosshairMode = CrosshairMode.RETROPLAY_ONLY,
     hasGameInfo: Boolean = false,  // NEW: If database info available
-    hasCheats: Boolean = false  // NEW: If cheats are loaded
+    hasGallery: Boolean = true,
+    hasCheats: Boolean = false,  // NEW: If cheats are loaded
+    rewindBufferSeconds: Float = 0f,
+    isRewindSupported: Boolean = false,
+    isRewinding: Boolean = false
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -4282,29 +4413,64 @@ private fun QuickMenuDialog(
                     )
                 }
                 
-                // Bouton Game Info (si database info disponible)
+                if (hasGallery) {
+                    androidx.compose.material3.Button(
+                        onClick = onOpenGallery,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF7C4DFF)
+                        )
+                    ) {
+                        Text("OPEN GALLERY", color = Color.White)
+                    }
+                }
+
+                androidx.compose.material3.Button(
+                    onClick = onSmartConfig,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF388E3C)
+                    )
+                ) {
+                    Text("SMART CONFIG", color = Color.White)
+                }
+
+                if (isRewindSupported) {
+                    Text(
+                        text = "Rewind Buffer: ${String.format(java.util.Locale.US, "%.1f", rewindBufferSeconds.coerceAtLeast(0f))}s",
+                        color = Color(0xFFB3E5FC),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (isRewinding) {
+                        Text(
+                            text = "Rewinding…",
+                            color = Color(0xFF03A9F4),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+
                 if (hasGameInfo) {
                     androidx.compose.material3.Button(
                         onClick = onGameInfo,
                         modifier = Modifier.fillMaxWidth(),
                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF9C27B0)
+                            containerColor = Color(0xFF1976D2)
                         )
                     ) {
-                        Text("📊 GAME INFO", color = Color.White)
+                        Text("GAME INFO", color = Color.White)
                     }
                 }
                 
-                // Bouton Cheats (si cheats disponibles)
                 if (hasCheats) {
                     androidx.compose.material3.Button(
                         onClick = onCheats,
                         modifier = Modifier.fillMaxWidth(),
                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFFD700)
+                            containerColor = Color(0xFFFFD54F)
                         )
                     ) {
-                        Text("🎮 CHEATS", color = Color.Black)
+                        Text("CHEAT CODES", color = Color.Black)
                     }
                 }
                 

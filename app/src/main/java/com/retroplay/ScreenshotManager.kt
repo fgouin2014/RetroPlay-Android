@@ -123,3 +123,90 @@ object ScreenshotManager {
     }
 }
 
+
+    
+    /**
+     * Generate and save thumbnail from screenshot
+     * @param bitmap Source bitmap
+     * @param crc Game CRC (used as filename)
+     * @param console Console name
+     * @return File path if successful, null otherwise
+     */
+    suspend fun saveThumbnail(
+        bitmap: Bitmap,
+        crc: String,
+        console: String
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            // Resize to thumbnail size while maintaining aspect ratio
+            val aspectRatio = bitmap.width.toFloat() / bitmap.height.toFloat()
+            val (thumbWidth, thumbHeight) = if (aspectRatio > 1.0f) {
+                // Landscape
+                Pair(THUMBNAIL_WIDTH, (THUMBNAIL_WIDTH / aspectRatio).toInt())
+            } else {
+                // Portrait or square
+                Pair((THUMBNAIL_HEIGHT * aspectRatio).toInt(), THUMBNAIL_HEIGHT)
+            }
+            
+            val thumbnail = Bitmap.createScaledBitmap(bitmap, thumbWidth, thumbHeight, true)
+            
+            val dir = File("$THUMBNAILS_BASE_PATH/$console")
+            if (!dir.exists()) {
+                dir.mkdirs()
+            }
+            
+            val file = File(dir, "$crc.jpg")
+            FileOutputStream(file).use { out ->
+                thumbnail.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            }
+            
+            Log.i(TAG, "Thumbnail saved: ${file.absolutePath}")
+            return@withContext file.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save thumbnail", e)
+            return@withContext null
+        }
+    }
+    
+    /**
+     * Get thumbnail path for a game
+     * @param crc Game CRC
+     * @param console Console name
+     * @return File path if thumbnail exists, null otherwise
+     */
+    fun getThumbnailPath(crc: String?, console: String): String? {
+        if (crc == null) return null
+        
+        val file = File("$THUMBNAILS_BASE_PATH/$console/$crc.jpg")
+        return if (file.exists()) file.absolutePath else null
+    }
+    
+    /**
+     * Get all screenshots for a game
+     * @param console Console name
+     * @param gameName Game name
+     * @return List of screenshot file paths
+     */
+    fun getScreenshotsForGame(console: String, gameName: String): List<String> {
+        val sanitizedGameName = gameName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        val dir = File("$SCREENSHOTS_BASE_PATH/$console/$sanitizedGameName")
+        
+        if (!dir.exists() || !dir.isDirectory) {
+            return emptyList()
+        }
+        
+        return dir.listFiles()
+            ?.filter { it.extension == "png" }
+            ?.map { it.absolutePath }
+            ?.sortedDescending() // Most recent first
+            ?: emptyList()
+    }
+    
+    /**
+     * Check if thumbnail exists for a game
+     */
+    fun hasThumbnail(crc: String?, console: String): Boolean {
+        return getThumbnailPath(crc, console) != null
+    }
+}
+

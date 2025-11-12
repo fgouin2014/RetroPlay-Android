@@ -204,8 +204,9 @@ private fun CompactBar(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "⚡",
-                        fontSize = 20.sp,
+                        text = "FF",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
                         color = Color(0xFFFF5722).copy(alpha = ffPulseAlpha)
                     )
                     Text(
@@ -223,8 +224,9 @@ private fun CompactBar(
                 exit = fadeOut() + shrinkHorizontally()
             ) {
                 Text(
-                    text = "🔇",
-                    fontSize = 20.sp,
+                    text = "MUTE",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
                     color = Color(0xFFF44336),
                     modifier = Modifier
                         .clickable { onToggleAudioMute() }
@@ -239,8 +241,9 @@ private fun CompactBar(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "🎨",
-                        fontSize = 16.sp,
+                        text = "SHDR",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
                         color = Color(0xFF9C27B0)
                     )
                     Text(
@@ -266,8 +269,8 @@ private fun CompactBar(
             modifier = Modifier.size(36.dp)
         ) {
             Text(
-                text = "⋮",
-                fontSize = 24.sp,
+                text = "MENU",
+                fontSize = 14.sp,
                 color = Color.White,
                 fontWeight = FontWeight.Bold
             )
@@ -316,7 +319,7 @@ private fun ExpandedBar(
         )
 
         ActionButton(
-            icon = "⚡",
+            icon = "FF",
             label = if (isFastForwardActive) "2x" else "",
             isActive = isFastForwardActive,
             activeColor = Color(0xFFFF5722),
@@ -325,7 +328,7 @@ private fun ExpandedBar(
         )
 
         ActionButton(
-            icon = if (audioMuted) "🔇" else "🔊",
+            icon = if (audioMuted) "MUTE" else "AUD",
             label = "",
             isActive = audioMuted,
             activeColor = Color(0xFFF44336),
@@ -333,21 +336,21 @@ private fun ExpandedBar(
         )
 
         ActionButton(
-            icon = "💾",
+            icon = "SV",
             label = "",
             isActive = false,
             onClick = onQuickSave
         )
 
         ActionButton(
-            icon = "📂",
+            icon = "LD",
             label = "",
             isActive = false,
             onClick = onQuickLoad
         )
 
         ActionButton(
-            icon = "🎨",
+            icon = "SHDR",
             label = currentShaderName.take(8),
             isActive = currentShaderName != "None (Fast)",
             activeColor = Color(0xFF9C27B0),
@@ -355,7 +358,7 @@ private fun ExpandedBar(
         )
 
         ActionButton(
-            icon = "⚙️",
+            icon = "SET",
             label = "",
             isActive = false,
             onClick = onOpenSettings
@@ -366,8 +369,8 @@ private fun ExpandedBar(
             modifier = Modifier.size(40.dp)
         ) {
             Text(
-                text = "✕",
-                fontSize = 20.sp,
+                text = "CLOSE",
+                fontSize = 14.sp,
                 color = Color.White.copy(alpha = 0.7f)
             )
         }
@@ -409,7 +412,8 @@ private fun ActionButton(
     ) {
         Text(
             text = icon,
-            fontSize = 28.sp,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
             color = contentColor.copy(alpha = contentAlpha)
         )
 

@@ -36,6 +36,7 @@ class RewindManager(
     private val states = ArrayDeque<ByteArray>()
     private val mutex = Mutex()
     private val captureInFlight = AtomicBoolean(false)
+    private val checkingSupport = AtomicBoolean(false)
 
     private var totalBytes: Int = 0
     private var frameCounter: Int = 0
@@ -63,6 +64,8 @@ class RewindManager(
         if (!enabled) {
             stopRewind()
             clearBuffer()
+            supportChecked = false
+            _isSupported.value = true
         }
     }
 
@@ -97,7 +100,22 @@ class RewindManager(
     }
 
     fun onFrameRendered() {
-        if (!_enabled.value || !_isSupported.value || _isRewinding.value) {
+        if (!_enabled.value || _isRewinding.value) {
+            return
+        }
+        if (!supportChecked) {
+            if (checkingSupport.compareAndSet(false, true)) {
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        ensureSupport()
+                    } finally {
+                        checkingSupport.set(false)
+                    }
+                }
+            }
+            return
+        }
+        if (!_isSupported.value) {
             return
         }
         frameCounter++
@@ -118,6 +136,18 @@ class RewindManager(
 
     fun startRewind(stepDelayMs: Long = DEFAULT_REWIND_STEP_DELAY_MS): Boolean {
         if (!_enabled.value || !_isSupported.value) {
+            return false
+        }
+        if (!supportChecked) {
+            if (checkingSupport.compareAndSet(false, true)) {
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        ensureSupport()
+                    } finally {
+                        checkingSupport.set(false)
+                    }
+                }
+            }
             return false
         }
         if (_availableStates.value == 0) {

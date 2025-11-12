@@ -33,4 +33,8 @@
     <string name="status_indicator_bsy">BSY</string>
     <string name="status_indicator_net">NET</string>
     <string name="status_indicator_msq">MSQ</string>
+
+    <string name="game_details_menu_update_artwork">Update cover</string>
+    <string name="game_details_menu_console_settings">Console settings</string>
+    <string name="game_details_menu_game_info">Game info</string>
 </resources>

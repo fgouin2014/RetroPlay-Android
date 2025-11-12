@@ -53,6 +53,8 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import java.io.File
+import com.retroplay.gallery.ScreenshotRepository
+import com.retroplay.ScreenshotManager
 
 /**
  * RetroArch Emulator Activity
@@ -104,6 +106,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private lateinit var console: String
     private lateinit var romPath: String
     private lateinit var gameName: String
+    private lateinit var screenshotGameId: String
     private lateinit var prefs: SharedPreferences
     private lateinit var cheatApplier: com.retroplay.cheat.CheatApplier
     private var currentCoreFilePath: String? = null
@@ -885,19 +888,16 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 kotlinx.coroutines.delay(100)
                 
                 screenshotBitmap?.let { bitmap ->
-                    // Save screenshot
-                    val path = ScreenshotManager.saveScreenshot(bitmap, console, gameName)
-                    
-                    // Also save/update thumbnail if we have CRC
-                    gameCRC?.let { crc ->
-                        ScreenshotManager.saveThumbnail(bitmap, crc, console)
-                    }
+                    val result = ScreenshotManager.saveScreenshot(bitmap, console, screenshotGameId)
                     
                     runOnUiThread {
-                        if (path != null) {
+                        if (result != null) {
                             Toast.makeText(this@RetroArchEmulatorActivity, 
                                 "Screenshot saved", Toast.LENGTH_SHORT).show()
-                            Log.i(TAG, "Screenshot saved: $path")
+                            Log.i(TAG, "Screenshot saved: ${result.screenshotPath}")
+                            result.thumbnailPath?.let { thumb ->
+                                Log.i(TAG, "Thumbnail saved: $thumb")
+                            }
                         } else {
                             Toast.makeText(this@RetroArchEmulatorActivity, 
                                 "Failed to save screenshot", Toast.LENGTH_SHORT).show()
@@ -934,41 +934,15 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         console = intent.getStringExtra("console") ?: "psx"
         gameName = intent.getStringExtra("gameName") ?: "Game"
         gameCRC = intent.getStringExtra("gameCRC")  // Database CRC (may be null)
-        val gameId = intent.getStringExtra("gameId") ?: gameName  // Use gameName as fallback
+        val rawGameId = intent.getStringExtra("gameId") ?: gameName
+        screenshotGameId = ScreenshotRepository.sanitizeGameKey(rawGameId.ifBlank { gameName })
+        val gameId = rawGameId  // legacy usage for config loading
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
         
         // Load per-game config (if exists)
         applyPerGameConfig(gameCRC)
         
-        // Auto-generate thumbnail if not exists (5 seconds after game start)
-        gameCRC?.let { crc ->
-            if (!ScreenshotManager.hasThumbnail(crc, console)) {
-                lifecycleScope.launch {
-                    kotlinx.coroutines.delay(5000) // Wait 5 seconds for game to start
-                    var thumbnailBitmap: android.graphics.Bitmap? = null
-                    
-                    retroView.queueEvent {
-                        try {
-                            val width = retroView.width
-                            val height = retroView.height
-                            thumbnailBitmap = ScreenshotManager.captureScreenshotGL(width, height)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to auto-capture thumbnail", e)
-                        }
-                    }
-                    
-                    kotlinx.coroutines.delay(100)
-                    
-                    thumbnailBitmap?.let { bitmap ->
-                        ScreenshotManager.saveThumbnail(bitmap, crc, console)
-                        Log.i(TAG, "Auto-generated thumbnail for $gameName")
-                    }
-                }
-            }
-        }
-        
         // Détecter les jeux Zapper AVANT la création de GLRetroViewData
-        // pour pouvoir passer les variables initiales au core
         isZapperGame = ZapperGameDetector.isZapperGame(gameName, console)
         if (isZapperGame) {
             Log.i(TAG, "[ZAPPER] Zapper game detected EARLY: $gameName")
@@ -1537,6 +1511,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     handleHotkey(action)
                 },
                 // Quick Wins callbacks
+                onRewindUnavailable = {
+                    this@RetroArchEmulatorActivity.notifyRewindUnavailable()
+                },
                 onToggleFastForward = {
                     toggleFastForward()
                 },
@@ -1569,6 +1546,14 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 currentDisk = currentDisk,
                 onTakeScreenshot = {
                     takeScreenshot()
+                },
+                onOpenGallery = {
+                    val intent = Intent(this@RetroArchEmulatorActivity, com.retroplay.gallery.ScreenshotGalleryActivity::class.java).apply {
+                        putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_CONSOLE, console)
+                        putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_ID, screenshotGameId)
+                        putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_NAME, gameName)
+                    }
+                    startActivity(intent)
                 },
                 onLoadCustomCfg = {
                     // Lancer le file picker pour sélectionner un .cfg
@@ -2400,6 +2385,16 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
         super.onDestroy()
     }
+
+    private fun notifyRewindUnavailable() {
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                "Rewind not available in RetroArch mode",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 }
 
 // Handle PadKit events (List of events from gamepads)
@@ -2459,7 +2454,12 @@ private fun handlePadKitEvent(
                 }
                 
                 // Appliquer inversion Y si demandé
-                val yAxis = if (settings?.invertAnalogY == true) event.direction.y else -event.direction.y
+                val invertY = when (stickId) {
+                    1 -> settings?.invertAnalogLeftY == true
+                    2 -> settings?.invertAnalogRightY == true
+                    else -> false
+                }
+                val yAxis = if (invertY) event.direction.y else -event.direction.y
                 retroView.sendMotionEvent(source, event.direction.x, yAxis)
             }
         }
@@ -2515,7 +2515,9 @@ private fun ComposeEmulatorScreen(
     showDiskSwapperDialog: MutableState<Boolean>,
     availableDisks: Int = 0,
     currentDisk: Int = 0,
-    onTakeScreenshot: () -> Unit = {}
+    onTakeScreenshot: () -> Unit = {},
+    onOpenGallery: () -> Unit = {},
+    onRewindUnavailable: () -> Unit = {}
 ) {
     // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
@@ -2825,15 +2827,18 @@ private fun ComposeEmulatorScreen(
                                 // Utiliser advancedSettingsState pour rechargement dynamique
                                 val advancedSettings = advancedSettingsState.value
                                 
+                                // Vérifier si un menu est ouvert (INCLURE Core Options Dialog!)
                                 val isOverlayConfiguration = showGamePadSettings.value
                                 val isMenuOpen = showMainMenu.value || showQuickMenu.value || showAdvancedOverlaySettings.value || showCoreOptionsDialog.value || showPerGameConfigDialog.value || showDiskSwapperDialog.value
                                 
                                 // Logique hideInMenu et behindMenu (RetroArch officiel)
                                 val shouldShowOverlay = when {
                                     !overlaysVisible.value -> false  // Overlay désactivé manuellement
-                                    isOverlayConfiguration -> true  // Toujours visible pendant la configuration
+                                    isOverlayConfiguration -> true   // Toujours visible pendant la configuration dédiée
                                     !isMenuOpen -> true  // Pas de menu ouvert → afficher
                                     advancedSettings.hideInMenu -> false  // Menu ouvert + hideInMenu=true → cacher
+                                    // Si on arrive ici: menu ouvert + hideInMenu=false
+                                    // behindMenu détermine le Z-order (pas implémenté visuellement, mais on affiche)
                                     else -> true
                                 }
                                 
@@ -2847,7 +2852,8 @@ private fun ComposeEmulatorScreen(
                                         assetManager = assetManager,
                                         showDebug = debugModeState.value,
                                         swapAnalogSticks = overlayPreference.swapAnalogSticks,
-                                        invertAnalogY = overlayPreference.invertAnalogY,
+                                        invertAnalogLeftY = overlayPreference.invertAnalogLeftY,
+                                        invertAnalogRightY = overlayPreference.invertAnalogRightY,
                                         overlayScale = overlayPreference.scale,
                                         overlayXOffset = overlayPreference.xOffset,
                                         overlayYOffset = overlayPreference.yOffset,
@@ -2989,13 +2995,18 @@ private fun ComposeEmulatorScreen(
                         com.retroplay.ui.QuickActionsBar(
                             isFastForwardActive = isFastForwardActive,
                             audioMuted = audioMuted,
+                            isRewindSupported = false,
+                            isRewinding = false,
+                            rewindDurationSeconds = 0f,
+                            onRewindPress = { onRewindUnavailable() },
+                            onRewindRelease = { },
                             onToggleFastForward = onToggleFastForward,
                             onToggleAudioMute = onToggleAudioMute,
                             onQuickSave = { onSaveState(1) },  // Quick save slot 1
                             onQuickLoad = { onLoadState(1) },  // Quick load slot 1
+                            onOpenSettings = { showMainMenu.value = true },
                             onCycleShader = onCycleShader,  // Quick Win #4
-                            currentShaderName = currentShaderName,
-                            onOpenSettings = { showMainMenu.value = true }
+                            currentShaderName = currentShaderName
                         )
                     }
                 }
@@ -3134,6 +3145,10 @@ private fun ComposeEmulatorScreen(
                             showMainMenu.value = false
                             onTakeScreenshot()
                         },
+                        onOpenGallery = {
+                            showMainMenu.value = false
+                            onOpenGallery()
+                        },
                         hasDipSwitches = dipSwitches.isNotEmpty(),
                         hasCoreOptions = coreOptions.isNotEmpty(),
                         availableDisks = availableDisks
@@ -3168,15 +3183,15 @@ private fun ComposeEmulatorScreen(
                     )
                 }
                 
-                // RetroArch GamePad Settings Dialog
+                // RetroArch Settings Dialog (simplified - NO Radial gamepad settings)
                 if (showGamePadSettings.value) {
                     RetroArchSettingsDialog(
                         console = console,
                         onDismiss = { showGamePadSettings.value = false },
                         context = retroView.context,
                         prefs = prefs,
-                        debugModeState = debugModeState,
-                        onLoadCustomCfg = onLoadCustomCfg
+                        onLoadCustomCfg = onLoadCustomCfg,
+                        debugModeState = debugModeState
                     )
                 }
                 
@@ -3411,6 +3426,7 @@ private fun MainMenuDialog(
     onSmartConfig: () -> Unit = {},  // Smart Config callback
     onDiskSwapper: () -> Unit = {},  // Disk Swapper callback
     onScreenshot: () -> Unit = {},  // Screenshot callback
+    onOpenGallery: () -> Unit = {},
     hasDipSwitches: Boolean,
     hasCoreOptions: Boolean,
     availableDisks: Int = 0  // Number of available disks (multi-disc support)
@@ -3466,6 +3482,13 @@ private fun MainMenuDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Take Screenshot", color = Color(0xFF2196F3))
+                    }
+                    
+                    TextButton(
+                        onClick = onOpenGallery,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open Gallery", color = Color(0xFFBB86FC))
                     }
                     
                     androidx.compose.material3.HorizontalDivider(color = Color.Gray)
@@ -4490,15 +4513,19 @@ private fun ensureRetroArchOverlayPreference(
     context: Context
 ) {
     val current = com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)
-    if (current != null) return
+    if (current != null) {
+        return
+    }
 
     val assetManager = com.retroplay.overlay.assets.OverlayAssetManager(context)
     val overlays = assetManager.getCompatibleOverlays(console)
-    if (overlays.isEmpty()) return
+    if (overlays.isEmpty()) {
+        return
+    }
 
     val defaultOverlay = overlays.first()
     val (landscape, portrait) = computeDefaultLayoutsForOverlay(assetManager, defaultOverlay, console, null)
-    val pref = com.retroplay.overlay.models.OverlayPreference(
+    val preference = com.retroplay.overlay.models.OverlayPreference(
         enabled = true,
         overlayName = defaultOverlay,
         customCfgName = null,
@@ -4506,14 +4533,15 @@ private fun ensureRetroArchOverlayPreference(
         portraitLayout = portrait,
         autoRotate = true,
         swapAnalogSticks = false,
-        invertAnalogY = false,
+        invertAnalogLeftY = false,
+        invertAnalogRightY = false,
         scale = 1.0f,
         xOffset = 0.0f,
         yOffset = 0.0f,
         xSeparation = 0.0f,
         ySeparation = 0.0f
     )
-    com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
+    com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, preference)
 }
 
 private fun computeDefaultLayoutsForOverlay(

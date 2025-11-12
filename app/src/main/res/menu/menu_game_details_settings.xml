@@ -1,0 +1,11 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_game_info"
+        android:title="@string/game_details_menu_game_info" />
+    <item
+        android:id="@+id/action_update_artwork"
+        android:title="@string/game_details_menu_update_artwork" />
+    <item
+        android:id="@+id/action_console_settings"
+        android:title="@string/game_details_menu_console_settings" />
+</menu>

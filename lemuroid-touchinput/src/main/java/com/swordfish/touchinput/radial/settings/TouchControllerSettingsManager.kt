@@ -30,7 +30,8 @@ class TouchControllerSettingsManager(private val sharedPreferences: SharedPrefer
         val marginX: Float = DEFAULT_MARGIN_X,
         val marginY: Float = DEFAULT_MARGIN_Y,
         val swapAnalogSticks: Boolean = false,
-        val invertAnalogY: Boolean = false,
+        val invertAnalogLeftY: Boolean = false,
+        val invertAnalogRightY: Boolean = false,
     )
 
     private fun computeInsetsPaddings(density: Density, insets: WindowInsets): PaddingValues {

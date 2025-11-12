@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,8 +53,17 @@ import gg.padkit.ids.Id
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withContext
 import java.io.File
+import com.retroplay.ScreenshotManager
+import com.retroplay.config.RetroPlayConfigManager
+import com.retroplay.ui.QuickActionsBar
+import com.retroplay.ui.SmartConfigOsd
+import com.retroplay.ui.SmartConfigOsdData
+import com.retroplay.runahead.RunAheadManager
+import com.retroplay.gallery.ScreenshotRepository
 
 /**
  * Native Compose Emulator Activity
@@ -105,9 +115,14 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     private lateinit var console: String
     private lateinit var romPath: String
     private lateinit var gameName: String
+    private lateinit var screenshotGameId: String
     private lateinit var prefs: SharedPreferences
     private lateinit var cheatApplier: com.retroplay.cheat.CheatApplier
     private var currentCoreFilePath: String? = null
+    private var retroPlayConfig: RetroPlayConfigManager.RetroPlayConfig = RetroPlayConfigManager.loadConfig()
+    private var runAheadManager: RunAheadManager? = null
+    private var runAheadEnabledConfig: Boolean = false
+    private var runAheadFramesConfig: Int = 0
     
     // Zapper support (NES light gun)
     private var isZapperGame: Boolean = false
@@ -115,14 +130,20 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     // États des menus
     private val showMainMenu = mutableStateOf(false)
     private val showGamePadSettings = mutableStateOf(false)
-    private val showAdvancedOverlaySettings = mutableStateOf(false)
+    private val showAdvancedRadialSettings = mutableStateOf(false)
     private val showQuickMenu = mutableStateOf(false)
     private val overlaysVisible = mutableStateOf(true)
+    private val showSmartConfigDialog = mutableStateOf(false)
+    private val showDiskSwapperDialog = mutableStateOf(false)
     private val showCoreErrorDialog = mutableStateOf(false)
     private val showCoreSelectorFromError = mutableStateOf(false)
     private var failedCoreName = ""
     private val showCoreChangeConfirmDialog = mutableStateOf(false)
     private var coreChangeConfirmMessage = ""
+    private val quickActionsBarVisible = mutableStateOf(true)
+    private val isFastForwardActive = mutableStateOf(false)
+    private val audioMuted = mutableStateOf(false)
+    private var fastForwardRatio = 2
     
     // États pour DIP Switches et Core Options
     private val showDipSwitchDialog = mutableStateOf(false)
@@ -130,6 +151,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     private var allCoreVariables = mutableStateListOf<CoreVariable>()
     private val dipSwitches = mutableStateListOf<CoreVariable>()
     private val coreOptions = mutableStateListOf<CoreVariable>()
+    private val availableDisksState = mutableIntStateOf(0)
+    private val currentDiskState = mutableIntStateOf(0)
+    
+    private var gameCRC: String? = null
     
     /**
      * Termine l'activité de manière sécurisée.
@@ -161,6 +186,155 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         }
     }
     
+    /**
+     * Apply global or per-game configuration (Run-Ahead, etc.)
+     */
+    private fun applyPerGameConfig(gameCRC: String?) {
+        val config = if (gameCRC != null) {
+            val merged = RetroPlayConfigManager.getEffectiveConfig(gameCRC)
+            if (RetroPlayConfigManager.hasGameConfig(gameCRC)) {
+                Log.i(TAG, "[Config] Per-game configuration detected for CRC $gameCRC")
+                Log.i(TAG, "[Config] Run-Ahead: ${if (merged.runAheadEnabled) "${merged.runAheadFrames} frames" else "Disabled"}")
+            } else {
+                Log.d(TAG, "[Config] Using global configuration for CRC $gameCRC")
+            }
+            merged
+        } else {
+            Log.d(TAG, "[Config] No CRC provided, falling back to global configuration")
+            RetroPlayConfigManager.loadConfig()
+        }
+        retroPlayConfig = config
+        runAheadEnabledConfig = config.runAheadEnabled
+        runAheadFramesConfig = config.runAheadFrames
+        applyRunAheadSettings()
+    }
+
+    private fun applyRunAheadSettings() {
+        runAheadManager?.configure(runAheadEnabledConfig, runAheadFramesConfig)
+    }
+
+    /**
+     * Capture and save a screenshot of the current game
+     */
+    private fun takeScreenshot() {
+        lifecycleScope.launch {
+            try {
+                var screenshotBitmap: android.graphics.Bitmap? = null
+                retroView.queueEvent {
+                    try {
+                        val width = retroView.width
+                        val height = retroView.height
+                        screenshotBitmap = ScreenshotManager.captureScreenshotGL(width, height)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to capture screenshot from GL", e)
+                    }
+                }
+                
+                kotlinx.coroutines.delay(100)
+                
+                screenshotBitmap?.let { bitmap ->
+                    val result = ScreenshotManager.saveScreenshot(bitmap, console, screenshotGameId)
+
+                    withContext(Dispatchers.Main) {
+                        if (result != null) {
+                            Toast.makeText(
+                                this@NativeComposeEmulatorActivity,
+                                "Screenshot saved",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            Log.i(TAG, "Screenshot saved: ${result.screenshotPath}")
+                            result.thumbnailPath?.let { thumb ->
+                                Log.i(TAG, "Thumbnail saved: $thumb")
+                            }
+                        } else {
+                            Toast.makeText(
+                                this@NativeComposeEmulatorActivity,
+                                "Failed to save screenshot",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                } ?: withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@NativeComposeEmulatorActivity,
+                        "Failed to capture screenshot",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Screenshot error", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@NativeComposeEmulatorActivity,
+                        "Screenshot error: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+    
+    private fun toggleFastForward() {
+        isFastForwardActive.value = !isFastForwardActive.value
+        val speed = if (isFastForwardActive.value) fastForwardRatio else 1
+        retroView.frameSpeed = speed
+        Log.i(
+            TAG,
+            "[FAST_FORWARD_NATIVE] ${if (isFastForwardActive.value) "ENABLED (${fastForwardRatio}x)" else "DISABLED (1x)"}"
+        )
+
+        prefs.edit().putBoolean("emulation_fast_forward_active", isFastForwardActive.value).apply()
+
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                if (isFastForwardActive.value) "Fast Forward: ${fastForwardRatio}x" else "Normal Speed",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun toggleAudioMute() {
+        audioMuted.value = !audioMuted.value
+        retroView.audioEnabled = !audioMuted.value
+        Log.i(TAG, "[AUDIO_NATIVE] ${if (audioMuted.value) "MUTED" else "UNMUTED"}")
+
+        prefs.edit().putBoolean("emulation_audio_muted", audioMuted.value).apply()
+
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                if (audioMuted.value) "Audio Muted" else "Audio Unmuted",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun toggleQuickActionsBar() {
+        quickActionsBarVisible.value = !quickActionsBarVisible.value
+        Log.i(TAG, "[QUICK_ACTIONS_BAR_NATIVE] ${if (quickActionsBarVisible.value) "VISIBLE" else "HIDDEN"}")
+
+        prefs.edit().putBoolean("emulation_quick_actions_bar_visible", quickActionsBarVisible.value).apply()
+
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                if (quickActionsBarVisible.value) "Quick Actions Bar Visible" else "Quick Actions Bar Hidden",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun notifyRewindUnavailable() {
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                "Rewind not available in Native mode",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     /**
      * Gestion des touches Zapper - Envoie position POINTER + trigger au port 2
      * Port 1 (index 0) = Manette standard (Start/Select pour menus)
@@ -332,8 +506,13 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
         console = intent.getStringExtra("console") ?: "psx"
         gameName = intent.getStringExtra("gameName") ?: "Game"
-        val gameId = intent.getStringExtra("gameId") ?: gameName  // Use gameName as fallback
+        gameCRC = intent.getStringExtra("gameCRC")
+        val rawGameId = intent.getStringExtra("gameId") ?: gameName
+        screenshotGameId = ScreenshotRepository.sanitizeGameKey(rawGameId.ifBlank { gameName })
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
+        val galleryGameId = screenshotGameId
+
+        applyPerGameConfig(gameCRC)
         
         // Détecter les jeux Zapper AVANT la création de GLRetroViewData
         // pour pouvoir passer les variables initiales au core
@@ -365,6 +544,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
         // Charger les settings depuis SharedPreferences
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
+        fastForwardRatio = prefs.getInt("emulation_fast_forward_ratio", 2).coerceIn(1, 4)
+        isFastForwardActive.value = prefs.getBoolean("emulation_fast_forward_active", false)
+        audioMuted.value = prefs.getBoolean("emulation_audio_muted", false)
+        quickActionsBarVisible.value = prefs.getBoolean("emulation_quick_actions_bar_visible", true)
         val savedSettings = loadSettings(prefs, console)
         
         // ALWAYS use NATIVE (Radial/Lemuroid) in this activity
@@ -587,7 +770,38 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         }
         
         retroView = GLRetroView(this, data)
+        retroView.audioEnabled = !audioMuted.value
+        if (isFastForwardActive.value) {
+            retroView.frameSpeed = fastForwardRatio
+        }
+        runAheadManager = RunAheadManager(retroView)
+        applyRunAheadSettings()
         lifecycle.addObserver(retroView)
+        
+        // Monitor GL events to refresh disk info for multi-disc games
+        lifecycleScope.launch {
+            try {
+                retroView.getGLRetroEvents().collect { event ->
+                    when (event) {
+                        is GLRetroView.GLRetroEvents.FrameRendered -> {
+                            if (System.currentTimeMillis() % 1000 < 17) {
+                                val disks = retroView.getAvailableDisks()
+                                val current = retroView.getCurrentDisk()
+                                if (disks != availableDisksState.intValue || current != currentDiskState.intValue) {
+                                    availableDisksState.intValue = disks
+                                    currentDiskState.intValue = current
+                                }
+                            }
+                        }
+                        is GLRetroView.GLRetroEvents.SurfaceCreated -> {
+                            runAheadManager?.onSurfaceReady()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error collecting GLRetroEvents: ${e.message}")
+            }
+        }
         
         // === ÉCOUTE DES ERREURS LIBRETRODROID (CHARGEMENT ÉCHOUÉ) ===
         lifecycleScope.launch {
@@ -769,233 +983,274 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         val gameViewBounds = mutableStateOf<androidx.compose.ui.geometry.Rect?>(null)
         
         setContent {
-            ComposeEmulatorScreen(
-                retroView = retroView,
-                console = console,
-                gameName = gameName,
-                romPath = romPath,
-                prefs = prefs,
-                showMainMenu = showMainMenu,
-                showGamePadSettings = showGamePadSettings,
-                showAdvancedOverlaySettings = showAdvancedOverlaySettings,
-                showQuickMenu = showQuickMenu,
-                overlaysVisible = overlaysVisible,
-                initialSettings = savedSettings,
-                initialVariant = savedVariant,
-                cheatApplier = cheatApplier,
-                onSettingsChanged = { newSettings ->
-                    saveSettings(prefs, console, newSettings)
-                },
-                onVariantChanged = { newVariant ->
-                    GamePadLayoutManager.saveVariant(prefs, console, newVariant)
-                },
-                onFinishActivity = {
-                    // Fermer le jeu avec délai pour une transition fluide
-                    safeFinishActivity(currentCoreFilePath, delayMs = 1200)
-                },
-                onSaveState = { slot ->
-                    saveGameState(slot)
-                },
-                isZapperGame = isZapperGame,
-                gameViewBounds = gameViewBounds,  // Passer le state pour capture
-                onZapperTouch = { event ->
-                    val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
-                    handleZapperTouch(event, gameViewBounds.value, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)
-                },
-                onLoadState = { slot ->
-                    loadGameState(slot)
-                },
-                showDipSwitchDialog = showDipSwitchDialog,
-                showCoreOptionsDialog = showCoreOptionsDialog,
-                dipSwitches = dipSwitches,
-                coreOptions = coreOptions
-            )
-            
-            // Dialog d'erreur de chargement du core
-            if (showCoreErrorDialog.value) {
-                CoreErrorDialog(
-                    coreName = failedCoreName,
-                    gameName = gameName,
-                    onChangeCore = {
-                        showCoreErrorDialog.value = false
-                        // Attendre un peu que le dialog se ferme avant d'ouvrir le suivant
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            showCoreSelectorFromError.value = true
-                        }, 100)
-                    },
-                    onRetry = {
-                        showCoreErrorDialog.value = false
-                        // Nettoyer les prefs de crash avant de réessayer
-                        val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
-                        crashPrefs.edit().clear().apply()
-                        // Fermer le jeu - l'utilisateur relancera depuis GameDetailsActivity
-                        safeFinishActivity(currentCoreFilePath, delayMs = 0)
-                    },
-                    onCancel = {
-                        showCoreErrorDialog.value = false
-                        // Retourner à GameDetailsActivity
-                        safeFinishActivity(currentCoreFilePath, delayMs = 0)
-                    }
-                )
-            }
-            
-            // Dialog de sélection de core (après erreur)
-            if (showCoreSelectorFromError.value) {
-                CoreSelectorDialog(
+            val galleryGameId = remember(screenshotGameId) { screenshotGameId }
+            MaterialTheme {
+                ComposeEmulatorScreen(
+                    retroView = retroView,
                     console = console,
-                    currentGamePath = romPath,
-                    onCoreSelected = { coreInfo ->
-                        showCoreSelectorFromError.value = false
-                        
-                        // Nettoyer les prefs de crash
-                        val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
-                        crashPrefs.edit().clear().apply()
-                        
-                        // Sauvegarder le nouveau core comme override
-                        val relativePath = if (romPath.contains("/GameLibrary-Data/")) {
-                            romPath.substringAfter("/GameLibrary-Data/")
-                        } else {
-                            ""
-                        }
-                        if (relativePath.isNotEmpty()) {
-                            val overrideManager = CoreOverrideManager.getInstance()
-                            overrideManager.setOverride(relativePath, coreInfo.coreId, "User selected after core error")
-                            Log.i(TAG, "Core override saved: $relativePath → ${coreInfo.coreId}")
-                        }
-                        // Afficher un message de confirmation avant de fermer
-                        coreChangeConfirmMessage = "Core changed to ${coreInfo.displayName}.\n\nRelaunch the game from the menu to apply."
-                        showCoreChangeConfirmDialog.value = true
-                    },
-                    onResetToDefault = {
-                        showCoreSelectorFromError.value = false
-                        
-                        // Nettoyer les prefs de crash
-                        val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
-                        crashPrefs.edit().clear().apply()
-                        
-                        // Supprimer l'override
-                        val relativePath = if (romPath.contains("/GameLibrary-Data/")) {
-                            romPath.substringAfter("/GameLibrary-Data/")
-                        } else {
-                            ""
-                        }
-                        if (relativePath.isNotEmpty()) {
-                            val overrideManager = CoreOverrideManager.getInstance()
-                            overrideManager.removeOverride(relativePath)
-                            Log.i(TAG, "Core override removed: $relativePath")
-                        }
-                        // Afficher un message de confirmation avant de fermer
-                        coreChangeConfirmMessage = "Core reset to default.\n\nRelaunch the game from the menu to apply."
-                        showCoreChangeConfirmDialog.value = true
-                    },
-                    onDismiss = {
-                        showCoreSelectorFromError.value = false
-                    }
-                )
-            }
-            
-            // Dialog de confirmation du changement de core
-            if (showCoreChangeConfirmDialog.value) {
-                AlertDialog(
-                    onDismissRequest = { showCoreChangeConfirmDialog.value = false },
-                    title = {
-                        Text(
-                            text = "Core Changed",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    },
-                    text = {
-                        Text(
-                            text = coreChangeConfirmMessage,
-                            fontSize = 16.sp,
-                            color = Color.White
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                showCoreChangeConfirmDialog.value = false
-                                // Fermer le jeu avec délai pour une transition fluide
-                                safeFinishActivity(currentCoreFilePath, delayMs = 1200)
-                            }
-                        ) {
-                            Text("OK", color = Color(0xFF4CAF50), fontSize = 16.sp)
-                        }
-                    },
-                    containerColor = Color(0xFF2C2C2C),
-                    tonalElevation = 8.dp
-                )
-            }
-            
-            // === DIP SWITCHES DIALOG ===
-            if (showDipSwitchDialog.value) {
-                DipSwitchDialog(
                     gameName = gameName,
+                    galleryGameId = galleryGameId,
+                    romPath = romPath,
+                    prefs = prefs,
+                    showMainMenu = showMainMenu,
+                    showGamePadSettings = showGamePadSettings,
+                    showAdvancedRadialSettings = showAdvancedRadialSettings,
+                    showQuickMenu = showQuickMenu,
+                    quickActionsBarVisible = quickActionsBarVisible,
+                    isFastForwardActive = isFastForwardActive.value,
+                    audioMuted = audioMuted.value,
+                    runAheadManager = runAheadManager,
+                    smartConfigAutoRunAhead = retroPlayConfig.smartConfigAutoRunAhead,
+                    smartConfigShowOsd = retroPlayConfig.smartConfigShowOSD,
+                    toggleFastForwardAction = { toggleFastForward() },
+                    toggleAudioMuteAction = { toggleAudioMute() },
+                    toggleQuickActionsBarAction = { toggleQuickActionsBar() },
+                    showSmartConfigDialog = showSmartConfigDialog,
+                    showDiskSwapperDialog = showDiskSwapperDialog,
+                    overlaysVisible = overlaysVisible,
+                    initialSettings = savedSettings,
+                    initialVariant = savedVariant,
+                    cheatApplier = cheatApplier,
+                    onSettingsChanged = { newSettings ->
+                        saveSettings(prefs, console, newSettings)
+                    },
+                    onVariantChanged = { newVariant ->
+                        GamePadLayoutManager.saveVariant(prefs, console, newVariant)
+                    },
+                    onFinishActivity = {
+                        // Fermer le jeu avec délai pour une transition fluide
+                        safeFinishActivity(currentCoreFilePath, delayMs = 1200)
+                    },
+                    onSaveState = { slot ->
+                        saveGameState(slot)
+                    },
+                    isZapperGame = isZapperGame,
+                    gameViewBounds = gameViewBounds,  // Passer le state pour capture
+                    onZapperTouch = { event ->
+                        val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+                        handleZapperTouch(event, gameViewBounds.value, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)
+                    },
+                    onLoadState = { slot ->
+                        loadGameState(slot)
+                    },
+                    showDipSwitchDialog = showDipSwitchDialog,
+                    showCoreOptionsDialog = showCoreOptionsDialog,
                     dipSwitches = dipSwitches,
-                    onApply = { modifiedValues ->
-                        // Extraire le coreId
-                        val coreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
-                        val gameId = File(romPath).nameWithoutExtension
-                        
-                        // Sauvegarder les modifications
-                        CoreVariableManager.saveVariables(this@NativeComposeEmulatorActivity, gameId, coreId, modifiedValues)
-                        
-                        // Appliquer au core
-                        val updatedVars = dipSwitches.map { dip ->
-                            if (modifiedValues.containsKey(dip.key)) {
-                                dip.copy(currentValue = modifiedValues[dip.key]!!)
-                            } else {
-                                dip
-                            }
-                        }
-                        val libretroVars = CoreVariableManager.toLibretroVariables(updatedVars)
-                        retroView.updateVariables(*libretroVars)
-                        
-                        // Mettre à jour la liste locale
-                        dipSwitches.clear()
-                        dipSwitches.addAll(updatedVars)
-                        
-                        Log.i(TAG, "Applied ${modifiedValues.size} DIP switch changes")
-                    },
-                    onDismiss = { showDipSwitchDialog.value = false }
-                )
-            }
-            
-            // === CORE OPTIONS DIALOG ===
-            if (showCoreOptionsDialog.value) {
-                CoreOptionsDialog(
-                    gameName = gameName,
                     coreOptions = coreOptions,
-                    onApply = { modifiedValues ->
-                        // Extraire le coreId et nom du core
-                        val coreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
-                        val coreName = coreId.replace("_libretro_android", "").replaceFirstChar { it.uppercase() }
-                        
-                        // NOUVEAU: Sauvegarder dans le fichier .cfg au lieu de SharedPreferences
-                        CoreConfigManager.saveConfig(this@NativeComposeEmulatorActivity, coreName, modifiedValues)
-                        Log.i(TAG, "[$coreName] Saved ${modifiedValues.size} options to .cfg file")
-                        
-                        // Appliquer au core
-                        val updatedVars = coreOptions.map { opt ->
-                            if (modifiedValues.containsKey(opt.key)) {
-                                opt.copy(currentValue = modifiedValues[opt.key]!!)
-                            } else {
-                                opt
+                    availableDisks = availableDisksState.intValue,
+                    currentDisk = currentDiskState.intValue,
+                    onDiskSelected = { diskIndex ->
+                        lifecycleScope.launch {
+                            try {
+                                retroView.changeDisk(diskIndex)
+                                currentDiskState.intValue = diskIndex
+                                Toast.makeText(
+                                    this@NativeComposeEmulatorActivity,
+                                    "Swapped to Disk ${diskIndex + 1}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                Log.i(TAG, "Disk swapped to index: $diskIndex")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to swap disk", e)
+                                Toast.makeText(
+                                    this@NativeComposeEmulatorActivity,
+                                    "Failed to swap disk",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         }
-                        val libretroVars = CoreVariableManager.toLibretroVariables(updatedVars)
-                        retroView.updateVariables(*libretroVars)
-                        
-                        // Mettre à jour la liste locale
-                        coreOptions.clear()
-                        coreOptions.addAll(updatedVars)
-                        
-                        Log.i(TAG, "Applied ${modifiedValues.size} core option changes to running core")
                     },
-                    onDismiss = { showCoreOptionsDialog.value = false }
+                    onTakeScreenshot = { takeScreenshot() },
+                    fastForwardRatio = fastForwardRatio,
+                    onRewindUnavailable = { notifyRewindUnavailable() }
                 )
+                
+                // Dialog d'erreur de chargement du core
+                if (showCoreErrorDialog.value) {
+                    CoreErrorDialog(
+                        coreName = failedCoreName,
+                        gameName = gameName,
+                        onChangeCore = {
+                            showCoreErrorDialog.value = false
+                            // Attendre un peu que le dialog se ferme avant d'ouvrir le suivant
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                showCoreSelectorFromError.value = true
+                            }, 100)
+                        },
+                        onRetry = {
+                            showCoreErrorDialog.value = false
+                            // Nettoyer les prefs de crash avant de réessayer
+                            val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
+                            crashPrefs.edit().clear().apply()
+                            // Fermer le jeu - l'utilisateur relancera depuis GameDetailsActivity
+                            safeFinishActivity(currentCoreFilePath, delayMs = 0)
+                        },
+                        onCancel = {
+                            showCoreErrorDialog.value = false
+                            // Retourner à GameDetailsActivity
+                            safeFinishActivity(currentCoreFilePath, delayMs = 0)
+                        }
+                    )
+                }
+                
+                // Dialog de sélection de core (après erreur)
+                if (showCoreSelectorFromError.value) {
+                    CoreSelectorDialog(
+                        console = console,
+                        currentGamePath = romPath,
+                        onCoreSelected = { coreInfo ->
+                            showCoreSelectorFromError.value = false
+                            
+                            // Nettoyer les prefs de crash
+                            val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
+                            crashPrefs.edit().clear().apply()
+                            
+                            // Sauvegarder le nouveau core comme override
+                            val relativePath = if (romPath.contains("/GameLibrary-Data/")) {
+                                romPath.substringAfter("/GameLibrary-Data/")
+                            } else {
+                                ""
+                            }
+                            if (relativePath.isNotEmpty()) {
+                                val overrideManager = CoreOverrideManager.getInstance()
+                                overrideManager.setOverride(relativePath, coreInfo.coreId, "User selected after core error")
+                                Log.i(TAG, "Core override saved: $relativePath → ${coreInfo.coreId}")
+                            }
+                            // Afficher un message de confirmation avant de fermer
+                            coreChangeConfirmMessage = "Core changed to ${coreInfo.displayName}.\n\nRelaunch the game from the menu to apply."
+                            showCoreChangeConfirmDialog.value = true
+                        },
+                        onResetToDefault = {
+                            showCoreSelectorFromError.value = false
+                            
+                            // Nettoyer les prefs de crash
+                            val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
+                            crashPrefs.edit().clear().apply()
+                            
+                            // Supprimer l'override
+                            val relativePath = if (romPath.contains("/GameLibrary-Data/")) {
+                                romPath.substringAfter("/GameLibrary-Data/")
+                            } else {
+                                ""
+                            }
+                            if (relativePath.isNotEmpty()) {
+                                val overrideManager = CoreOverrideManager.getInstance()
+                                overrideManager.removeOverride(relativePath)
+                                Log.i(TAG, "Core override removed: $relativePath")
+                            }
+                            // Afficher un message de confirmation avant de fermer
+                            coreChangeConfirmMessage = "Core reset to default.\n\nRelaunch the game from the menu to apply."
+                            showCoreChangeConfirmDialog.value = true
+                        },
+                        onDismiss = {
+                            showCoreSelectorFromError.value = false
+                        }
+                    )
+                }
+                
+                // Dialog de confirmation du changement de core
+                if (showCoreChangeConfirmDialog.value) {
+                    AlertDialog(
+                        onDismissRequest = { showCoreChangeConfirmDialog.value = false },
+                        title = {
+                            Text(
+                                text = "Core Changed",
+                                color = Color.White,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = coreChangeConfirmMessage,
+                                fontSize = 16.sp,
+                                color = Color.White
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showCoreChangeConfirmDialog.value = false
+                                    // Fermer le jeu avec délai pour une transition fluide
+                                    safeFinishActivity(currentCoreFilePath, delayMs = 1200)
+                                }
+                            ) {
+                                Text("OK", color = Color(0xFF4CAF50), fontSize = 16.sp)
+                            }
+                        },
+                        containerColor = Color(0xFF2C2C2C),
+                        tonalElevation = 8.dp
+                    )
+                }
+                
+                // === DIP SWITCHES DIALOG ===
+                if (showDipSwitchDialog.value) {
+                    DipSwitchDialog(
+                        gameName = gameName,
+                        dipSwitches = dipSwitches,
+                        onApply = { modifiedValues ->
+                            // Extraire le coreId
+                            val coreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
+                            val gameId = File(romPath).nameWithoutExtension
+                            
+                            // Sauvegarder les modifications
+                            CoreVariableManager.saveVariables(this@NativeComposeEmulatorActivity, gameId, coreId, modifiedValues)
+                            
+                            // Appliquer au core
+                            val updatedVars = dipSwitches.map { dip ->
+                                if (modifiedValues.containsKey(dip.key)) {
+                                    dip.copy(currentValue = modifiedValues[dip.key]!!)
+                                } else {
+                                    dip
+                                }
+                            }
+                            val libretroVars = CoreVariableManager.toLibretroVariables(updatedVars)
+                            retroView.updateVariables(*libretroVars)
+                            
+                            // Mettre à jour la liste locale
+                            dipSwitches.clear()
+                            dipSwitches.addAll(updatedVars)
+                            
+                            Log.i(TAG, "Applied ${modifiedValues.size} DIP switch changes")
+                        },
+                        onDismiss = { showDipSwitchDialog.value = false }
+                    )
+                }
+                
+                // === CORE OPTIONS DIALOG ===
+                if (showCoreOptionsDialog.value) {
+                    CoreOptionsDialog(
+                        gameName = gameName,
+                        coreOptions = coreOptions,
+                        onApply = { modifiedValues ->
+                            // Extraire le coreId et nom du core
+                            val coreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
+                            val coreName = coreId.replace("_libretro_android", "").replaceFirstChar { it.uppercase() }
+                            
+                            // NOUVEAU: Sauvegarder dans le fichier .cfg au lieu de SharedPreferences
+                            CoreConfigManager.saveConfig(this@NativeComposeEmulatorActivity, coreName, modifiedValues)
+                            Log.i(TAG, "[$coreName] Saved ${modifiedValues.size} options to .cfg file")
+                            
+                            // Appliquer au core
+                            val updatedVars = coreOptions.map { opt ->
+                                if (modifiedValues.containsKey(opt.key)) {
+                                    opt.copy(currentValue = modifiedValues[opt.key]!!)
+                                } else {
+                                    opt
+                                }
+                            }
+                            val libretroVars = CoreVariableManager.toLibretroVariables(updatedVars)
+                            retroView.updateVariables(*libretroVars)
+                            
+                            // Mettre à jour la liste locale
+                            coreOptions.clear()
+                            coreOptions.addAll(updatedVars)
+                            
+                            Log.i(TAG, "Applied ${modifiedValues.size} core option changes to running core")
+                        },
+                        onDismiss = { showCoreOptionsDialog.value = false }
+                    )
+                }
             }
         }
     }
@@ -1166,7 +1421,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             scale = prefs.getFloat("${key}_scale", 0.5f),
             rotation = prefs.getFloat("${key}_rotation", 0.0f),
             marginX = prefs.getFloat("${key}_marginX", 0.0f),
-            marginY = prefs.getFloat("${key}_marginY", 0.0f)
+            marginY = prefs.getFloat("${key}_marginY", 0.0f),
+            swapAnalogSticks = prefs.getBoolean("${key}_swap", false),
+            invertAnalogLeftY = prefs.getBoolean("${key}_invertLeftY", prefs.getBoolean("${key}_invertY", false)),
+            invertAnalogRightY = prefs.getBoolean("${key}_invertRightY", prefs.getBoolean("${key}_invertY", false))
         )
     }
     
@@ -1178,9 +1436,12 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             putFloat("${key}_rotation", settings.rotation)
             putFloat("${key}_marginX", settings.marginX)
             putFloat("${key}_marginY", settings.marginY)
+            putBoolean("${key}_swap", settings.swapAnalogSticks)
+            putBoolean("${key}_invertLeftY", settings.invertAnalogLeftY)
+            putBoolean("${key}_invertRightY", settings.invertAnalogRightY)
             apply()
         }
-        Log.i(TAG, "Settings saved for $console: scale=${settings.scale}, rotation=${settings.rotation}")
+        Log.i(TAG, "Settings saved for $console: scale=${settings.scale}, rotation=${settings.rotation}, swap=${settings.swapAnalogSticks}, invertLeft=${settings.invertAnalogLeftY}, invertRight=${settings.invertAnalogRightY}")
     }
     
     // Charger et appliquer les codes de triche au démarrage
@@ -1264,6 +1525,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             Log.i(TAG, "🔴 onDestroy called - cleaning up core")
             // Ne pas appeler retroView.onDestroy() manuellement car lifecycle.addObserver le fait déjà
             // Juste logger pour le debug
+            runAheadManager?.release()
+            runAheadManager = null
         } catch (e: Exception) {
             Log.e(TAG, "Error in onDestroy", e)
         }
@@ -1328,7 +1591,12 @@ private fun handlePadKitEvent(
                 }
                 
                 // Appliquer inversion Y si demandé
-                val yAxis = if (settings.invertAnalogY) event.direction.y else -event.direction.y
+                val invertY = when (stickId) {
+                    1 -> settings.invertAnalogLeftY
+                    2 -> settings.invertAnalogRightY
+                    else -> false
+                }
+                val yAxis = if (invertY) event.direction.y else -event.direction.y
                 retroView.sendMotionEvent(source, event.direction.x, yAxis)
             }
         }
@@ -1340,12 +1608,24 @@ private fun ComposeEmulatorScreen(
     retroView: GLRetroView,
     console: String,
     gameName: String,
+    galleryGameId: String,
     romPath: String,
     prefs: SharedPreferences,
     showMainMenu: MutableState<Boolean>,
     showGamePadSettings: MutableState<Boolean>,
-    showAdvancedOverlaySettings: MutableState<Boolean>,
+    showAdvancedRadialSettings: MutableState<Boolean>,
     showQuickMenu: MutableState<Boolean>,
+    quickActionsBarVisible: MutableState<Boolean>,
+    isFastForwardActive: Boolean,
+    audioMuted: Boolean,
+    runAheadManager: RunAheadManager? = null,
+    smartConfigAutoRunAhead: Boolean = true,
+    smartConfigShowOsd: Boolean = true,
+    toggleFastForwardAction: () -> Unit,
+    toggleAudioMuteAction: () -> Unit,
+    toggleQuickActionsBarAction: () -> Unit,
+    showSmartConfigDialog: MutableState<Boolean>,
+    showDiskSwapperDialog: MutableState<Boolean>,
     overlaysVisible: MutableState<Boolean>,
     initialSettings: TouchControllerSettingsManager.Settings,
     initialVariant: GamePadLayoutManager.LayoutVariant,
@@ -1359,13 +1639,24 @@ private fun ComposeEmulatorScreen(
     showCoreOptionsDialog: MutableState<Boolean>,
     dipSwitches: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
     coreOptions: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
+    availableDisks: Int,
+    currentDisk: Int,
+    onDiskSelected: (Int) -> Unit,
+    onTakeScreenshot: () -> Unit = {},
+    fastForwardRatio: Int,
+    onRewindUnavailable: () -> Unit = {},
     isZapperGame: Boolean = false,
     gameViewBounds: MutableState<androidx.compose.ui.geometry.Rect?>,  // Bounds du GLRetroView
     onZapperTouch: (android.view.MotionEvent) -> Boolean = { false }
 ) {
     // Settings manager pour les gamepads (state mutable)
-    var settings by remember {
-        mutableStateOf(initialSettings)
+    var settings by remember { mutableStateOf(initialSettings) }
+    var advancedRadialInitial by remember { mutableStateOf(initialSettings) }
+
+    LaunchedEffect(showAdvancedRadialSettings.value) {
+        if (showAdvancedRadialSettings.value) {
+            advancedRadialInitial = settings
+        }
     }
     
     // Variante de layout (state mutable)
@@ -1479,6 +1770,14 @@ private fun ComposeEmulatorScreen(
         buildPortraitConstraints()
     }
     
+    val defaultRunAheadStatus = remember { RunAheadManager.RunAheadStatus(false, true, 0, 0, 0, 0) }
+    val runAheadStatus = if (runAheadManager != null) {
+        val status by runAheadManager.status().collectAsState(defaultRunAheadStatus)
+        status
+    } else {
+        defaultRunAheadStatus
+    }
+    
     // Fournir le thème Lemuroid pour les gamepads
     CompositionLocalProvider(LocalLemuroidPadTheme provides LemuroidPadTheme()) {
         MaterialTheme {
@@ -1487,6 +1786,24 @@ private fun ComposeEmulatorScreen(
                     .fillMaxSize()
                     .background(Color.Black)
             ) {
+                SmartConfigOsd(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 16.dp, end = 16.dp),
+                    data = SmartConfigOsdData(
+                        runAheadStatus = runAheadStatus,
+                        runAheadEnabled = runAheadStatus.enabled,
+                        rewindSupported = false,
+                        rewindActive = false,
+                        rewindSeconds = 0f,
+                        fastForwardActive = isFastForwardActive,
+                        fastForwardRatio = fastForwardRatio.toFloat(),
+                        audioMuted = audioMuted,
+                        autoSmartConfig = smartConfigAutoRunAhead
+                    ),
+                    visible = smartConfigShowOsd
+                )
+                
                 if (layoutVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
                     // Mode RetroArch : Overlay fullscreen par-dessus le gameView
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -1645,7 +1962,7 @@ private fun ComposeEmulatorScreen(
                                 val advancedSettings = advancedSettingsState.value
                                 
                                 // Vérifier si un menu est ouvert (INCLURE Core Options Dialog!)
-                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showGamePadSettings.value || showAdvancedOverlaySettings.value || showCoreOptionsDialog.value
+                                val isMenuOpen = showMainMenu.value || showQuickMenu.value || showGamePadSettings.value || showAdvancedRadialSettings.value || showCoreOptionsDialog.value
                                 
                                 // Logique hideInMenu et behindMenu (RetroArch officiel)
                                 val shouldShowOverlay = when {
@@ -1667,7 +1984,8 @@ private fun ComposeEmulatorScreen(
                                         assetManager = assetManager,
                                         showDebug = debugModeState.value,
                                         swapAnalogSticks = overlayPreference.swapAnalogSticks,
-                                        invertAnalogY = overlayPreference.invertAnalogY,
+                                        invertAnalogLeftY = overlayPreference.invertAnalogLeftY,
+                                        invertAnalogRightY = overlayPreference.invertAnalogRightY,
                                         overlayScale = overlayPreference.scale,
                                         overlayXOffset = overlayPreference.xOffset,
                                         overlayYOffset = overlayPreference.yOffset,
@@ -1842,6 +2160,31 @@ private fun ComposeEmulatorScreen(
                     }
                 }
                 
+            if (quickActionsBarVisible.value) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                ) {
+                    QuickActionsBar(
+                        isFastForwardActive = isFastForwardActive,
+                        audioMuted = audioMuted,
+                        isRewindSupported = false,
+                        isRewinding = false,
+                        rewindDurationSeconds = 0f,
+                        onRewindPress = onRewindUnavailable,
+                        onRewindRelease = {},
+                        onToggleFastForward = toggleFastForwardAction,
+                        onToggleAudioMute = toggleAudioMuteAction,
+                        onQuickSave = { onSaveState(1) },
+                        onQuickLoad = { onLoadState(1) },
+                        onOpenSettings = { showMainMenu.value = true },
+                        onCycleShader = {},
+                        currentShaderName = "None (Fast)"
+                    )
+                }
+            }
+
                 // États locaux pour les sous-menus
                 var showSaveSlots by remember { mutableStateOf(false) }
                 var showLoadSlots by remember { mutableStateOf(false) }
@@ -1868,9 +2211,17 @@ private fun ComposeEmulatorScreen(
                             showQuickMenu.value = false
                             showMainMenu.value = true
                         },
-                        onAdvancedSettings = {
+                        onAdvancedRadialSettings = {
                             showQuickMenu.value = false
-                            showAdvancedOverlaySettings.value = true
+                            advancedRadialInitial = settings
+                            showAdvancedRadialSettings.value = true
+                        },
+                        onToggleFastForward = {
+                            toggleFastForwardAction()
+                            closeQuickMenuWithCooldown()
+                        },
+                        onToggleAudioMute = {
+                            toggleAudioMuteAction()
                         },
                         onSaveState = { slot ->
                             closeQuickMenuWithCooldown()  // Fermer avec cooldown
@@ -1885,7 +2236,15 @@ private fun ComposeEmulatorScreen(
                             retroView.onPause()
                             onFinishActivity()
                         },
-                        overlaysVisible = overlaysVisible.value
+                        overlaysVisible = overlaysVisible.value,
+                        isFastForwardActive = isFastForwardActive,
+                        audioMuted = audioMuted,
+                        onToggleQuickActionsBar = {
+                            toggleQuickActionsBarAction()
+                            closeQuickMenuWithCooldown()
+                        },
+                        quickActionsBarVisible = quickActionsBarVisible.value,
+                        fastForwardRatio = fastForwardRatio
                     )
                 }
                 
@@ -1908,9 +2267,10 @@ private fun ComposeEmulatorScreen(
                             showMainMenu.value = false
                             showGamePadSettings.value = true
                         },
-                        onAdvancedSettings = {
+                        onAdvancedRadialSettings = {
                             showMainMenu.value = false
-                            showAdvancedOverlaySettings.value = true
+                            advancedRadialInitial = settings
+                            showAdvancedRadialSettings.value = true
                         },
                         onCheatCodes = {
                             showMainMenu.value = false
@@ -1928,8 +2288,30 @@ private fun ComposeEmulatorScreen(
                             showMainMenu.value = false
                             showCoreOptionsDialog.value = true
                         },
+                        onScreenshot = {
+                            showMainMenu.value = false
+                            onTakeScreenshot()
+                    },
+                    onOpenGallery = {
+                        showMainMenu.value = false
+                        val intent = Intent(context, com.retroplay.gallery.ScreenshotGalleryActivity::class.java).apply {
+                            putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_CONSOLE, console)
+                            putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_ID, galleryGameId)
+                            putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_NAME, gameName)
+                        }
+                        context.startActivity(intent)
+                    },
+                        onSmartConfig = {
+                            showMainMenu.value = false
+                            showSmartConfigDialog.value = true
+                        },
+                        onDiskSwapper = {
+                            showMainMenu.value = false
+                            showDiskSwapperDialog.value = true
+                        },
                         hasDipSwitches = dipSwitches.isNotEmpty(),
-                        hasCoreOptions = coreOptions.isNotEmpty()
+                        hasCoreOptions = coreOptions.isNotEmpty(),
+                        availableDisks = availableDisks
                     )
                 }
                 
@@ -1960,6 +2342,26 @@ private fun ComposeEmulatorScreen(
                         }
                     )
                 }
+
+                // Smart Config Dialog
+                if (showSmartConfigDialog.value) {
+                    SmartConfigDialog(
+                        onDismiss = { showSmartConfigDialog.value = false }
+                    )
+                }
+
+                // Disk Swapper Dialog
+                if (showDiskSwapperDialog.value && availableDisks > 1) {
+                    DiskSwapperDialog(
+                        availableDisks = availableDisks,
+                        currentDiskIndex = currentDisk,
+                        onDiskSelected = { diskIndex ->
+                            onDiskSelected(diskIndex)
+                            showDiskSwapperDialog.value = false
+                        },
+                        onDismiss = { showDiskSwapperDialog.value = false }
+                    )
+                }
                 
                 // GamePad Settings Dialog avec LIVE PREVIEW et PERSISTANCE
                 if (showGamePadSettings.value) {
@@ -1979,18 +2381,32 @@ private fun ComposeEmulatorScreen(
                             layoutVariant = newVariant
                             onVariantChanged(newVariant)
                         },
-                        context = retroView.context,
-                        prefs = prefs
+                        onOpenAdvancedRadial = {
+                            showGamePadSettings.value = false
+                            advancedRadialInitial = settings
+                            showAdvancedRadialSettings.value = true
+                        }
                     )
                 }
                 
-                // Advanced Overlay Settings Dialog
-                if (showAdvancedOverlaySettings.value) {
-                    AdvancedOverlaySettingsDialog(
+                // Advanced Radial Settings Dialog
+                if (showAdvancedRadialSettings.value) {
+                    AdvancedRadialSettingsDialog(
                         console = console,
-                        onDismiss = { showAdvancedOverlaySettings.value = false },
-                        context = retroView.context,
-                        prefs = prefs
+                        initialSettings = advancedRadialInitial,
+                        prefs = prefs,
+                        onPreview = { previewSettings ->
+                            settings = previewSettings
+                        },
+                        onSave = { savedSettings ->
+                            settings = savedSettings
+                            onSettingsChanged(savedSettings)
+                            showAdvancedRadialSettings.value = false
+                        },
+                        onCancel = {
+                            settings = advancedRadialInitial
+                            showAdvancedRadialSettings.value = false
+                        }
                     )
                 }
                 
@@ -2248,16 +2664,22 @@ private fun MainMenuDialog(
     onSaveGame: () -> Unit,
     onLoadGame: () -> Unit,
     onGamePadSettings: () -> Unit,
-    onAdvancedSettings: () -> Unit = {},  // Nouveau callback
+    onAdvancedRadialSettings: () -> Unit = {},  // Nouveau callback
     onCheatCodes: () -> Unit,
     onChangeCore: () -> Unit,
     onDipSwitches: () -> Unit,
     onCoreOptions: () -> Unit,
+    onScreenshot: () -> Unit = {},
+    onOpenGallery: () -> Unit = {},
+    onSmartConfig: () -> Unit = {},
+    onDiskSwapper: () -> Unit = {},
     hasDipSwitches: Boolean,
-    hasCoreOptions: Boolean
+    hasCoreOptions: Boolean,
+    availableDisks: Int = 0
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var cacheState by remember { mutableStateOf(prefs.getBoolean("cache_enabled_$console", false)) }
+    val scrollState = rememberScrollState()
     
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -2267,11 +2689,13 @@ private fun MainMenuDialog(
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
-                    .wrapContentHeight(),
+                    .fillMaxHeight(0.85f),
                 colors = CardDefaults.cardColors(containerColor = Color(0xDD000000))
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .verticalScroll(scrollState),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Titre
@@ -2280,6 +2704,23 @@ private fun MainMenuDialog(
                         style = MaterialTheme.typography.titleLarge,
                         color = Color.White
                     )
+                    
+                    androidx.compose.material3.HorizontalDivider(color = Color.Gray)
+                    
+                    // Screenshot
+                    TextButton(
+                        onClick = onScreenshot,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Take Screenshot", color = Color(0xFF2196F3))
+                    }
+
+                    TextButton(
+                        onClick = onOpenGallery,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open Gallery", color = Color(0xFFBB86FC))
+                    }
                     
                     androidx.compose.material3.HorizontalDivider(color = Color.Gray)
                     
@@ -2337,12 +2778,30 @@ private fun MainMenuDialog(
                         }
                     }
                     
-                    // Advanced Overlay Settings
+                    // Advanced Radial Settings
                     TextButton(
-                        onClick = onAdvancedSettings,
+                        onClick = onAdvancedRadialSettings,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Advanced Overlay Settings", color = Color(0xFFFF9800))
+                        Text("Advanced Radial Settings", color = Color(0xFFFF9800))
+                    }
+                    
+                    // Smart Config Settings
+                    TextButton(
+                        onClick = onSmartConfig,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Smart Config", color = Color(0xFF4CAF50))
+                    }
+                    
+                    // Disk Swapper (PSX multi-disc games)
+                    if (availableDisks > 1) {
+                        TextButton(
+                            onClick = onDiskSwapper,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Swap Disk ($availableDisks discs)", color = Color(0xFFFF9800))
+                        }
                     }
                     
                     // Change Core
@@ -2518,122 +2977,76 @@ private fun GamePadSettingsDialog(
     onDismiss: () -> Unit,
     onApply: (TouchControllerSettingsManager.Settings) -> Unit,
     onVariantChange: (GamePadLayoutManager.LayoutVariant) -> Unit,
-    context: Context,
-    prefs: SharedPreferences
+    onOpenAdvancedRadial: () -> Unit
 ) {
+    val scrollState = rememberScrollState()
+
+    val availableVariants = remember(console) {
+        GamePadLayoutManager.getAvailableVariants(console)
+            .filterNot { it.first == GamePadLayoutManager.LayoutVariant.RETROARCH }
+            .ifEmpty { listOf(GamePadLayoutManager.LayoutVariant.DEFAULT to "Default") }
+    }
+    val defaultVariant = availableVariants.first().first
+
+    var selectedVariant by remember {
+        mutableStateOf(
+            availableVariants.firstOrNull { it.first == currentVariant }?.first
+                ?: defaultVariant
+        )
+    }
+
     var scale by remember { mutableFloatStateOf(currentSettings.scale) }
     var rotation by remember { mutableFloatStateOf(currentSettings.rotation) }
     var marginX by remember { mutableFloatStateOf(currentSettings.marginX) }
     var marginY by remember { mutableFloatStateOf(currentSettings.marginY) }
-    var selectedVariant by remember { mutableStateOf(currentVariant) }
-    
-    // Charger les paramètres d'inversion depuis currentSettings pour Lemuroid/Radial
-    var swapAnalogSticksLemuroid by remember { mutableStateOf<Boolean>(currentSettings.swapAnalogSticks) }
-    var invertAnalogYLemuroid by remember { mutableStateOf<Boolean>(currentSettings.invertAnalogY) }
-    
-    // État pour l'overlay RetroArch
-    val assetManager = remember { com.retroplay.overlay.assets.OverlayAssetManager(context) }
-    val availableOverlays = remember { assetManager.getCompatibleOverlays(console) }
-    
-    // Charger préférence actuelle
-    val currentOverlayPref = remember { com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console) }
-    var selectedOverlay by remember { mutableStateOf(currentOverlayPref?.overlayName ?: if (availableOverlays.isNotEmpty()) availableOverlays[0] else "") }
-    var selectedLandscapeLayout by remember { mutableStateOf(currentOverlayPref?.landscapeLayout ?: "landscape-A") }
-    var selectedPortraitLayout by remember { mutableStateOf(currentOverlayPref?.portraitLayout ?: "portrait-A") }
-    var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
-    var swapAnalogSticks by remember { mutableStateOf(currentOverlayPref?.swapAnalogSticks ?: false) }
-    var invertAnalogY by remember { mutableStateOf(currentOverlayPref?.invertAnalogY ?: false) }
-    
-    // État pour détecter si un slider est en train d'être bougé
-    var isAdjusting by remember { mutableStateOf(false) }
-    
-    // Liste des variantes disponibles pour cette console
-    val availableVariants = GamePadLayoutManager.getAvailableVariants(console)
-    
-    // Charger layouts disponibles pour l'overlay sélectionné (si RetroArch)
-    val availableLayouts = remember(selectedOverlay, console) {
-        if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH && selectedOverlay.isNotEmpty()) {
-            val layouts = assetManager.getAvailableLayouts(selectedOverlay, console)
-            android.util.Log.d("GamePadSettings", "Loaded ${layouts.size} layouts for '$selectedOverlay': ${layouts.joinToString()}")
-            layouts
-        } else {
-            emptyList()
+    var swapAnalogSticks by remember { mutableStateOf(currentSettings.swapAnalogSticks) }
+    var invertAnalogLeftY by remember { mutableStateOf(currentSettings.invertAnalogLeftY) }
+    var invertAnalogRightY by remember { mutableStateOf(currentSettings.invertAnalogRightY) }
+
+    LaunchedEffect(selectedVariant) {
+        if (selectedVariant != currentVariant) {
+            onVariantChange(selectedVariant)
         }
     }
-    
-    // Sauvegarder la préférence overlay quand modifiée
-    LaunchedEffect(selectedVariant, selectedOverlay, selectedLandscapeLayout, selectedPortraitLayout, autoRotate, swapAnalogSticks, invertAnalogY) {
-        if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH && selectedOverlay.isNotEmpty()) {
-            val pref = com.retroplay.overlay.models.OverlayPreference(
-                enabled = true,
-                overlayName = selectedOverlay,
-                landscapeLayout = selectedLandscapeLayout,
-                portraitLayout = selectedPortraitLayout,
-                autoRotate = autoRotate,
-                swapAnalogSticks = swapAnalogSticks,
-                invertAnalogY = invertAnalogY
-            )
-            com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
-            android.util.Log.i("GamePadSettings", "✅ SAVED overlay pref for $console: overlay='$selectedOverlay' landscape='$selectedLandscapeLayout' portrait='$selectedPortraitLayout' autoRotate=$autoRotate swap=$swapAnalogSticks invertY=$invertAnalogY")
-        } else if (selectedVariant != GamePadLayoutManager.LayoutVariant.RETROARCH) {
-            // Désactiver RetroArch si autre variante choisie
-            com.retroplay.overlay.models.OverlayPreferenceManager.disable(prefs, console)
-        }
-    }
-    
-    // Alpha du fond : plus transparent quand on ajuste
-    val dialogAlpha = if (isAdjusting) 0x33000000 else 0x99000000
-    
-    // LIVE PREVIEW : Appliquer les changements instantanément
-    LaunchedEffect(scale, rotation, marginX, marginY, swapAnalogSticksLemuroid, invertAnalogYLemuroid) {
+
+    LaunchedEffect(scale, rotation, marginX, marginY, swapAnalogSticks, invertAnalogLeftY, invertAnalogRightY) {
         onApply(
             TouchControllerSettingsManager.Settings(
                 scale = scale,
                 rotation = rotation,
                 marginX = marginX,
                 marginY = marginY,
-                swapAnalogSticks = swapAnalogSticksLemuroid,
-                invertAnalogY = invertAnalogYLemuroid
+                swapAnalogSticks = swapAnalogSticks,
+                invertAnalogLeftY = invertAnalogLeftY,
+                invertAnalogRightY = invertAnalogRightY
             )
         )
     }
-    
-    // Appliquer changement de variante
-    LaunchedEffect(selectedVariant) {
-        if (selectedVariant != currentVariant) {
-            onVariantChange(selectedVariant)
-        }
-    }
-    
+
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center  // Centrer le dialog
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.85f)
+                .verticalScroll(scrollState),
+            colors = CardDefaults.cardColors(containerColor = Color(0xDD000000))
         ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .fillMaxHeight(0.85f)  // Limiter hauteur à 85% de l'écran pour forcer scroll
-                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),  // SCROLL SUR LE CARD
-                colors = CardDefaults.cardColors(containerColor = Color(dialogAlpha))
-            ) {
-            // Column sans scroll (juste padding)
             Column(
-                modifier = Modifier.padding(20.dp),  // PAS de verticalScroll ici
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Titre
                 Text(
-                    "GamePad Settings",
+                    text = "GamePad Settings",
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White
                 )
-                
-                // Sélecteur de variante (si plusieurs disponibles)
+
                 if (availableVariants.size > 1) {
-                    Spacer(Modifier.height(4.dp))
-                    Text("Gamepad Mode", color = Color(0xFF4CAF50), style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Gamepad Mode",
+                        color = Color(0xFF4CAF50),
+                        style = MaterialTheme.typography.titleMedium
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2648,340 +3061,81 @@ private fun GamePadSettingsDialog(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
-                                    label,
+                                    text = label,
                                     color = if (isSelected) Color.White else Color.Gray,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
                         }
                     }
+                    Divider(color = Color.Gray.copy(alpha = 0.3f))
                 }
-                
-                // Configuration RetroArch Overlay (affiché seulement si variante RETROARCH sélectionnée)
-                if (selectedVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
-                    Divider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 8.dp))
-                    
-                    Text("RetroArch Overlay", color = Color(0xFFFF9800), style = MaterialTheme.typography.titleMedium)
-                    
-                    // Sélection de l'overlay package
-                    if (availableOverlays.isNotEmpty()) {
-                        Text("Overlay Package", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
-                        Column {
-                            availableOverlays.forEach { overlayName ->
-                                val isSelected = selectedOverlay == overlayName
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { selectedOverlay = overlayName }
-                                        .background(if (isSelected) Color(0xFF4CAF50).copy(alpha = 0.3f) else Color.Transparent)
-                                        .padding(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { selectedOverlay = overlayName }
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        overlayName,
-                                        color = if (isSelected) Color.White else Color.Gray,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            }
-                        }
-                        
-                        // Sélection des layouts (si overlay chargé)
-                        if (selectedOverlay.isNotEmpty() && availableLayouts.isNotEmpty()) {
-                            Spacer(Modifier.height(12.dp))
-                            
-                            // Filtrer par orientation
-                            val landscapeLayouts = availableLayouts.filter { it.contains("landscape") }
-                            val portraitLayouts = availableLayouts.filter { it.contains("portrait") }
-                            
-                            if (landscapeLayouts.isNotEmpty()) {
-                                Text("Landscape Layout", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
-                                // Afficher tous les layouts en plusieurs lignes si nécessaire
-                                androidx.compose.foundation.layout.FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    landscapeLayouts.forEach { layoutName ->
-                                        val isSelected = selectedLandscapeLayout == layoutName
-                                        // Extraire label lisible (ex: "landscape-left-analog" -> "Left Analog")
-                                        val displayName = when {
-                                            layoutName.contains("both-analog") -> "Both Analog"
-                                            layoutName.contains("left-analog") && layoutName.contains("menu") -> "L.Analog+Menu"
-                                            layoutName.contains("left-analog") -> "Left Analog"
-                                            layoutName.contains("right-analog") -> "Right Analog"
-                                            layoutName.contains("analog") && layoutName.contains("menu") -> "Analog+Menu"
-                                            layoutName.contains("analog") -> "Analog"
-                                            layoutName.contains("menu") -> "Menu"
-                                            layoutName.endsWith("-B") -> "B"
-                                            else -> "Digital"
-                                        }
-                                        TextButton(
-                                            onClick = { 
-                                                android.util.Log.i("GamePadSettings", "Landscape layout changed: $selectedLandscapeLayout -> $layoutName")
-                                                selectedLandscapeLayout = layoutName
-                                            },
-                                            colors = ButtonDefaults.textButtonColors(
-                                                containerColor = if (isSelected) Color(0xFFFF9800) else Color.Transparent
-                                            ),
-                                            modifier = Modifier.padding(0.dp)
-                                        ) {
-                                            Text(
-                                                displayName,
-                                                color = if (isSelected) Color.Black else Color.Gray,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                maxLines = 1
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            if (portraitLayouts.isNotEmpty()) {
-                                Text("Portrait Layout", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
-                                // Afficher tous les layouts en plusieurs lignes si nécessaire
-                                androidx.compose.foundation.layout.FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    portraitLayouts.forEach { layoutName ->
-                                        val isSelected = selectedPortraitLayout == layoutName
-                                        // Extraire label lisible
-                                        val displayName = when {
-                                            layoutName.contains("analog") && layoutName.contains("menu") -> "Analog+Menu"
-                                            layoutName.contains("analog") -> "Analog"
-                                            layoutName.contains("menu") -> "Menu"
-                                            else -> "Digital"
-                                        }
-                                        TextButton(
-                                            onClick = { 
-                                                android.util.Log.i("GamePadSettings", "Portrait layout changed: $selectedPortraitLayout -> $layoutName")
-                                                selectedPortraitLayout = layoutName
-                                            },
-                                            colors = ButtonDefaults.textButtonColors(
-                                                containerColor = if (isSelected) Color(0xFFFF9800) else Color.Transparent
-                                            ),
-                                            modifier = Modifier.padding(0.dp)
-                                        ) {
-                                            Text(
-                                                displayName,
-                                                color = if (isSelected) Color.Black else Color.Gray,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                maxLines = 1
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // Auto-rotate option
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = autoRotate,
-                                    onCheckedChange = { autoRotate = it },
-                                    colors = CheckboxDefaults.colors(
-                                        checkedColor = Color(0xFFFF9800),
-                                        uncheckedColor = Color.Gray
-                                    )
-                                )
-                                Text(
-                                    "Auto-switch on rotation",
-                                    color = Color.LightGray,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            
-                            // DEBUG MODE - Afficher les hitboxes
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                var debugMode by remember { 
-                                    mutableStateOf(prefs.getBoolean("overlay_debug_mode", false)) 
-                                }
-                                
-                                androidx.compose.material3.Switch(
-                                    checked = debugMode,
-                                    onCheckedChange = { 
-                                        debugMode = it
-                                        prefs.edit().putBoolean("overlay_debug_mode", it).apply()
-                                    },
-                                    colors = androidx.compose.material3.SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFFFF5722),
-                                        checkedTrackColor = Color(0xFFFF5722).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color.Gray,
-                                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
-                                    )
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "DEBUG: Show hitboxes",
-                                    color = if (debugMode) Color(0xFFFF5722) else Color.Gray,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            
-                            Spacer(Modifier.height(12.dp))
-                            
-                            // Analog Stick Options
-                            Text("Analog Stick Options", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
-                            
-                            // Swap Analog Sticks
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                androidx.compose.material3.Switch(
-                                    checked = swapAnalogSticks,
-                                    onCheckedChange = { swapAnalogSticks = it },
-                                    colors = androidx.compose.material3.SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFF2196F3),
-                                        checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color.Gray,
-                                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
-                                    )
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        "Swap Left/Right Sticks",
-                                        color = Color.LightGray,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        "Swap L and R analog positions",
-                                        color = Color.Gray,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
-                            }
-                            
-                            // Invert Y Axis
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                androidx.compose.material3.Switch(
-                                    checked = invertAnalogY,
-                                    onCheckedChange = { invertAnalogY = it },
-                                    colors = androidx.compose.material3.SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFFE91E63),
-                                        checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color.Gray,
-                                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
-                                    )
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        "Invert Y Axis",
-                                        color = Color.LightGray,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        "Invert up/down for analog sticks",
-                                        color = Color.Gray,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        Text(
-                            "No compatible overlays found for $console",
-                            color = Color.Gray,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    
-                    Divider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 8.dp))
-                }
-                
-                // Sliders Lemuroid (affichés SEULEMENT si mode Default ou Compact)
-                if (selectedVariant != GamePadLayoutManager.LayoutVariant.RETROARCH) {
-                    Text("Lemuroid Gamepad Adjustments", color = Color(0xFF2196F3), style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
-                    
-                    // Scale (0.75x - 1.5x)
-                    Text("Scale: ${String.format("%.2f", scale * 0.75f + 0.75f)}x", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
+
+                Text(
+                    text = "Touch Controls (Radial)",
+                    color = Color(0xFF2196F3),
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Scale: ${String.format("%.2f", scale * 0.75f + 0.75f)}x",
+                        color = Color.LightGray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Slider(
                         value = scale,
-                        onValueChange = { 
-                            scale = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
+                        onValueChange = { scale = it },
                         valueRange = 0f..1f,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
-                    // Rotation (0° - 45°)
-                    Text("Rotation: ${String.format("%.0f", rotation * 45f)}°", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
+
+                    Text(
+                        text = "Rotation: ${String.format("%.0f", rotation * TouchControllerSettingsManager.MAX_ROTATION)}°",
+                        color = Color.LightGray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Slider(
                         value = rotation,
-                        onValueChange = { 
-                            rotation = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
+                        onValueChange = { rotation = it },
                         valueRange = 0f..1f,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
-                    // Margin X (0dp - 96dp)
-                    Text("Margin X: ${String.format("%.0f", marginX * 96f)}dp", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
+
+                    Text(
+                        text = "Horizontal Margin: ${String.format("%.0f", marginX * TouchControllerSettingsManager.MAX_MARGINS)}dp",
+                        color = Color.LightGray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Slider(
                         value = marginX,
-                        onValueChange = { 
-                            marginX = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
+                        onValueChange = { marginX = it },
                         valueRange = 0f..1f,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
-                    // Margin Y (0dp - 96dp)
-                    Text("Margin Y: ${String.format("%.0f", marginY * 96f)}dp", color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
+
+                    Text(
+                        text = "Vertical Margin: ${String.format("%.0f", marginY * TouchControllerSettingsManager.MAX_MARGINS)}dp",
+                        color = Color.LightGray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Slider(
                         value = marginY,
-                        onValueChange = { 
-                            marginY = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
+                        onValueChange = { marginY = it },
                         valueRange = 0f..1f,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
-                    Spacer(Modifier.height(16.dp))
-                    
-                    // Analog Stick Options (Radial/Lemuroid)
-                    Text("Analog Stick Options", color = Color(0xFF4CAF50), style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
-                    
-                    // Swap Analog Sticks
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        androidx.compose.material3.Switch(
-                            checked = swapAnalogSticksLemuroid,
-                            onCheckedChange = { swapAnalogSticksLemuroid = it },
-                            colors = androidx.compose.material3.SwitchDefaults.colors(
+                        Switch(
+                            checked = swapAnalogSticks,
+                            onCheckedChange = { swapAnalogSticks = it },
+                            colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color(0xFF2196F3),
-                                checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
-                                uncheckedThumbColor = Color.Gray,
-                                uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
+                                checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f)
                             )
                         )
                         Spacer(Modifier.width(8.dp))
@@ -2998,75 +3152,100 @@ private fun GamePadSettingsDialog(
                             )
                         }
                     }
-                    
-                    // Invert Y Axis
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        androidx.compose.material3.Switch(
-                            checked = invertAnalogYLemuroid,
-                            onCheckedChange = { invertAnalogYLemuroid = it },
-                            colors = androidx.compose.material3.SwitchDefaults.colors(
-                                checkedThumbColor = Color(0xFFE91E63),
-                                checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
-                                uncheckedThumbColor = Color.Gray,
-                                uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Switch(
+                                checked = invertAnalogLeftY,
+                                onCheckedChange = { invertAnalogLeftY = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFFE91E63),
+                                    checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f)
+                                )
                             )
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                "Invert Y Axis",
-                                color = Color.LightGray,
-                                style = MaterialTheme.typography.bodySmall
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    "Invert Left Stick Y",
+                                    color = Color.LightGray,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "Reverse up/down for left analog",
+                                    color = Color.Gray,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Switch(
+                                checked = invertAnalogRightY,
+                                onCheckedChange = { invertAnalogRightY = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFFFF7043),
+                                    checkedTrackColor = Color(0xFFFF7043).copy(alpha = 0.5f)
+                                )
                             )
-                            Text(
-                                "Invert up/down for analog sticks",
-                                color = Color.Gray,
-                                style = MaterialTheme.typography.labelSmall
-                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    "Invert Right Stick Y",
+                                    color = Color.LightGray,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "Reverse up/down for right analog",
+                                    color = Color.Gray,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
                         }
                     }
-                    
-                    Spacer(Modifier.height(8.dp))
                 }
-                
-                // Boutons
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Bouton RESET TO DEFAULT (à gauche)
-                    androidx.compose.material3.Button(
-                        onClick = {
-                            // Forcer le retour au mode DEFAULT
-                            selectedVariant = GamePadLayoutManager.LayoutVariant.DEFAULT
-                            // Désactiver RetroArch overlay
-                            com.retroplay.overlay.models.OverlayPreferenceManager.disable(prefs, console)
-                            // Appliquer le changement
-                            onVariantChange(GamePadLayoutManager.LayoutVariant.DEFAULT)
-                            android.util.Log.i("GamePadSettings", "Force reset to DEFAULT mode for $console")
-                            onDismiss()
-                        },
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFF5722)
-                        )
+                    TextButton(
+                        onClick = onOpenAdvancedRadial,
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Text("RESET TO DEFAULT", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                        Text("Advanced Radial Settings", color = Color(0xFFFF9800))
                     }
-                    
-                    // Bouton Done (à droite)
-                    androidx.compose.material3.Button(
-                        onClick = onDismiss,
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF4CAF50)
-                        )
+
+                    Button(
+                        onClick = {
+                            val defaults = TouchControllerSettingsManager.Settings()
+                            scale = defaults.scale
+                            rotation = defaults.rotation
+                            marginX = defaults.marginX
+                            marginY = defaults.marginY
+                            swapAnalogSticks = defaults.swapAnalogSticks
+                            invertAnalogLeftY = defaults.invertAnalogLeftY
+                            invertAnalogRightY = defaults.invertAnalogRightY
+                            selectedVariant = defaultVariant
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722))
                     ) {
-                        Text("DONE", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        Text("Reset", color = Color.White)
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                    ) {
+                        Text("Done", color = Color.White)
                     }
                 }
-            }
             }
         }
     }
@@ -3078,11 +3257,18 @@ private fun QuickMenuDialog(
     onDismiss: () -> Unit,
     onHideOverlay: () -> Unit,
     onSettings: () -> Unit,
-    onAdvancedSettings: () -> Unit = {},  // Nouveau callback
+    onAdvancedRadialSettings: () -> Unit = {},  // Nouveau callback
+    onToggleFastForward: () -> Unit,
+    onToggleAudioMute: () -> Unit,
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
     onQuit: () -> Unit,
-    overlaysVisible: Boolean
+    overlaysVisible: Boolean,
+    isFastForwardActive: Boolean,
+    audioMuted: Boolean,
+    onToggleQuickActionsBar: () -> Unit,
+    quickActionsBarVisible: Boolean,
+    fastForwardRatio: Int
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -3158,6 +3344,59 @@ private fun QuickMenuDialog(
                     )
                 ) {
                     Text("LOAD STATE (Slot 1)", color = Color.White)
+                }
+
+                androidx.compose.material3.Button(
+                    onClick = onToggleFastForward,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = if (isFastForwardActive) Color(0xFFFF5722) else Color(0xFF795548)
+                    )
+                ) {
+                    Text(
+                        text = if (isFastForwardActive)
+                            "FAST FORWARD: ON (${fastForwardRatio}x)"
+                        else
+                            "FAST FORWARD: OFF (${fastForwardRatio}x)",
+                        color = Color.White
+                    )
+                }
+
+                androidx.compose.material3.Button(
+                    onClick = onToggleAudioMute,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = if (audioMuted) Color(0xFFF44336) else Color(0xFF388E3C)
+                    )
+                ) {
+                    Text(
+                        text = if (audioMuted) "UNMUTE AUDIO" else "MUTE AUDIO",
+                        color = Color.White
+                    )
+                }
+
+                androidx.compose.material3.Button(
+                    onClick = onToggleQuickActionsBar,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = if (quickActionsBarVisible) Color(0xFF00BCD4) else Color(0xFF607D8B)
+                    )
+                ) {
+                    Text(
+                        text = if (quickActionsBarVisible) "HIDE QUICK ACTIONS BAR" else "SHOW QUICK ACTIONS BAR",
+                        color = Color.White
+                    )
+                }
+
+                // Bouton Advanced Radial Settings
+                androidx.compose.material3.Button(
+                    onClick = onAdvancedRadialSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFB74D)
+                    )
+                ) {
+                    Text("ADVANCED RADIAL SETTINGS", color = Color.Black)
                 }
                 
                 // Bouton Settings (ouvrir le menu complet)

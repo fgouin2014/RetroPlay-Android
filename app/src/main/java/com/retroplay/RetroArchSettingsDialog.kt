@@ -69,76 +69,42 @@ fun RetroArchSettingsDialog(
     debugModeState: MutableState<Boolean>
 ) {
     val assetManager = remember { OverlayAssetManager(context) }
+    val overlayPackages = remember { assetManager.getCompatibleOverlays(console) }
 
-    var overlayPackages by remember { mutableStateOf(emptyList<String>()) }
     var customBrowsed by remember { mutableStateOf(OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()) }
 
-    var selectedOverlay by remember { mutableStateOf("") }
-    var selectedCustomPath by remember { mutableStateOf<String?>(null) }
-    var selectedLandscapeLayout by remember { mutableStateOf("landscape-A") }
-    var selectedPortraitLayout by remember { mutableStateOf("portrait-A") }
-    var autoRotate by remember { mutableStateOf(true) }
-    var swapAnalogSticks by remember { mutableStateOf(false) }
-    var invertAnalogY by remember { mutableStateOf(false) }
-    var scale by remember { mutableStateOf(1.0f) }
-    var xOffset by remember { mutableStateOf(0.0f) }
-    var yOffset by remember { mutableStateOf(0.0f) }
-    var xSeparation by remember { mutableStateOf(0.0f) }
-    var ySeparation by remember { mutableStateOf(0.0f) }
-
-    var isPreviewTransparent by remember { mutableStateOf(false) }
-    val contentScrollState = rememberScrollState()
-
-    LaunchedEffect(console) {
-        overlayPackages = assetManager.getCompatibleOverlays(console)
-        val pref = OverlayPreferenceManager.load(prefs, console)
-        if (pref != null) {
-            selectedOverlay = pref.overlayName
-            selectedCustomPath = pref.customCfgName?.let { "${pref.overlayName}/$it" }
-            selectedLandscapeLayout = pref.landscapeLayout
-            selectedPortraitLayout = pref.portraitLayout
-            autoRotate = pref.autoRotate
-            swapAnalogSticks = pref.swapAnalogSticks
-            invertAnalogY = pref.invertAnalogY
-            scale = pref.scale
-            xOffset = pref.xOffset
-            yOffset = pref.yOffset
-            xSeparation = pref.xSeparation
-            ySeparation = pref.ySeparation
-        } else if (overlayPackages.isNotEmpty()) {
-            val defaultOverlay = overlayPackages.first()
-            val (land, port) = computeDefaultLayouts(assetManager, defaultOverlay, console, null)
-            selectedOverlay = defaultOverlay
-            selectedCustomPath = null
-            selectedLandscapeLayout = land
-            selectedPortraitLayout = port
-            autoRotate = true
-            swapAnalogSticks = false
-            invertAnalogY = false
-            scale = 1.0f
-            xOffset = 0.0f
-            yOffset = 0.0f
-            xSeparation = 0.0f
-            ySeparation = 0.0f
-
-            val defaultPref = OverlayPreference(
-                enabled = true,
-                overlayName = defaultOverlay,
-                customCfgName = null,
-                landscapeLayout = land,
-                portraitLayout = port,
-                autoRotate = true,
-                swapAnalogSticks = false,
-                invertAnalogY = false,
-                scale = 1.0f,
-                xOffset = 0.0f,
-                yOffset = 0.0f,
-                xSeparation = 0.0f,
-                ySeparation = 0.0f
-            )
-            OverlayPreferenceManager.save(prefs, console, defaultPref)
-        }
+    val currentOverlayPref = remember { OverlayPreferenceManager.load(prefs, console) }
+    var selectedOverlay by remember {
+        mutableStateOf(
+            currentOverlayPref?.overlayName
+                ?: overlayPackages.firstOrNull().orEmpty()
+        )
     }
+    var selectedCustomPath by remember {
+        mutableStateOf(
+            currentOverlayPref?.customCfgName?.let {
+                "${currentOverlayPref.overlayName}/$it"
+            }
+        )
+    }
+    var selectedLandscapeLayout by remember {
+        mutableStateOf(currentOverlayPref?.landscapeLayout ?: "landscape-A")
+    }
+    var selectedPortraitLayout by remember {
+        mutableStateOf(currentOverlayPref?.portraitLayout ?: "portrait-A")
+    }
+    var autoRotate by remember { mutableStateOf(currentOverlayPref?.autoRotate ?: true) }
+    var swapAnalogSticks by remember { mutableStateOf(currentOverlayPref?.swapAnalogSticks ?: false) }
+    var invertAnalogLeftY by remember { mutableStateOf(currentOverlayPref?.invertAnalogLeftY ?: false) }
+    var invertAnalogRightY by remember { mutableStateOf(currentOverlayPref?.invertAnalogRightY ?: false) }
+    var scale by remember { mutableStateOf(currentOverlayPref?.scale ?: 1.0f) }
+    var xOffset by remember { mutableStateOf(currentOverlayPref?.xOffset ?: 0.0f) }
+    var yOffset by remember { mutableStateOf(currentOverlayPref?.yOffset ?: 0.0f) }
+    var xSeparation by remember { mutableStateOf(currentOverlayPref?.xSeparation ?: 0.0f) }
+    var ySeparation by remember { mutableStateOf(currentOverlayPref?.ySeparation ?: 0.0f) }
+
+    var isTransparent by remember { mutableStateOf(false) }
+    val contentScrollState = rememberScrollState()
 
     DisposableEffect(console) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -157,15 +123,9 @@ fun RetroArchSettingsDialog(
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    LaunchedEffect(debugModeState.value) {
-        prefs.edit()
-            .putBoolean("overlay_debug_mode", debugModeState.value)
-            .commit()
-    }
-
-    val customCfgName = selectedCustomPath?.substringAfter("/")
-    val availableLayouts = remember(selectedOverlay, customCfgName) {
+    val availableLayouts = remember(selectedOverlay, selectedCustomPath) {
         if (selectedOverlay.isNotEmpty()) {
+            val customCfgName = selectedCustomPath?.substringAfter("/")
             assetManager.getAvailableLayouts(selectedOverlay, console, customCfgName)
         } else {
             emptyList()
@@ -198,7 +158,8 @@ fun RetroArchSettingsDialog(
         selectedPortraitLayout,
         autoRotate,
         swapAnalogSticks,
-        invertAnalogY,
+        invertAnalogLeftY,
+        invertAnalogRightY,
         scale,
         xOffset,
         yOffset,
@@ -206,15 +167,17 @@ fun RetroArchSettingsDialog(
         ySeparation
     ) {
         if (selectedOverlay.isNotEmpty()) {
+            val customCfgName = selectedCustomPath?.substringAfter("/")
             val pref = OverlayPreference(
                 enabled = true,
                 overlayName = selectedOverlay,
-                customCfgName = selectedCustomPath?.substringAfter("/"),
+                customCfgName = customCfgName,
                 landscapeLayout = selectedLandscapeLayout,
                 portraitLayout = selectedPortraitLayout,
                 autoRotate = autoRotate,
                 swapAnalogSticks = swapAnalogSticks,
-                invertAnalogY = invertAnalogY,
+                invertAnalogLeftY = invertAnalogLeftY,
+                invertAnalogRightY = invertAnalogRightY,
                 scale = scale,
                 xOffset = xOffset,
                 yOffset = yOffset,
@@ -222,13 +185,11 @@ fun RetroArchSettingsDialog(
                 ySeparation = ySeparation
             )
             OverlayPreferenceManager.save(prefs, console, pref)
-            isPreviewTransparent = true
-            delay(1200)
-            isPreviewTransparent = false
+            isTransparent = true
+            kotlinx.coroutines.delay(1200)
+            isTransparent = false
         }
     }
-
-    val containerAlpha = if (isPreviewTransparent) 0.32f else 0.42f
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -238,15 +199,18 @@ fun RetroArchSettingsDialog(
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
-                    .fillMaxHeight(0.85f),
+                    .fillMaxHeight(0.85f)
+                    .verticalScroll(contentScrollState),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFF000000).copy(alpha = containerAlpha)
+                    containerColor = if (isTransparent)
+                        Color(0xFF000000).copy(alpha = 0.3f)
+                    else
+                        Color(0xFF000000).copy(alpha = 0.4f)
                 )
             ) {
                 Column(
                     modifier = Modifier
-                        .padding(20.dp)
-                        .verticalScroll(contentScrollState),
+                        .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
@@ -508,70 +472,34 @@ fun RetroArchSettingsDialog(
                     }
 
                     HorizontalDivider(color = Color(0xFF444444))
-                    Text("Analog Options", color = Color(0xFFFF9800), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Switch(
-                            checked = swapAnalogSticks,
-                            onCheckedChange = { swapAnalogSticks = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color(0xFF2196F3),
-                                checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
-                                uncheckedThumbColor = Color(0xFF777777),
-                                uncheckedTrackColor = Color(0xFF444444)
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("Swap Left/Right sticks", color = Color.White, fontSize = 13.sp)
-                            Text("Exchange L and R analog sticks", color = Color(0xFF888888), fontSize = 11.sp)
-                        }
-                    }
+                    Text(
+                        text = "Analog Options",
+                        color = Color(0xFFFF9800),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Switch(
-                            checked = invertAnalogY,
-                            onCheckedChange = { invertAnalogY = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color(0xFFE91E63),
-                                checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
-                                uncheckedThumbColor = Color(0xFF777777),
-                                uncheckedTrackColor = Color(0xFF444444)
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("Invert Y axis", color = Color.White, fontSize = 13.sp)
-                            Text("Reverse up/down analog input", color = Color(0xFF888888), fontSize = 11.sp)
-                        }
-                    }
+                    SwitchRow(
+                        title = "Swap Left/Right Sticks",
+                        subtitle = "Exchange left and right analog positions",
+                        checked = swapAnalogSticks,
+                        onCheckedChange = { swapAnalogSticks = it }
+                    )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Switch(
-                            checked = debugModeState.value,
-                            onCheckedChange = { debugModeState.value = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color(0xFFFFEB3B),
-                                checkedTrackColor = Color(0xFFFFEB3B).copy(alpha = 0.5f),
-                                uncheckedThumbColor = Color(0xFF777777),
-                                uncheckedTrackColor = Color(0xFF444444)
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("Debug hitboxes", color = Color(0xFFFFEB3B), fontSize = 13.sp)
-                            Text("Display overlay hitboxes for tuning", color = Color(0xFF888888), fontSize = 11.sp)
-                        }
-                    }
+                    SwitchRow(
+                        title = "Invert Left Stick Y",
+                        subtitle = "Reverse up/down movement for left analog",
+                        checked = invertAnalogLeftY,
+                        onCheckedChange = { invertAnalogLeftY = it }
+                    )
+
+                    SwitchRow(
+                        title = "Invert Right Stick Y",
+                        subtitle = "Reverse up/down movement for right analog",
+                        checked = invertAnalogRightY,
+                        onCheckedChange = { invertAnalogRightY = it }
+                    )
 
                     HorizontalDivider(color = Color(0xFF444444))
                     Text("Position & Scale", color = Color(0xFFFF9800), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -636,7 +564,8 @@ fun RetroArchSettingsDialog(
                                     selectedPortraitLayout = port
                                     autoRotate = true
                                     swapAnalogSticks = false
-                                    invertAnalogY = false
+                                    invertAnalogLeftY = false
+                                    invertAnalogRightY = false
                                     scale = 1.0f
                                     xOffset = 0.0f
                                     yOffset = 0.0f
@@ -705,6 +634,35 @@ private fun SliderWithLabel(
                 inactiveTrackColor = Color(0xFF3A3A3A)
             )
         )
+    }
+}
+
+@Composable
+private fun SwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFFFFA726),
+                checkedTrackColor = Color(0xFFFFA726).copy(alpha = 0.5f),
+                uncheckedThumbColor = Color(0xFF777777),
+                uncheckedTrackColor = Color(0xFF444444)
+            )
+        )
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = Color(0xFF9E9E9E), fontSize = 12.sp)
+        }
     }
 }
 

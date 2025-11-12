@@ -143,6 +143,13 @@ public class Game implements java.io.Serializable {
     }
     
     /**
+     * Retourne le nom du fichier ROM sans extension (pour compatibilité playlists/RetroArch)
+     */
+    public String getBaseName() {
+        return getBaseNameFromPath(path);
+    }
+    
+    /**
      * Initialise les chemins vers les images en utilisant ObbManager
      */
     public void initializePaths(ObbManager obbManager) {
@@ -158,23 +165,17 @@ public class Game implements java.io.Serializable {
     }
     
     /**
-     * Retourne l'URL HTTP de l'image (Glide gère automatiquement le fallback)
+     * Retourne l'URL ou le fichier de l'image principale avec fallback intelligent
      */
     public String getImageWithFallback() {
-        String baseName = getBaseNameFromPath(path);
-        // Encoder le baseName pour gérer les caractères spéciaux (+, &, %, etc.)
-        String encodedName = android.net.Uri.encode(baseName);
-        return "http://localhost:7777/gamedata/" + consoleId + "/media/box2d/" + encodedName + ".png";
+        return ArtworkResolver.resolveBoxArt(this);
     }
     
     /**
-     * Retourne l'URL HTTP de la screenshot (Glide gère automatiquement le fallback)
+     * Retourne l'URL ou le fichier de la capture d'écran avec fallback intelligent
      */
     public String getScreenshotWithFallback() {
-        String baseName = getBaseNameFromPath(path);
-        // Encoder le baseName pour gérer les caractères spéciaux (+, &, %, etc.)
-        String encodedName = android.net.Uri.encode(baseName);
-        return "http://localhost:7777/gamedata/" + consoleId + "/media/screenshot/" + encodedName + ".png";
+        return ArtworkResolver.resolveScreenshot(this);
     }
 }
 

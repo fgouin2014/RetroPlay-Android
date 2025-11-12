@@ -86,6 +86,22 @@
                 android:visibility="gone" />
         </LinearLayout>
 
+        <!-- Artwork Button -->
+        <TextView
+            android:id="@+id/artworkButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🖼"
+            android:textSize="20sp"
+            android:textColor="@color/kitt_blue"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:padding="8dp"
+            android:background="@drawable/filter_chip_background"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginEnd="8dp" />
+
         <!-- Refresh Button -->
         <TextView
             android:id="@+id/refreshButton"

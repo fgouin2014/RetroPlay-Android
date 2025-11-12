@@ -174,10 +174,11 @@ object GamePadLayoutManager {
         onButtonPress: (List<Int>) -> Unit,
         onButtonRelease: (List<Int>) -> Unit,
         onLayoutSwitch: (String) -> Unit,
-        onMenuToggle: () -> Unit
+        onMenuToggle: () -> Unit,
+        onHotkeyChange: (String, Boolean) -> Unit = { _, _ -> }
     ): LayoutPair {
         if (variant == LayoutVariant.RETROARCH) {
-            return createRetroArchLayout(console, context, prefs, onButtonPress, onButtonRelease, onLayoutSwitch, onMenuToggle)
+            return createRetroArchLayout(console, context, prefs, onButtonPress, onButtonRelease, onLayoutSwitch, onMenuToggle, onHotkeyChange)
         }
         
         // Pour les autres variantes, utiliser la méthode normale
@@ -194,7 +195,8 @@ object GamePadLayoutManager {
         onButtonPress: (List<Int>) -> Unit,
         onButtonRelease: (List<Int>) -> Unit,
         onLayoutSwitch: (String) -> Unit,
-        onMenuToggle: () -> Unit
+        onMenuToggle: () -> Unit,
+        onHotkeyChange: (String, Boolean) -> Unit
     ): LayoutPair {
         return LayoutPair(
             left = { mod, set -> 
@@ -211,7 +213,8 @@ object GamePadLayoutManager {
                     onButtonPress = onButtonPress,
                     onButtonRelease = onButtonRelease,
                     onLayoutSwitch = onLayoutSwitch,
-                    onMenuToggle = onMenuToggle
+                    onMenuToggle = onMenuToggle,
+                    onHotkeyChange = onHotkeyChange
                 )
             }
         )
@@ -230,7 +233,8 @@ object GamePadLayoutManager {
         onButtonPress: (List<Int>) -> Unit,
         onButtonRelease: (List<Int>) -> Unit,
         onLayoutSwitch: (String) -> Unit,
-        onMenuToggle: () -> Unit
+        onMenuToggle: () -> Unit,
+        onHotkeyChange: (String, Boolean) -> Unit
     ) {
         // Charger les préférences d'overlay
         val overlayPreference = remember(console) {
@@ -299,6 +303,15 @@ object GamePadLayoutManager {
             },
             onLayoutSwitch = onLayoutSwitch,
             onMenuToggle = onMenuToggle,
+            onHotkeyChange = onHotkeyChange,
+            swapAnalogSticks = overlayPreference.swapAnalogSticks,
+            invertAnalogLeftY = overlayPreference.invertAnalogLeftY,
+            invertAnalogRightY = overlayPreference.invertAnalogRightY,
+            overlayScale = overlayPreference.scale,
+            overlayXOffset = overlayPreference.xOffset,
+            overlayYOffset = overlayPreference.yOffset,
+            overlayXSeparation = overlayPreference.xSeparation,
+            overlayYSeparation = overlayPreference.ySeparation,
             modifier = modifier
         )
     }

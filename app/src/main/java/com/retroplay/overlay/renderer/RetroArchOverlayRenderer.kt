@@ -60,9 +60,11 @@ fun RetroArchOverlayScreen(
     onMenuToggle: () -> Unit = {},
     onAnalogMove: (String, Float, Float) -> Unit = { _, _, _ -> },  // Callback pour analog sticks (action, x, y)
     onHotkey: (String) -> Unit = {},  // Callback pour hotkeys RetroArch
+    onHotkeyChange: (String, Boolean) -> Unit = { _, _ -> },
     showDebug: Boolean = false,
     swapAnalogSticks: Boolean = false,
-    invertAnalogY: Boolean = false,
+    invertAnalogLeftY: Boolean = false,
+    invertAnalogRightY: Boolean = false,
     overlayScale: Float = 1.0f,            // Échelle globale (0.5-1.5)
     overlayXOffset: Float = 0.0f,          // Décalage X (-0.2 à 0.2)
     overlayYOffset: Float = 0.0f,          // Décalage Y (-0.2 à 0.2)
@@ -128,7 +130,7 @@ fun RetroArchOverlayScreen(
             .pointerInteropFilter { event ->
                 // CRITIQUE: Retourner true SEULEMENT si un bouton est touché
                 // Sinon retourner false pour laisser passer au Zapper en dessous
-                val buttonWasTouched = handleTouchEvent(
+                val handled = handleOverlayTouch(
                     event = event,
                     layout = scaledLayout,
                     screenSize = screenSize,
@@ -141,18 +143,21 @@ fun RetroArchOverlayScreen(
                     onMenuToggle = onMenuToggle,
                     onAnalogMove = onAnalogMove,
                     onHotkey = onHotkey,
+                    onHotkeyChange = onHotkeyChange,
                     swapAnalogSticks = swapAnalogSticks,
-                    invertAnalogY = invertAnalogY,
+                    invertAnalogLeftY = invertAnalogLeftY,
+                    invertAnalogRightY = invertAnalogRightY,
                     dpadDiagonalSensitivity = dpadDiagonalSensitivity,
                     abxyDiagonalSensitivity = abxyDiagonalSensitivity,
-                    analogRecenterZone = analogRecenterZone
+                    analogRecenterZone = analogRecenterZone,
+                    isZapperGame = isZapperGame
                 )
                 // Si un bouton a été touché, capturer l'événement
                 // Sinon, laisser passer au Zapper en dessous (pour jeux Duck Hunt)
                 if (isZapperGame) {
                     // Mode Zapper: Ne consommer QUE si un bouton est touché
                     // Sinon laisser passer au Zapper en dessous
-                    buttonWasTouched
+                    handled
                 } else {
                     // Mode normal: toujours consommer
                     true
@@ -186,7 +191,8 @@ fun RetroArchOverlayScreen(
                         val imageBitmap = bitmap.asImageBitmap()
                         // IMPORTANT: Utiliser button.alphaModifier si défini, sinon layout.alphaModifier
                         val effectiveAlphaMod = button.alphaModifier ?: scaledLayout.alphaModifier
-                        val baseAlpha = if (pressedButtons.values.any { it.contains(button) }) effectiveAlphaMod else (0.7f * effectiveAlphaMod)
+                        val isPressed = pressedButtons.values.any { it.contains(button) }
+                        val baseAlpha = if (isPressed) effectiveAlphaMod else (0.4f * effectiveAlphaMod)
                         val alpha = baseAlpha * overlayOpacity  // Appliquer opacity globale
                         
                         // IMPORTANT: Utiliser modW et modH pour la taille d'affichage!
@@ -355,7 +361,7 @@ fun RetroArchOverlayScreen(
 /**
  * Gestion des événements touch avec support multi-touch
  */
-private fun handleTouchEvent(
+private fun handleOverlayTouch(
     event: MotionEvent,
     layout: OverlayLayout,
     screenSize: IntSize,
@@ -368,11 +374,14 @@ private fun handleTouchEvent(
     onMenuToggle: () -> Unit,
     onAnalogMove: (String, Float, Float) -> Unit,
     onHotkey: (String) -> Unit,
+    onHotkeyChange: (String, Boolean) -> Unit,
     swapAnalogSticks: Boolean = false,
-    invertAnalogY: Boolean = false,
+    invertAnalogLeftY: Boolean = false,
+    invertAnalogRightY: Boolean = false,
     dpadDiagonalSensitivity: Int = 50,
     abxyDiagonalSensitivity: Int = 50,
-    analogRecenterZone: Int = 0  // 0-100: zone de recentrage (% du radius)
+    analogRecenterZone: Int = 0,  // 0-100: zone de recentrage (% du radius)
+    isZapperGame: Boolean = false
 ): Boolean {
     val TAG = "TouchHandler"
     val ANALOG_DEADZONE = 0.15f  // 15% dead zone (zone morte)
@@ -443,7 +452,9 @@ private fun handleTouchEvent(
                 // Calculer les valeurs avec le centre recentré si nécessaire
                 val effectiveCenterX = centerX + recenterOffsetX
                 val effectiveCenterY = centerY + recenterOffsetY
-                val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY, effectiveCenterX, effectiveCenterY)
+                val values = calculateAnalogValues(x, y, analogStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier,
+                    if (analogStick.type == OverlayButtonType.ANALOG_LEFT) invertAnalogLeftY else invertAnalogRightY,
+                    effectiveCenterX, effectiveCenterY)
                 
                 if (values != null) {
                     // Calculer l'offset visuel pour movable buttons
@@ -517,7 +528,10 @@ private fun handleTouchEvent(
                 } else if (RetroArchButtonMapping.isHotkeyAction(button.action)) {
                     // Hotkeys RetroArch (save/load/rewind/fast_forward, etc.)
                     Log.i(TAG, "HOTKEY: ${button.action} | Img='${button.imagePath}' | Touch px: ($x, $y)")
-                    onHotkey(button.action)
+                    onHotkeyChange(button.action, true)
+                    if (button.action != "rewind") {
+                        onHotkey(button.action)
+                    }
                 } else {
                     // Actions normales (boutons gamepad)
                     Log.d(TAG, "Button pressed: ${button.action}")
@@ -543,7 +557,9 @@ private fun handleTouchEvent(
                     if (leftStick != null) {
                         val centerX = leftStick.x * screenSize.width + analogLeftState.value.recenterOffsetX
                         val centerY = leftStick.y * screenSize.height + analogLeftState.value.recenterOffsetY
-                        val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY, centerX, centerY)
+                        val values = calculateAnalogValues(x, y, leftStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier,
+                            if (swapAnalogSticks) invertAnalogRightY else invertAnalogLeftY,
+                            centerX, centerY)
                         if (values != null) {
                             // Calculer l'offset visuel pour movable buttons
                             val (visualOffsetX, visualOffsetY) = if (leftStick.movable) {
@@ -573,7 +589,9 @@ private fun handleTouchEvent(
                     if (rightStick != null) {
                         val centerX = rightStick.x * screenSize.width + analogRightState.value.recenterOffsetX
                         val centerY = rightStick.y * screenSize.height + analogRightState.value.recenterOffsetY
-                        val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier, invertAnalogY, centerX, centerY)
+                        val values = calculateAnalogValues(x, y, rightStick, screenSize, ANALOG_DEADZONE, layout.rangeModifier,
+                            if (swapAnalogSticks) invertAnalogLeftY else invertAnalogRightY,
+                            centerX, centerY)
                         if (values != null) {
                             // Calculer l'offset visuel pour movable buttons
                             val (visualOffsetX, visualOffsetY) = if (rightStick.movable) {
@@ -607,7 +625,10 @@ private fun handleTouchEvent(
                     newButtons.forEach { button ->
                         if (RetroArchButtonMapping.isHotkeyAction(button.action)) {
                             Log.i(TAG, "HOTKEY (move): ${button.action}")
-                            onHotkey(button.action)
+                            onHotkeyChange(button.action, true)
+                            if (button.action != "rewind") {
+                                onHotkey(button.action)
+                            }
                         } else if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
                             Log.d(TAG, "Button pressed (move): ${button.action}")
                             onButtonPress(button.action)
@@ -650,7 +671,9 @@ private fun handleTouchEvent(
             // Relâcher tous les boutons de ce pointeur (pas les hotkeys, ils sont one-shot)
             val releasedButtons = pressedButtons[pointerId] ?: emptySet()
             releasedButtons.forEach { button ->
-                if (!RetroArchButtonMapping.isOverlayControlAction(button.action) && !RetroArchButtonMapping.isHotkeyAction(button.action)) {
+                if (RetroArchButtonMapping.isHotkeyAction(button.action)) {
+                    onHotkeyChange(button.action, false)
+                } else if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
                     Log.d(TAG, "Button released: ${button.action}")
                     onButtonRelease(button.action)
                 }
@@ -674,7 +697,9 @@ private fun handleTouchEvent(
             
             // Relâcher tous les boutons (pas les hotkeys, ils sont one-shot)
             pressedButtons.flatMap { it.value }.distinct().forEach { button ->
-                if (!RetroArchButtonMapping.isOverlayControlAction(button.action) && !RetroArchButtonMapping.isHotkeyAction(button.action)) {
+                if (RetroArchButtonMapping.isHotkeyAction(button.action)) {
+                    onHotkeyChange(button.action, false)
+                } else if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
                     Log.d(TAG, "Button released (cancel): ${button.action}")
                     onButtonRelease(button.action)
                 }

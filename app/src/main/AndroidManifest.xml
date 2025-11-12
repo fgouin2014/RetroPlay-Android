@@ -121,6 +121,14 @@
                 android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
                 android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
 
+            <!-- Screenshot Gallery Activity -->
+            <activity
+                android:name=".gallery.ScreenshotGalleryActivity"
+                android:exported="false"
+                android:screenOrientation="sensor"
+                android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+                android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
+
             <!-- Cheat Activity (Codes de triche) -->
             <activity
                 android:name=".cheat.CheatActivity"

@@ -1,12 +1,14 @@
 package com.retroplay;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
+import androidx.appcompat.widget.PopupMenu;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.content.res.ColorStateList;
 import android.widget.ArrayAdapter;
 import android.widget.ImageView;
 import android.widget.ListView;
@@ -20,16 +22,24 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.widget.Toast;
 import com.bumptech.glide.Glide;
-import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.switchmaterial.SwitchMaterial;
+import com.retroplay.database.GameInfo;
+import com.retroplay.gallery.ScreenshotRepository;
+import java.io.File;
+import androidx.core.content.ContextCompat;
 
 /**
  * Activity pour afficher les détails d'un jeu
  */
 public class GameDetailsActivity extends AppCompatActivity {
     private static final String TAG = "GameDetailsActivity";
+    private static final String GAME_INFO_DIALOG_TAG = "game_info_dialog";
+    private static final String GAME_INFO_DIALOG_RESULT_KEY = "game_info_dialog_result";
+    private static final String GAME_INFO_DIALOG_EVENT_KEY = "event";
+    private static final String GAME_INFO_DIALOG_EVENT_SHOW = "show";
+    private static final String GAME_INFO_DIALOG_EVENT_DISMISS = "dismiss";
     
     private Game game;
     private ImageView gameImage;
@@ -45,11 +55,21 @@ public class GameDetailsActivity extends AppCompatActivity {
     private MaterialButton cheatButton;
     private MaterialButton coreOverrideButton;
     private MaterialButton favoriteButton;
+    private MaterialButton viewGalleryButton;
+    private MaterialButton headerBackButton;
+    private MaterialButton headerSettingsButton;
+    private MaterialButton gameInfoButton;
+    private TextView headerTitle;
     private FrameLayout pillWasm;
     private FrameLayout pillLoad;
     private FrameLayout pillNative;
     private LinearLayout nativeButtonsContainer;
     private FavoritesManager favoritesManager;
+    
+    private String currentGameCRC;
+    private GameInfo currentGameInfo;
+    private boolean isGameInfoDialogVisible;
+    private String currentGalleryGameId;
     
     // Emulator Mode Toggle
     private SwitchMaterial emulatorModeSwitch;
@@ -82,15 +102,20 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Initialiser les variables console et gameId
         currentConsole = game.getConsole();
         currentGameId = game.getId();
+        currentGalleryGameId = ScreenshotRepository.sanitizeGameKey(game.getName());
         
         // Initialiser le manager des favoris
         favoritesManager = FavoritesManager.getInstance(this);
         
-        setupToolbar();
+        registerGameInfoDialogCallbacks();
+        
+        setupHeader();
         setupViews();
         populateGameDetails();
         setupButtons();
         setupEmulatorModeToggle();
+        
+        syncGameInfoDialogState();
     }
     
     private void setupFullscreenMode() {
@@ -107,21 +132,29 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Garder l'écran allumé
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        // Ne pas masquer la barre d'action car on utilise une Toolbar
+        // Laisser visible notre en-tête personnalisé
     }
     
-    private void setupToolbar() {
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-            getSupportActionBar().setDisplayShowHomeEnabled(true);
-        }
-        toolbar.setNavigationOnClickListener(v -> finish());
+    private void setupHeader() {
+        headerBackButton = findViewById(R.id.headerBackButton);
+        headerSettingsButton = findViewById(R.id.headerSettingsButton);
+        gameInfoButton = findViewById(R.id.game_info_button);
+        favoriteButton = findViewById(R.id.favorite_button);
+        headerTitle = findViewById(R.id.headerTitle);
         
-        // Set toolbar title
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setTitle(game.getName());
+        headerTitle.setText(game.getName());
+        headerBackButton.setOnClickListener(v -> finish());
+        headerSettingsButton.setOnClickListener(this::showSettingsMenu);
+        
+        if (gameInfoButton != null) {
+            gameInfoButton.setCheckable(true);
+            gameInfoButton.setOnClickListener(v -> handleGameInfoAction());
+            updateGameInfoButtonState();
+        }
+        
+        if (favoriteButton != null) {
+            updateFavoriteButton();
+            favoriteButton.setOnClickListener(v -> toggleFavorite());
         }
     }
     
@@ -137,6 +170,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         loadSaveButton = findViewById(R.id.load_save_button);
         cheatButton = findViewById(R.id.cheat_button);
         coreOverrideButton = findViewById(R.id.core_override_button);
+        viewGalleryButton = findViewById(R.id.view_gallery_button);
         pillWasm = findViewById(R.id.pill_wasm);
         pillLoad = findViewById(R.id.pill_load);
         pillNative = findViewById(R.id.pill_native);
@@ -158,34 +192,28 @@ public class GameDetailsActivity extends AppCompatActivity {
         // === DATABASE LOOKUP (ASYNC) ===
         // Calculate CRC and enrich metadata from database
         // ALWAYS use original file (ZIP or ROM) for accurate CRC matching
-        String fileName = game.getFile();
-        if (fileName.startsWith("http://") || fileName.startsWith("https://")) {
-            fileName = fileName.substring(fileName.lastIndexOf("/") + 1);
-        }
-        String consoleDir = getRealConsoleDirectory(game.getConsole());
-        String romPath = "/storage/emulated/0/GameLibrary-Data/" + consoleDir + "/" + fileName;
+        currentGameCRC = null;
+        currentGameInfo = null;
+        setGameInfoDialogVisible(false);
+        final String romPath = resolveRomPath();
+        Log.d(TAG, "[DB] Calculating CRC for original file: " + romPath);
         
-        // Show progress dialog
         progressDialog = new android.app.ProgressDialog(this);
         progressDialog.setMessage("Loading game metadata...");
         progressDialog.setCancelable(false);
         progressDialog.show();
         
-        // Calculate CRC on background thread
         new Thread(() -> {
-            Log.d(TAG, "[DB] Calculating CRC for original file: " + romPath);
             String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
             
-            // Lookup game info async (with progress callback)
             if (gameCRC != null) {
-                final String finalGameCRC = gameCRC; // Make final for lambda
+                final String finalGameCRC = gameCRC;
                 com.retroplay.database.DatabaseManager.INSTANCE.lookupGameAsyncJava(
                     finalGameCRC,
                     game.getConsole(),
                     new kotlin.jvm.functions.Function1<String, kotlin.Unit>() {
                         @Override
                         public kotlin.Unit invoke(String progressMessage) {
-                            // Update progress on UI thread
                             runOnUiThread(() -> {
                                 if (progressDialog != null && progressDialog.isShowing()) {
                                     progressDialog.setMessage(progressMessage);
@@ -197,7 +225,6 @@ public class GameDetailsActivity extends AppCompatActivity {
                     new kotlin.jvm.functions.Function1<com.retroplay.database.GameInfo, kotlin.Unit>() {
                         @Override
                         public kotlin.Unit invoke(com.retroplay.database.GameInfo dbGameInfo) {
-                            // Update UI on main thread
                             runOnUiThread(() -> {
                                 if (progressDialog != null && progressDialog.isShowing()) {
                                     progressDialog.dismiss();
@@ -209,7 +236,6 @@ public class GameDetailsActivity extends AppCompatActivity {
                     }
                 );
             } else {
-                // No CRC, just update UI
                 runOnUiThread(() -> {
                     if (progressDialog != null && progressDialog.isShowing()) {
                         progressDialog.dismiss();
@@ -223,7 +249,10 @@ public class GameDetailsActivity extends AppCompatActivity {
     /**
      * Update game details UI with database metadata
      */
-    private void updateGameDetailsWithMetadata(String gameCRC, com.retroplay.database.GameInfo dbGameInfo) {
+    private void updateGameDetailsWithMetadata(String gameCRC, GameInfo dbGameInfo) {
+        currentGameCRC = gameCRC;
+        currentGameInfo = dbGameInfo;
+        updateGameInfoButtonState();
         if (dbGameInfo != null) {
             Log.i(TAG, "✅ Database metadata found: " + dbGameInfo.getDisplayInfo());
         }
@@ -319,6 +348,8 @@ public class GameDetailsActivity extends AppCompatActivity {
         coreOverrideButton.setOnClickListener(v -> showCoreOverrideDialog());
         updateCoreOverrideButton();
         
+        viewGalleryButton.setOnClickListener(v -> openScreenshotGallery());
+        
         // Afficher les boutons natifs pour TOUTES les consoles
         // L'utilisateur peut maintenant choisir entre WASM et NATIVE pour n'importe quelle console
         String console = game.getConsole().toLowerCase();
@@ -342,11 +373,6 @@ public class GameDetailsActivity extends AppCompatActivity {
             Log.i(TAG, "NATIVE pill clicked - launching RetroArch");
             launchGameNative(0);  // 0 = new game
         });
-        
-        // Favorite button
-        favoriteButton = findViewById(R.id.favorite_button);
-        updateFavoriteButton();
-        favoriteButton.setOnClickListener(v -> toggleFavorite());
     }
     
     @Override
@@ -355,6 +381,10 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Rafraîchir le bouton de core override au cas où il aurait été changé
         // depuis NativeComposeEmulatorActivity (via le dialog d'erreur)
         updateCoreOverrideButton();
+        if (favoriteButton != null) {
+            updateFavoriteButton();
+        }
+        syncGameInfoDialogState();
     }
     
     private void launchGame() {
@@ -662,7 +692,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         Intent intent = new Intent(this, emulatorActivity);
         intent.putExtra("romPath", romPath);
         intent.putExtra("gameName", game.getName());
-        intent.putExtra("gameId", game.getId());
+        intent.putExtra("gameId", currentGalleryGameId);
         intent.putExtra("console", game.getConsole());
         intent.putExtra("loadSlot", slot);  // 0 = nouvelle partie, 1-5 = charger slot
         
@@ -1032,7 +1062,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         Intent intent = new Intent(this, emulatorActivity);
         intent.putExtra("romPath", romPath);
         intent.putExtra("gameName", game.getName());
-        intent.putExtra("gameId", game.getId());
+        intent.putExtra("gameId", currentGalleryGameId);
         intent.putExtra("console", game.getConsole());
         intent.putExtra("loadSlot", slot);
         
@@ -1075,7 +1105,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
         
         // Afficher le dialogue de sélection
-        new AlertDialog.Builder(this)
+        new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Load Game - " + console.toUpperCase())
                 .setItems(slotLabels, (dialog, which) -> {
                     int selectedSlot = which + 1;
@@ -1185,17 +1215,31 @@ public class GameDetailsActivity extends AppCompatActivity {
         
         Log.i(TAG, "Toggle favorite for: " + game.getName() + " - isFavorite: " + isFavorite);
     }
+
+    private void openScreenshotGallery() {
+        Intent intent = new Intent(this, com.retroplay.gallery.ScreenshotGalleryActivity.class);
+        intent.putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_CONSOLE, currentConsole);
+        intent.putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_ID, currentGalleryGameId);
+        intent.putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_NAME, game.getName());
+        startActivity(intent);
+    }
     
     private void updateFavoriteButton() {
         if (favoriteButton == null || favoritesManager == null) {
             return;
         }
         
+        ColorStateList accent = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_red));
+        ColorStateList medium = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_medium_red));
+        favoriteButton.setStrokeColor(accent);
+        favoriteButton.setBackgroundTintList(medium);
         if (favoritesManager.isFavorite(game)) {
             favoriteButton.setIconResource(R.drawable.ic_favorite_24);
+            favoriteButton.setIconTint(accent);
             game.setFavorite(true);
         } else {
             favoriteButton.setIconResource(R.drawable.ic_favorite_border_24);
+            favoriteButton.setIconTint(accent);
             game.setFavorite(false);
         }
     }
@@ -1404,7 +1448,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             }
         };
 
-        final AlertDialog dialog = new AlertDialog.Builder(this)
+        final androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Select Core for " + game.getName())
                 .setView(listView)
                 .setNegativeButton("Cancel", null)
@@ -1527,7 +1571,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     private void showRestartRequiredDialog(GamepadPreferenceManager.EmulatorMode newMode) {
         String modeName = newMode == GamepadPreferenceManager.EmulatorMode.NATIVE ? "NATIVE" : "RETROARCH";
         
-        new android.app.AlertDialog.Builder(this)
+        new androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Restart Required")
             .setMessage("Emulator mode changed to " + modeName + ".\n\nRestart the game to apply changes.")
             .setIcon(android.R.drawable.ic_dialog_info)
@@ -1545,5 +1589,229 @@ public class GameDetailsActivity extends AppCompatActivity {
             // Maintenir le mode plein écran même après perte de focus
             setupFullscreenMode();
         }
+    }
+
+    private void showArtworkUpdateOptions() {
+        String[] options = new String[]{"Download missing", "Force refresh"};
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Artwork Options")
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) {
+                        startArtworkDownloadForGame(true);
+                    } else if (which == 1) {
+                        startArtworkDownloadForGame(false);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+    
+    private void startArtworkDownloadForGame(boolean missingOnly) {
+        android.app.ProgressDialog dialog = new android.app.ProgressDialog(this);
+        dialog.setMessage(missingOnly ? "Downloading missing artwork..." : "Refreshing artwork...");
+        dialog.setCancelable(false);
+        dialog.show();
+        
+        new Thread(() -> {
+            try {
+                ArtworkDownloadHelper.DownloadResult result = ArtworkDownloadHelper.downloadArtwork(game.getConsole(), game.getBaseName(), !missingOnly, missingOnly);
+                runOnUiThread(() -> {
+                    dialog.dismiss();
+                    if (result.error != null) {
+                        Toast.makeText(this, result.error, Toast.LENGTH_LONG).show();
+                    } else if (result.hasAnyDownload()) {
+                        Toast.makeText(this, "Artwork updated", Toast.LENGTH_SHORT).show();
+                        loadGameImages();
+                    } else if (result.skipped) {
+                        Toast.makeText(this, "Artwork already present", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "Artwork not found on Libretro", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "Artwork download failed", e);
+                runOnUiThread(() -> {
+                    dialog.dismiss();
+                    Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        }).start();
+    }
+
+    private void showSettingsMenu(View anchor) {
+        PopupMenu popupMenu = new PopupMenu(this, anchor);
+        popupMenu.inflate(R.menu.menu_game_details_settings);
+
+        Menu menu = popupMenu.getMenu();
+        MenuItem gameInfoItem = menu.findItem(R.id.action_game_info);
+        if (gameInfoItem != null) {
+            gameInfoItem.setEnabled(currentGameCRC != null && !currentGameCRC.isEmpty());
+        }
+
+        popupMenu.setOnMenuItemClickListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == R.id.action_game_info) {
+                handleGameInfoAction();
+                return true;
+            } else if (itemId == R.id.action_update_artwork) {
+                showArtworkUpdateOptions();
+                return true;
+            } else if (itemId == R.id.action_console_settings) {
+                openConsoleSettings();
+                return true;
+            }
+            return false;
+        });
+        popupMenu.show();
+    }
+    
+    private void openConsoleSettings() {
+        Intent intent = new Intent(this, ConsoleConfigActivity.class);
+        intent.putExtra("console", game.getConsole());
+        startActivity(intent);
+    }
+
+    private void handleGameInfoAction() {
+        if (dismissGameInfoDialog()) {
+            return;
+        }
+        openGameInfoDialog();
+    }
+    
+    private void openGameInfoDialog() {
+        if (currentGameCRC == null || currentGameCRC.isEmpty()) {
+            Toast.makeText(this, "Game info not available yet", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        GameInfoDialogFragment.show(
+            getSupportFragmentManager(),
+            currentGameCRC,
+            game.getConsole(),
+            game.getName(),
+            currentGameInfo
+        );
+        setGameInfoDialogVisible(true);
+    }
+    
+    private GameInfoDialogFragment getGameInfoDialog() {
+        return (GameInfoDialogFragment) getSupportFragmentManager().findFragmentByTag(GAME_INFO_DIALOG_TAG);
+    }
+    
+    private boolean dismissGameInfoDialog() {
+        GameInfoDialogFragment fragment = getGameInfoDialog();
+        if (fragment != null) {
+            fragment.dismissAllowingStateLoss();
+            setGameInfoDialogVisible(false);
+            return true;
+        }
+        return false;
+    }
+    
+    private void registerGameInfoDialogCallbacks() {
+        getSupportFragmentManager().setFragmentResultListener(
+            GAME_INFO_DIALOG_RESULT_KEY,
+            this,
+            (requestKey, bundle) -> {
+                String event = bundle.getString(GAME_INFO_DIALOG_EVENT_KEY);
+                if (GAME_INFO_DIALOG_EVENT_SHOW.equals(event)) {
+                    setGameInfoDialogVisible(true);
+                } else if (GAME_INFO_DIALOG_EVENT_DISMISS.equals(event)) {
+                    setGameInfoDialogVisible(false);
+                }
+            }
+        );
+    }
+    
+    private void syncGameInfoDialogState() {
+        boolean dialogVisible = getGameInfoDialog() != null;
+        setGameInfoDialogVisible(dialogVisible);
+    }
+    
+    private void setGameInfoDialogVisible(boolean visible) {
+        if (isGameInfoDialogVisible == visible) {
+            updateGameInfoButtonState();
+            return;
+        }
+        isGameInfoDialogVisible = visible;
+        updateGameInfoButtonState();
+    }
+    
+    private void updateGameInfoButtonState() {
+        if (gameInfoButton == null) {
+            return;
+        }
+        boolean enabled = currentGameCRC != null && !currentGameCRC.isEmpty();
+        gameInfoButton.setEnabled(enabled);
+        gameInfoButton.setAlpha(enabled ? 1f : 0.5f);
+        gameInfoButton.setChecked(enabled && isGameInfoDialogVisible);
+        ColorStateList accent = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_red));
+        ColorStateList medium = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_medium_red));
+        ColorStateList iconActive = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_black));
+        if (enabled && isGameInfoDialogVisible) {
+            gameInfoButton.setBackgroundTintList(accent);
+            gameInfoButton.setIconTint(iconActive);
+            gameInfoButton.setStrokeColor(accent);
+        } else {
+            gameInfoButton.setBackgroundTintList(medium);
+            gameInfoButton.setIconTint(accent);
+            gameInfoButton.setStrokeColor(accent);
+        }
+    }
+
+    private String resolveRomPath() {
+        final String baseDir = "/storage/emulated/0/GameLibrary-Data/";
+        final String consoleDir = getRealConsoleDirectory(game.getConsole());
+
+        String fileUrl = game.getFile();
+        String relativePath = null;
+
+        if (fileUrl != null && !fileUrl.isEmpty()) {
+            if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
+                int markerIndex = fileUrl.indexOf("/gamedata/");
+                if (markerIndex >= 0) {
+                    relativePath = fileUrl.substring(markerIndex + "/gamedata/".length());
+                } else {
+                    relativePath = fileUrl.substring(fileUrl.lastIndexOf('/') + 1);
+                }
+            } else {
+                relativePath = fileUrl;
+            }
+        }
+
+        if (relativePath != null && !relativePath.isEmpty()) {
+            File directFile = new File(baseDir + relativePath);
+            if (directFile.exists()) {
+                return directFile.getAbsolutePath();
+            }
+        }
+
+        String rawPath = game.getPath();
+        if (rawPath != null && !rawPath.isEmpty()) {
+            if (rawPath.startsWith("./")) {
+                rawPath = rawPath.substring(2);
+            }
+
+            File candidate = new File(baseDir + rawPath);
+            if (candidate.exists()) {
+                return candidate.getAbsolutePath();
+            }
+
+            File remapped = new File(baseDir + consoleDir + "/" + rawPath);
+            if (remapped.exists()) {
+                return remapped.getAbsolutePath();
+            }
+        }
+
+        String fileName = "";
+        if (relativePath != null && !relativePath.isEmpty()) {
+            int lastSlash = relativePath.lastIndexOf('/');
+            fileName = lastSlash >= 0 ? relativePath.substring(lastSlash + 1) : relativePath;
+        } else if (rawPath != null && !rawPath.isEmpty()) {
+            String sanitized = rawPath.startsWith("./") ? rawPath.substring(2) : rawPath;
+            int lastSlash = sanitized.lastIndexOf('/');
+            fileName = lastSlash >= 0 ? sanitized.substring(lastSlash + 1) : sanitized;
+        }
+
+        return baseDir + consoleDir + "/" + fileName;
     }
 }

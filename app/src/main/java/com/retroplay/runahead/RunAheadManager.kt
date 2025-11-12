@@ -1,140 +1,377 @@
 package com.retroplay.runahead
 
+import android.os.SystemClock
 import android.util.Log
 import com.swordfish.libretrodroid.GLRetroView
+import com.swordfish.libretrodroid.LibretroDroid
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.abs
+import kotlin.math.max
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Run-Ahead Manager - Reduces input lag by running the core ahead of real-time.
- * 
- * Based on RetroArch's implementation (c:\repos\RetroArch-master\runahead.c)
- * 
- * How it works:
- * 1. Save current core state (savestate)
- * 2. Run core N frames ahead with current input
- * 3. Render the "future" frame (reduced lag)
- * 4. Restore the saved state
- * 5. Execute one normal frame
- * 
- * This effectively removes N frames of internal input lag from the emulated game.
- * 
- * Typical usage:
- * - Fighting games: 2-4 frames (-32ms to -66ms lag)
- * - Platformers: 1-2 frames (-16ms to -32ms lag)
- * - Shoot'em ups: 1-2 frames
- * - RPGs/Puzzle: 0 frames (not needed)
- */
 class RunAheadManager(
-    private val retroView: GLRetroView,
-    private var frames: Int = 0,
-    private var enabled: Boolean = false
-) {
+    private val retroView: GLRetroView
+) : GLRetroView.FrameInterceptor, GLRetroView.InputListener {
+
     companion object {
         private const val TAG = "RunAheadManager"
-        private const val MAX_FRAMES = 12  // RetroArch limit
+        const val MAX_FRAMES = 12
+        private const val PORT_COUNT = 4
+        private const val ANALOG_THRESHOLD = 0.01f
+        private const val POINTER_THRESHOLD = 0.005f
+        private const val INIT_RETRY_INTERVAL_MS = 500L
     }
-    
-    private var stateBuffer: ByteArray? = null
-    private var stateSize: Int = 0
-    private var frameCount: Long = 0
-    private var supported: Boolean = true
-    
-    /**
-     * Enable/disable Run-Ahead.
-     */
-    fun setEnabled(enabled: Boolean) {
-        this.enabled = enabled
-        Log.i(TAG, "Run-Ahead ${if (enabled) "ENABLED" else "DISABLED"} ($frames frames)")
+
+    private val inputDirty = AtomicBoolean(false)
+    private val statusFlow = MutableStateFlow(
+        RunAheadStatus(
+            enabled = false,
+            supported = true,
+            frames = 0,
+            framesExecuted = 0,
+            totalFrames = 0,
+            skippedFrames = 0
+        )
+    )
+
+    private val keyStates = Array(PORT_COUNT) { mutableSetOf<Int>() }
+    private val dpadState = Array(PORT_COUNT) { IntArray(2) }
+    private val analogState = Array(PORT_COUNT) { FloatArray(4) } // Lx, Ly, Rx, Ry
+    private val pointerState = Array(PORT_COUNT) { PointerState() }
+    private val mouseButtons = Array(PORT_COUNT) { BooleanArray(3) }
+
+    private var runAheadEnabled = false
+    private var runAheadFrames = 0
+
+    private var stateBuffer = ByteArray(0)
+    private var stateSize = 0
+    private var initialized = false
+    private var supported = true
+    private var lastInitializationAttempt = 0L
+
+    private var totalFrames = 0L
+    private var runAheadFramesExecuted = 0L
+    private var skippedFrames = 0L
+
+    private data class PointerState(
+        var x: Float = Float.NaN,
+        var y: Float = Float.NaN,
+        var pressed: Boolean = false
+    )
+
+    init {
+        retroView.setFrameInterceptor(this)
+        retroView.setInputListener(this)
     }
-    
-    /**
-     * Set number of frames to run ahead (0-12).
-     */
-    fun setFrames(frames: Int) {
-        this.frames = frames.coerceIn(0, MAX_FRAMES)
-        Log.i(TAG, "Run-Ahead frames set to: $frames")
+
+    fun configure(enabled: Boolean, frames: Int) {
+        val clamped = frames.coerceIn(0, MAX_FRAMES)
+        runAheadEnabled = enabled && clamped > 0
+        runAheadFrames = if (runAheadEnabled) clamped else 0
+        if (runAheadEnabled) {
+            markInputDirty()
+            ensureInitialized(force = true)
+            Log.i(TAG, "Configured run-ahead: enabled=true frames=$runAheadFrames")
+        } else {
+            Log.i(TAG, "Configured run-ahead: enabled=false")
+        }
+        publishStatus()
     }
-    
-    /**
-     * Check if the current core supports Run-Ahead (savestate API).
-     * 
-     * This should be called after the game is loaded.
-     */
-    fun checkCoreSupport(): Boolean {
+
+    fun release() {
+        retroView.setFrameInterceptor(null)
+        retroView.setInputListener(null)
+        initialized = false
+        supported = true
+        inputDirty.set(false)
+        publishStatus(resetCounters = true)
+    }
+
+    fun onSurfaceReady() {
+        if (runAheadEnabled) {
+            ensureInitialized(force = true)
+        }
+    }
+
+    private fun ensureInitialized(force: Boolean = false): Boolean {
+        if (!runAheadEnabled) {
+            return false
+        }
+        if (initialized && !force) {
+            return true
+        }
+        if (!supported && !force) {
+            return false
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastInitializationAttempt < INIT_RETRY_INTERVAL_MS) {
+            return initialized && supported
+        }
+        lastInitializationAttempt = now
         return try {
-            // Try to serialize state
-            val testState = retroView.serializeState()
-            stateSize = testState.size
-            supported = testState.isNotEmpty()
-            
-            if (supported) {
-                Log.i(TAG, "✅ Core supports Run-Ahead (savestate size: ${stateSize / 1024} KB)")
+            val state = retroView.serializeState()
+            if (state.isEmpty()) {
+                Log.w(TAG, "serializeState returned an empty buffer, disabling run-ahead")
+                initialized = false
+                supported = false
+                false
             } else {
-                Log.w(TAG, "⚠️ Core does not support Run-Ahead (empty savestate)")
+                stateSize = state.size
+                if (stateBuffer.size != stateSize) {
+                    stateBuffer = ByteArray(stateSize)
+                }
+                initialized = true
+                supported = true
+                Log.i(TAG, "Run-ahead initialized: stateSize=$stateSize bytes")
+                true
             }
-            
-            supported
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Core does not support Run-Ahead: ${e.message}")
+            Log.e(TAG, "Run-ahead initialization failed: ${e.message}", e)
+            initialized = false
             supported = false
             false
         }
     }
-    
-    /**
-     * Process one frame with Run-Ahead.
-     * 
-     * This should be called INSTEAD of retroView.step() in the game loop.
-     */
-    fun processFrame() {
-        frameCount++
-        
-        // If disabled or frames=0, just run normally
-        if (!enabled || frames == 0 || !supported) {
-            return  // GLRetroView handles frame stepping internally
+
+    override fun onBeforeFrame(): Boolean {
+        if (!runAheadEnabled) {
+            publishStatus()
+            return false
         }
-        
-        try {
-            // 1. Save current state
-            stateBuffer = retroView.serializeState()
-            
-            if (stateBuffer == null || stateBuffer!!.isEmpty()) {
-                Log.w(TAG, "Failed to serialize state, disabling Run-Ahead")
-                enabled = false
-                supported = false
-                return
+        if (!supported) {
+            if (totalFrames % 600 == 0L) {
+                Log.w(TAG, "Run-ahead skipped: current core does not support savestates")
             }
-            
-            // 2. Run N frames ahead (retroView.step() is called internally by GLRetroView)
-            // NOTE: GLRetroView runs its own game loop, so we can't manually step.
-            // Instead, we'll need to hook into the frame callback.
-            // For now, this is a placeholder for the concept.
-            
-            // 3. Rendering happens automatically
-            
-            // 4. Restore state (will happen on next frame)
-            // NOTE: This needs to be integrated into GLRetroView's rendering loop
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in Run-Ahead: ${e.message}", e)
-            enabled = false
+            publishStatus()
+            return false
+        }
+        totalFrames++
+        if (!inputDirty.get()) {
+            skippedFrames++
+            publishStatus()
+            return false
+        }
+        if (!ensureInitialized()) {
+            skippedFrames++
+            publishStatus()
+            return false
+        }
+        val handled = performRunAhead()
+        publishStatus()
+        return handled
+    }
+
+    override fun onAfterFrame(frameHandled: Boolean) {
+        if (frameHandled) {
+            runAheadFramesExecuted++
+            inputDirty.set(false)
+            publishStatus()
         }
     }
-    
-    /**
-     * Get current Run-Ahead stats for debugging.
-     */
-    fun getStats(): String {
-        return "Enabled: $enabled, Frames: $frames, State Size: ${stateSize / 1024} KB, " +
-               "Supported: $supported, Frame Count: $frameCount"
+
+    private fun performRunAhead(): Boolean {
+        val framesToRun = runAheadFrames
+        if (framesToRun <= 0) {
+            return false
+        }
+        val audioBefore = retroView.audioEnabled
+        var stateCaptured = false
+        var executedAnyFrame = false
+        return try {
+            for (index in 0..framesToRun) {
+                val lastFrame = index == framesToRun
+                if (!lastFrame) {
+                    retroView.audioEnabled = false
+                }
+                LibretroDroid.step(retroView)
+                executedAnyFrame = true
+                if (!lastFrame) {
+                    retroView.audioEnabled = audioBefore
+                }
+                if (index == 0) {
+                    val state = retroView.serializeState()
+                    if (state.isEmpty()) {
+                        Log.w(TAG, "Run-ahead state capture returned empty buffer, disabling feature")
+                        supported = false
+                        return true // avoid stepping twice
+                    }
+                    if (state.size != stateSize) {
+                        stateSize = state.size
+                        stateBuffer = ByteArray(stateSize)
+                    }
+                    System.arraycopy(state, 0, stateBuffer, 0, stateSize)
+                    stateCaptured = true
+                }
+            }
+            if (stateCaptured) {
+                val restored = retroView.unserializeState(stateBuffer)
+                if (!restored) {
+                    Log.w(TAG, "Run-ahead restore failed, disabling feature")
+                    supported = false
+                }
+            } else {
+                supported = false
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Run-ahead execution failed: ${e.message}", e)
+            supported = false
+            executedAnyFrame
+        } finally {
+            retroView.audioEnabled = audioBefore
+        }
     }
-    
-    /**
-     * Reset Run-Ahead state (call when game is reset or reloaded).
-     */
-    fun reset() {
-        stateBuffer = null
-        frameCount = 0
-        Log.d(TAG, "Run-Ahead state reset")
+
+    private fun markInputDirty() {
+        inputDirty.set(true)
+        publishStatus()
+    }
+
+    override fun onKeyEvent(port: Int, action: Int, keyCode: Int) {
+        if (port !in 0 until PORT_COUNT) return
+        val pressedKeys = keyStates[port]
+        val changed = when (action) {
+            android.view.KeyEvent.ACTION_DOWN -> pressedKeys.add(keyCode)
+            android.view.KeyEvent.ACTION_UP -> pressedKeys.remove(keyCode)
+            else -> false
+        }
+        if (changed) {
+            markInputDirty()
+        }
+    }
+
+    override fun onMotionEvent(port: Int, source: Int, xAxis: Float, yAxis: Float) {
+        if (port !in 0 until PORT_COUNT) return
+        val changed = when (source) {
+            GLRetroView.MOTION_SOURCE_DPAD -> updateDpad(port, xAxis, yAxis)
+            GLRetroView.MOTION_SOURCE_ANALOG_LEFT -> updateAnalog(analogState[port], 0, xAxis, yAxis)
+            GLRetroView.MOTION_SOURCE_ANALOG_RIGHT -> updateAnalog(analogState[port], 2, xAxis, yAxis)
+            GLRetroView.MOTION_SOURCE_POINTER -> updatePointer(port, xAxis, yAxis, pointerState[port].pressed)
+            else -> false
+        }
+        if (changed) {
+            markInputDirty()
+        }
+    }
+
+    override fun onTouchEvent(action: Int, normalizedX: Float, normalizedY: Float) {
+        val pointer = pointerState[0]
+        val pressed = action == android.view.MotionEvent.ACTION_DOWN || action == android.view.MotionEvent.ACTION_MOVE
+        val changed = updatePointer(0, normalizedX, normalizedY, pressed)
+        if (changed) {
+            pointer.pressed = pressed
+            markInputDirty()
+        }
+        if (!pressed && pointer.pressed) {
+            pointer.pressed = false
+            pointer.x = Float.NaN
+            pointer.y = Float.NaN
+        }
+    }
+
+    override fun onMouseButton(port: Int, button: Int, pressed: Boolean) {
+        if (port !in 0 until PORT_COUNT) return
+        val buttons = mouseButtons[port]
+        val index = when (button) {
+            1 -> 0
+            2 -> 1
+            3 -> 2
+            else -> return
+        }
+        if (buttons[index] != pressed) {
+            buttons[index] = pressed
+            markInputDirty()
+        }
+    }
+
+    private fun updateDpad(port: Int, xAxis: Float, yAxis: Float): Boolean {
+        val state = dpadState[port]
+        val newX = xAxis.toInt()
+        val newY = yAxis.toInt()
+        return if (state[0] != newX || state[1] != newY) {
+            state[0] = newX
+            state[1] = newY
+            true
+        } else {
+            false
+        }
+    }
+
+    private fun updateAnalog(values: FloatArray, offset: Int, xAxis: Float, yAxis: Float): Boolean {
+        var changed = false
+        if (abs(values[offset] - xAxis) > ANALOG_THRESHOLD) {
+            values[offset] = xAxis
+            changed = true
+        }
+        if (abs(values[offset + 1] - yAxis) > ANALOG_THRESHOLD) {
+            values[offset + 1] = yAxis
+            changed = true
+        }
+        return changed
+    }
+
+    private fun updatePointer(port: Int, xAxis: Float, yAxis: Float, pressed: Boolean): Boolean {
+        val state = pointerState[port]
+        var changed = false
+        if (pressed) {
+            if (state.x.isNaN() || abs(state.x - xAxis) > POINTER_THRESHOLD) {
+                state.x = xAxis
+                changed = true
+            }
+            if (state.y.isNaN() || abs(state.y - yAxis) > POINTER_THRESHOLD) {
+                state.y = yAxis
+                changed = true
+            }
+            if (!state.pressed) {
+                state.pressed = true
+                changed = true
+            }
+        } else if (state.pressed) {
+            state.pressed = false
+            state.x = Float.NaN
+            state.y = Float.NaN
+            changed = true
+        }
+        return changed
+    }
+
+    fun getStats(): String {
+        val total = max(1L, totalFrames)
+        val runAheadRatio = (runAheadFramesExecuted * 100) / total
+        val skippedRatio = (skippedFrames * 100) / total
+        return "enabled=$runAheadEnabled frames=$runAheadFrames supported=$supported total=$total runAhead=$runAheadFramesExecuted (${runAheadRatio}%) skipped=$skippedFrames (${skippedRatio}%)"
+    }
+
+    fun status(): StateFlow<RunAheadStatus> = statusFlow.asStateFlow()
+
+    private fun publishStatus(resetCounters: Boolean = false) {
+        if (resetCounters) {
+            totalFrames = 0
+            runAheadFramesExecuted = 0
+            skippedFrames = 0
+        }
+        statusFlow.value = RunAheadStatus(
+            enabled = runAheadEnabled,
+            supported = supported,
+            frames = runAheadFrames,
+            framesExecuted = runAheadFramesExecuted,
+            totalFrames = totalFrames,
+            skippedFrames = skippedFrames
+        )
+    }
+
+    data class RunAheadStatus(
+        val enabled: Boolean,
+        val supported: Boolean,
+        val frames: Int,
+        val framesExecuted: Long,
+        val totalFrames: Long,
+        val skippedFrames: Long
+    ) {
+        val effectiveFrames: Int get() = if (supported && enabled) frames else 0
+        val hitRatio: Int get() = if (totalFrames == 0L) 0 else ((framesExecuted * 100) / totalFrames).toInt()
+        val skipRatio: Int get() = if (totalFrames == 0L) 0 else ((skippedFrames * 100) / totalFrames).toInt()
     }
 }
-

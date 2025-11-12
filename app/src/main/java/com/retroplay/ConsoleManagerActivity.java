@@ -25,7 +25,10 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import com.retroplay.R;
 
 public class ConsoleManagerActivity extends AppCompatActivity {
@@ -62,6 +65,12 @@ public class ConsoleManagerActivity extends AppCompatActivity {
         
         recyclerView = findViewById(R.id.consolesRecyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        
+        MaterialButton updateAllArtworksButton = findViewById(R.id.updateAllArtworksButton);
+        updateAllArtworksButton.setOnClickListener(v -> showGlobalArtworkDialog(false));
+        
+        MaterialButton fillMissingArtworksButton = findViewById(R.id.fillMissingArtworksButton);
+        fillMissingArtworksButton.setOnClickListener(v -> showGlobalArtworkDialog(true));
         
         MaterialButton scanAllButton = findViewById(R.id.scanAllButton);
         scanAllButton.setOnClickListener(v -> scanAllConsoles());
@@ -1976,6 +1985,8 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                 String extensions = String.join(", ", console.extensions);
                 scanRomsAndGenerateGamelist(console.id, extensions);
             });
+            
+            holder.artworkButton.setOnClickListener(v -> showArtworkOptionsForConsole(console));
         }
         
         @Override
@@ -1992,6 +2003,7 @@ public class ConsoleManagerActivity extends AppCompatActivity {
             TextView autoScanBadge;
             TextView editButton;
             TextView refreshButton;
+            TextView artworkButton;
             
             ViewHolder(View itemView) {
                 super(itemView);
@@ -2003,6 +2015,7 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                 autoScanBadge = itemView.findViewById(R.id.consoleAutoScanBadge);
                 editButton = itemView.findViewById(R.id.editButton);
                 refreshButton = itemView.findViewById(R.id.refreshButton);
+                artworkButton = itemView.findViewById(R.id.artworkButton);
             }
         }
     }
@@ -2605,6 +2618,158 @@ public class ConsoleManagerActivity extends AppCompatActivity {
         }
         
         return filesCopied;
+    }
+    
+    private void showGlobalArtworkDialog(boolean missingOnly) {
+        if (consoles == null || consoles.isEmpty()) {
+            android.widget.Toast.makeText(this, "No consoles configured", android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String title = missingOnly ? "Download Missing Artwork" : "Refresh All Artwork";
+        String message = missingOnly ?
+                "Download missing boxarts and screenshots for all consoles?" :
+                "Download and replace all boxarts and screenshots for all consoles?";
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("Start", (dialog, which) -> downloadArtworksForConsoles(new ArrayList<>(consoles), missingOnly))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+    
+    private void showArtworkOptionsForConsole(ConsoleConfig console) {
+        if (console == null) {
+            return;
+        }
+        String[] options = new String[]{"Download missing", "Download all"};
+        new AlertDialog.Builder(this)
+                .setTitle("Artwork - " + console.name)
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) {
+                        downloadArtworksForConsoles(Collections.singletonList(console), true);
+                    } else if (which == 1) {
+                        downloadArtworksForConsoles(Collections.singletonList(console), false);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+    
+    private void downloadArtworksForConsoles(List<ConsoleConfig> targetConsoles, boolean missingOnly) {
+        if (targetConsoles == null || targetConsoles.isEmpty()) {
+            android.widget.Toast.makeText(this, "No consoles selected", android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
+        progressDialog.setTitle(missingOnly ? "Downloading Missing Art" : "Refreshing Art");
+        progressDialog.setMessage("Preparing...");
+        progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+        progressDialog.setIndeterminate(true);
+        progressDialog.setCancelable(false);
+        progressDialog.show();
+        
+        new Thread(() -> {
+            Map<ConsoleConfig, List<String>> romMap = new HashMap<>();
+            int totalGames = 0;
+            for (ConsoleConfig console : targetConsoles) {
+                List<String> roms = getRomBaseNames(console.id);
+                romMap.put(console, roms);
+                totalGames += roms.size();
+            }
+            
+            if (totalGames == 0) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    android.widget.Toast.makeText(this, "No ROMs found for selected consoles", android.widget.Toast.LENGTH_LONG).show();
+                });
+                return;
+            }
+            
+            final int maxProgress = totalGames;
+            runOnUiThread(() -> {
+                progressDialog.setIndeterminate(false);
+                progressDialog.setMax(maxProgress);
+                progressDialog.setProgress(0);
+            });
+            
+            int processed = 0;
+            int downloaded = 0;
+            int skipped = 0;
+            int errors = 0;
+            StringBuilder errorLog = new StringBuilder();
+            
+            for (ConsoleConfig console : targetConsoles) {
+                List<String> roms = romMap.get(console);
+                if (roms == null || roms.isEmpty()) {
+                    continue;
+                }
+                
+                for (String baseName : roms) {
+                    final String progressMessage = console.name + " - " + baseName;
+                    runOnUiThread(() -> progressDialog.setMessage(progressMessage));
+                    
+                    try {
+                        ArtworkDownloadHelper.DownloadResult result = ArtworkDownloadHelper.downloadArtwork(console.id, baseName, !missingOnly, missingOnly);
+                        if (result.error != null) {
+                            errors++;
+                            errorLog.append(console.name).append(" / ").append(baseName).append(": ").append(result.error).append("\n");
+                        } else if (result.hasAnyDownload()) {
+                            downloaded++;
+                        } else if (result.skipped) {
+                            skipped++;
+                        }
+                    } catch (Exception e) {
+                        errors++;
+                        errorLog.append(console.name).append(" / ").append(baseName).append(": ").append(e.getMessage()).append("\n");
+                        Log.e(TAG, "Artwork download failed", e);
+                    }
+                    
+                    processed++;
+                    final int currentProgress = processed;
+                    runOnUiThread(() -> progressDialog.setProgress(currentProgress));
+                }
+            }
+            
+            final int processedFinal = processed;
+            final int downloadedFinal = downloaded;
+            final int skippedFinal = skipped;
+            final int errorsFinal = errors;
+            final String errorSummary = errorLog.toString();
+            
+            runOnUiThread(() -> {
+                progressDialog.dismiss();
+                StringBuilder summary = new StringBuilder();
+                summary.append("Games processed: ").append(processedFinal).append("\n");
+                summary.append("Downloaded: ").append(downloadedFinal).append("\n");
+                summary.append("Skipped: ").append(skippedFinal).append("\n");
+                if (errorsFinal > 0) {
+                    summary.append("Errors: ").append(errorsFinal).append("\n\n").append(errorSummary);
+                }
+                new AlertDialog.Builder(this)
+                        .setTitle("Artwork Download")
+                        .setMessage(summary.toString())
+                        .setPositiveButton("OK", null)
+                        .show();
+            });
+        }).start();
+    }
+    
+    private List<String> getRomBaseNames(String consoleId) {
+        List<String> roms = new ArrayList<>();
+        File consoleDir = new File(GAMELIBRARY_DIR + "/" + consoleId);
+        if (!consoleDir.exists() || !consoleDir.isDirectory()) {
+            return roms;
+        }
+        File[] files = consoleDir.listFiles();
+        if (files == null) {
+            return roms;
+        }
+        for (File file : files) {
+            if (file.isFile() && isRomFile(file.getName())) {
+                roms.add(getBaseNameFromFile(file.getName()));
+            }
+        }
+        return roms;
     }
 }
 

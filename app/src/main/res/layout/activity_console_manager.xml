@@ -40,6 +40,52 @@
             android:layout_marginStart="12dp" />
     </LinearLayout>
 
+    <!-- Buttons for global artwork updates -->
+    <LinearLayout
+        android:id="@+id/artworkGlobalButtons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="8dp"
+        android:gravity="center">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/updateAllArtworksButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:text="UPDATE ALL ART"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            app:icon="@android:drawable/ic_menu_upload"
+            app:iconGravity="textStart"
+            app:backgroundTint="@color/kitt_blue"
+            android:textColor="@android:color/white"
+            app:cornerRadius="0dp"
+            android:layout_marginEnd="4dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/fillMissingArtworksButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:text="FILL MISSING ART"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            app:icon="@android:drawable/ic_menu_gallery"
+            app:iconGravity="textStart"
+            app:backgroundTint="@color/kitt_green_alpha"
+            android:textColor="@android:color/white"
+            app:cornerRadius="0dp"
+            android:layout_marginStart="4dp" />
+
+    </LinearLayout>
+
     <!-- Liste des consoles -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/consolesRecyclerView"

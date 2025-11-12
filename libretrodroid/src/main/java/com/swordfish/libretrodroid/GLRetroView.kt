@@ -80,6 +80,11 @@ class GLRetroView(
 
     private var lifecycle: Lifecycle? = null
 
+    @Volatile
+    private var inputListener: InputListener? = null
+
+    private var frameInterceptor: FrameInterceptor? = null
+
     init {
         openGLESVersion = getGLESVersion(context)
         preserveEGLContextOnPause = true
@@ -122,10 +127,12 @@ class GLRetroView(
     }
 
     fun sendKeyEvent(action: Int, keyCode: Int, port: Int = 0) {
+        inputListener?.onKeyEvent(port, action, keyCode)
         queueEvent { LibretroDroid.onKeyEvent(port, action, keyCode) }
     }
 
     fun sendMotionEvent(source: Int, xAxis: Float, yAxis: Float, port: Int = 0) {
+        inputListener?.onMotionEvent(port, source, xAxis, yAxis)
         queueEvent { LibretroDroid.onMotionEvent(port, source, xAxis, yAxis) }
     }
     
@@ -136,6 +143,7 @@ class GLRetroView(
      * @param port Controller port (default 0)
      */
     fun sendMouseButton(button: Int, pressed: Boolean, port: Int = 0) {
+        inputListener?.onMouseButton(port, button, pressed)
         queueEvent { LibretroDroid.onMouseButton(port, button, if (pressed) 1 else 0) }
     }
 
@@ -151,6 +159,7 @@ class GLRetroView(
         }
 
         if (position != null) {
+            inputListener?.onTouchEvent(event?.actionMasked ?: MotionEvent.ACTION_CANCEL, position.x, position.y)
             LibretroDroid.onTouchEvent(position.x, position.y)
         }
 
@@ -322,7 +331,12 @@ class GLRetroView(
     inner class Renderer : GLSurfaceView.Renderer {
         override fun onDrawFrame(gl: GL10) = catchExceptions {
             if (isEmulationReady) {
-                LibretroDroid.step(this@GLRetroView)
+                val interceptor = frameInterceptor
+                val handled = interceptor?.onBeforeFrame() ?: false
+                if (!handled) {
+                    LibretroDroid.step(this@GLRetroView)
+                }
+                interceptor?.onAfterFrame(handled)
                 lifecycle?.coroutineScope?.launch {
                     retroGLEventsSubject.emit(GLRetroEvents.FrameRendered)
                 }
@@ -503,6 +517,33 @@ class GLRetroView(
     sealed class GLRetroEvents {
         object FrameRendered: GLRetroEvents()
         object SurfaceCreated: GLRetroEvents()
+    }
+
+    fun setFrameInterceptor(interceptor: FrameInterceptor?) {
+        queueEvent { frameInterceptor = interceptor }
+    }
+
+    fun setInputListener(listener: InputListener?) {
+        inputListener = listener
+    }
+
+    interface FrameInterceptor {
+        /**
+         * @return true if the frame has been fully handled and the default Libretro step should be skipped.
+         */
+        fun onBeforeFrame(): Boolean
+
+        /**
+         * Called after the frame has been rendered. The parameter indicates whether onBeforeFrame handled the frame.
+         */
+        fun onAfterFrame(frameHandled: Boolean)
+    }
+
+    interface InputListener {
+        fun onKeyEvent(port: Int, action: Int, keyCode: Int)
+        fun onMotionEvent(port: Int, source: Int, xAxis: Float, yAxis: Float)
+        fun onTouchEvent(action: Int, normalizedX: Float, normalizedY: Float)
+        fun onMouseButton(port: Int, button: Int, pressed: Boolean)
     }
 
     companion object {

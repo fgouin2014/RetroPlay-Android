@@ -12,30 +12,39 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.retroplay.R
+import java.util.Locale
 import kotlinx.coroutines.delay
 
 /**
  * Quick Actions Bar - Variante F (Hybrid)
- * 
- * Barre overlay pour actions rapides en jeu :
+ *
  * - Mode compact : Mini-icons + menu [⋮]
  * - Mode expand : Barre complète avec toutes les actions
- * - Auto-collapse après 3s
+ * - Auto-collapse après 6s
  * - Quick toggles directs sur états visibles
  */
 @Composable
 fun QuickActionsBar(
     isFastForwardActive: Boolean,
     audioMuted: Boolean,
+    isRewindSupported: Boolean,
+    isRewinding: Boolean,
+    rewindDurationSeconds: Float,
+    onRewindPress: () -> Unit,
+    onRewindRelease: () -> Unit,
     onToggleFastForward: () -> Unit,
     onToggleAudioMute: () -> Unit,
     onQuickSave: () -> Unit,
@@ -45,18 +54,15 @@ fun QuickActionsBar(
     currentShaderName: String = "None",
     modifier: Modifier = Modifier
 ) {
-    // État expand/collapse
     var isExpanded by remember { mutableStateOf(false) }
-    
-    // Auto-collapse après 3 secondes
+
     LaunchedEffect(isExpanded) {
         if (isExpanded) {
-            delay(3000)
+            delay(6000)
             isExpanded = false
         }
     }
-    
-    // Animation pulse pour Fast Forward actif
+
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val ffPulseAlpha by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -67,9 +73,7 @@ fun QuickActionsBar(
         ),
         label = "ff_pulse"
     )
-    
-    // Récupérer le padding de la status bar pour éviter le cutout
-    // En mode fullscreen, utiliser un padding minimum de 40dp pour le cutout
+
     val view = LocalView.current
     val density = LocalDensity.current
     val statusBarHeight = remember {
@@ -77,16 +81,15 @@ fun QuickActionsBar(
             val insets = ViewCompat.getRootWindowInsets(view)
             val topInset = insets?.getInsets(WindowInsetsCompat.Type.systemBars())?.top ?: 0
             val heightDp = with(density) { topInset.toDp() }
-            // Si 0 (fullscreen), utiliser 40dp minimum pour le cutout
             if (heightDp.value < 5f) 40.dp else heightDp
         }
     }
-    
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = statusBarHeight.value)  // Padding pour éviter le cutout (min 40dp)
-            .background(Color(0x80000000))  // Noir 50% transparent
+            .padding(top = statusBarHeight.value)
+            .background(Color(0x80000000))
             .animateContentSize(
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -95,11 +98,15 @@ fun QuickActionsBar(
             )
     ) {
         if (isExpanded) {
-            // MODE EXPAND : Barre complète
             ExpandedBar(
                 isFastForwardActive = isFastForwardActive,
                 audioMuted = audioMuted,
+                isRewindSupported = isRewindSupported,
+                isRewinding = isRewinding,
+                rewindDurationSeconds = rewindDurationSeconds,
                 ffPulseAlpha = ffPulseAlpha,
+                onRewindPress = onRewindPress,
+                onRewindRelease = onRewindRelease,
                 onToggleFastForward = onToggleFastForward,
                 onToggleAudioMute = onToggleAudioMute,
                 onQuickSave = onQuickSave,
@@ -110,11 +117,15 @@ fun QuickActionsBar(
                 onCollapse = { isExpanded = false }
             )
         } else {
-            // MODE COMPACT : Mini-icons + menu
             CompactBar(
                 isFastForwardActive = isFastForwardActive,
                 audioMuted = audioMuted,
+                isRewindSupported = isRewindSupported,
+                isRewinding = isRewinding,
+                rewindDurationSeconds = rewindDurationSeconds,
                 ffPulseAlpha = ffPulseAlpha,
+                onRewindPress = onRewindPress,
+                onRewindRelease = onRewindRelease,
                 onToggleFastForward = onToggleFastForward,
                 onToggleAudioMute = onToggleAudioMute,
                 onExpand = { isExpanded = true },
@@ -124,19 +135,25 @@ fun QuickActionsBar(
     }
 }
 
-/**
- * Mode Compact : Seulement états actifs + icône menu
- */
 @Composable
 private fun CompactBar(
     isFastForwardActive: Boolean,
     audioMuted: Boolean,
+    isRewindSupported: Boolean,
+    isRewinding: Boolean,
+    rewindDurationSeconds: Float,
     ffPulseAlpha: Float,
+    onRewindPress: () -> Unit,
+    onRewindRelease: () -> Unit,
     onToggleFastForward: () -> Unit,
     onToggleAudioMute: () -> Unit,
     onExpand: () -> Unit,
     currentShaderName: String = "None"
 ) {
+    val rewindLabel = remember(rewindDurationSeconds) {
+        String.format(Locale.US, "%.1fs", rewindDurationSeconds.coerceAtLeast(0f))
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -145,12 +162,35 @@ private fun CompactBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // États actifs à gauche
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Fast Forward (si actif)
+            Row(
+                modifier = Modifier
+                    .pressAndHold(onRewindPress, onRewindRelease)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val rewindColor = when {
+                    isRewinding -> Color(0xFF03A9F4)
+                    isRewindSupported -> Color(0xFF90CAF9)
+                    else -> Color.White.copy(alpha = 0.5f)
+                }
+                Text(
+                    text = "RW",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = rewindColor
+                )
+                Text(
+                    text = rewindLabel,
+                    fontSize = 12.sp,
+                    color = rewindColor.copy(alpha = 0.9f)
+                )
+            }
+
             AnimatedVisibility(
                 visible = isFastForwardActive,
                 enter = fadeIn() + expandHorizontally(),
@@ -176,8 +216,7 @@ private fun CompactBar(
                     )
                 }
             }
-            
-            // Audio Muted (si muted)
+
             AnimatedVisibility(
                 visible = audioMuted,
                 enter = fadeIn() + expandHorizontally(),
@@ -192,8 +231,7 @@ private fun CompactBar(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
-            
-            // Shader actif (si différent de None)
+
             if (currentShaderName != "None (Fast)") {
                 Row(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -206,16 +244,15 @@ private fun CompactBar(
                         color = Color(0xFF9C27B0)
                     )
                     Text(
-                        text = currentShaderName.take(6),  // 6 caractères max en mode compact
+                        text = currentShaderName.take(6),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFF9C27B0)
                     )
                 }
             }
-            
-            // Si rien d'actif, afficher placeholder
-            if (!isFastForwardActive && !audioMuted && currentShaderName == "None (Fast)") {
+
+            if (!isFastForwardActive && !audioMuted && currentShaderName == "None (Fast)" && (!isRewindSupported || rewindDurationSeconds <= 0f)) {
                 Text(
                     text = "RetroPlay",
                     fontSize = 12.sp,
@@ -223,8 +260,7 @@ private fun CompactBar(
                 )
             }
         }
-        
-        // Icône menu à droite
+
         IconButton(
             onClick = onExpand,
             modifier = Modifier.size(36.dp)
@@ -239,13 +275,15 @@ private fun CompactBar(
     }
 }
 
-/**
- * Mode Expand : Barre complète avec toutes les actions
- */
 @Composable
 private fun ExpandedBar(
     isFastForwardActive: Boolean,
     audioMuted: Boolean,
+    isRewindSupported: Boolean,
+    isRewinding: Boolean,
+    rewindDurationSeconds: Float,
+    onRewindPress: () -> Unit,
+    onRewindRelease: () -> Unit,
     ffPulseAlpha: Float,
     onToggleFastForward: () -> Unit,
     onToggleAudioMute: () -> Unit,
@@ -256,6 +294,10 @@ private fun ExpandedBar(
     currentShaderName: String,
     onCollapse: () -> Unit
 ) {
+    val rewindLabel = remember(rewindDurationSeconds) {
+        if (rewindDurationSeconds <= 0f) "" else String.format(Locale.US, "%.1fs", rewindDurationSeconds)
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -264,7 +306,15 @@ private fun ExpandedBar(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Fast Forward
+        ActionButton(
+            icon = "RW",
+            label = rewindLabel,
+            isActive = isRewinding,
+            activeColor = Color(0xFF03A9F4),
+            onPress = onRewindPress,
+            onRelease = onRewindRelease
+        )
+
         ActionButton(
             icon = "⚡",
             label = if (isFastForwardActive) "2x" else "",
@@ -273,8 +323,7 @@ private fun ExpandedBar(
             alpha = if (isFastForwardActive) ffPulseAlpha else 1f,
             onClick = onToggleFastForward
         )
-        
-        // Audio Mute
+
         ActionButton(
             icon = if (audioMuted) "🔇" else "🔊",
             label = "",
@@ -282,41 +331,36 @@ private fun ExpandedBar(
             activeColor = Color(0xFFF44336),
             onClick = onToggleAudioMute
         )
-        
-        // Quick Save
+
         ActionButton(
             icon = "💾",
             label = "",
             isActive = false,
             onClick = onQuickSave
         )
-        
-        // Quick Load
+
         ActionButton(
             icon = "📂",
             label = "",
             isActive = false,
             onClick = onQuickLoad
         )
-        
-        // Shader Cycle (Quick Win #4) - Afficher le nom du shader
+
         ActionButton(
             icon = "🎨",
-            label = currentShaderName.take(8),  // 8 premiers caractères max
+            label = currentShaderName.take(8),
             isActive = currentShaderName != "None (Fast)",
-            activeColor = Color(0xFF9C27B0),  // Purple pour shader actif
+            activeColor = Color(0xFF9C27B0),
             onClick = onCycleShader
         )
-        
-        // Settings
+
         ActionButton(
             icon = "⚙️",
             label = "",
             isActive = false,
             onClick = onOpenSettings
         )
-        
-        // Collapse button
+
         IconButton(
             onClick = onCollapse,
             modifier = Modifier.size(40.dp)
@@ -330,9 +374,6 @@ private fun ExpandedBar(
     }
 }
 
-/**
- * Bouton d'action avec icône et label optionnel
- */
 @Composable
 private fun ActionButton(
     icon: String,
@@ -340,35 +381,58 @@ private fun ActionButton(
     isActive: Boolean,
     activeColor: Color = Color.White,
     alpha: Float = 1f,
-    onClick: () -> Unit
+    onClick: (() -> Unit)? = null,
+    onPress: (() -> Unit)? = null,
+    onRelease: (() -> Unit)? = null,
+    enabled: Boolean = true
 ) {
     val color by animateColorAsState(
         targetValue = if (isActive) activeColor else Color.White,
         animationSpec = tween(300),
         label = "button_color"
     )
-    
+
+    val contentColor = if (enabled) color else Color.White.copy(alpha = 0.4f)
+    val contentAlpha = if (enabled) alpha else 0.4f
+
+    var modifier = Modifier.padding(8.dp)
+    modifier = when {
+        onPress != null && onRelease != null -> modifier.pressAndHold(onPress, onRelease)
+        onClick != null -> modifier.clickable(enabled = enabled) { onClick() }
+        else -> modifier
+    }
+
     Column(
-        modifier = Modifier
-            .clickable { onClick() }
-            .padding(8.dp),
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text(
             text = icon,
             fontSize = 28.sp,
-            color = color.copy(alpha = alpha)
+            color = contentColor.copy(alpha = contentAlpha)
         )
-        
+
         if (label.isNotEmpty()) {
             Text(
                 text = label,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
-                color = color.copy(alpha = alpha)
+                color = contentColor.copy(alpha = contentAlpha)
             )
         }
+    }
+}
+
+private fun Modifier.pressAndHold(
+    onPress: () -> Unit,
+    onRelease: () -> Unit
+): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown()
+        onPress()
+        val up = waitForUpOrCancellation()
+        onRelease()
     }
 }
 

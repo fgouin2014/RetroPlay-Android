@@ -295,6 +295,11 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
                // Setup console selector
                consoleSelectorButton.setOnClickListener(v -> showConsoleSelector());
+               // Overflow menu (long press, no UI change)
+               consoleSelectorButton.setOnLongClickListener(v -> {
+                   showOverflowMenu(v);
+                   return true;
+               });
                
                // Setup favorites button
                favoritesButton.setOnClickListener(v -> openFavorites());
@@ -328,6 +333,19 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                
                // Setup alphabetical pagination
                setupAlphabetPagination();
+    }
+
+    private void showOverflowMenu(View anchor) {
+        androidx.appcompat.widget.PopupMenu popup = new androidx.appcompat.widget.PopupMenu(this, anchor);
+        popup.getMenu().add(Menu.NONE, 1, 0, "Open Gallery");
+        popup.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == 1) {
+                openConsoleGallery();
+                return true;
+            }
+            return false;
+        });
+        popup.show();
     }
     
     private void setupRecyclerView() {

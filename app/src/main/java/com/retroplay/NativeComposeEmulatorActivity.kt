@@ -362,6 +362,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
 
     private fun endRewind() {
         rewindManager?.stopRewind()
+        // Capture a screenshot at the end of rewind for Gallery
+        takeScreenshot()
     }
 
     private fun notifyRewindUnavailable() {
@@ -1548,6 +1550,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             Log.i(TAG, "[$console] Game state saved to slot $slot: ${saveFile.absolutePath}")
             runOnUiThread {
                 Toast.makeText(this, "[$console] Saved to Slot $slot", Toast.LENGTH_SHORT).show()
+                // Auto-capture screenshot for Gallery
+                takeScreenshot()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error saving game state to slot $slot", e)

@@ -2480,6 +2480,7 @@ private fun ComposeEmulatorScreen(
                 }
 
                 if (showGameInfoDialog.value) {
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
                     val currentCrc = gameCRC
                     val gameInfo = currentCrc?.let { com.retroplay.database.DatabaseManager.lookupGame(it, console) }
                     val cheatFile = gameInfo?.let { com.retroplay.database.DatabaseManager.getCheatsPath(it, console) }
@@ -2496,12 +2497,12 @@ private fun ComposeEmulatorScreen(
                         },
                         onOpenGallery = {
                             showGameInfoDialog.value = false
-                            val intent = Intent(activityRef, com.retroplay.gallery.ScreenshotGalleryActivity::class.java).apply {
+                            val intent = Intent(ctx, com.retroplay.gallery.ScreenshotGalleryActivity::class.java).apply {
                                 putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_CONSOLE, console)
                                 putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_ID, galleryGameId)
                                 putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_NAME, gameName)
                             }
-                            activityRef.startActivity(intent)
+                            ctx.startActivity(intent)
                         }
                     )
                 }

@@ -18,6 +18,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.button.MaterialButton;
@@ -297,7 +298,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                consoleSelectorButton.setOnClickListener(v -> showConsoleSelector());
                // Overflow menu (long press, no UI change)
                consoleSelectorButton.setOnLongClickListener(v -> {
-                   showOverflowMenu(v);
+                   showOverflowMenuSheet();
                    return true;
                });
                
@@ -335,17 +336,47 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                setupAlphabetPagination();
     }
 
-    private void showOverflowMenu(View anchor) {
-        androidx.appcompat.widget.PopupMenu popup = new androidx.appcompat.widget.PopupMenu(this, anchor);
-        popup.getMenu().add(Menu.NONE, 1, 0, "Open Gallery");
-        popup.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == 1) {
-                openConsoleGallery();
-                return true;
-            }
-            return false;
+    private void showOverflowMenuSheet() {
+        BottomSheetDialog sheet = new BottomSheetDialog(this);
+
+        android.widget.ScrollView scrollView = new android.widget.ScrollView(this);
+        scrollView.setFillViewport(true);
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (getResources().getDisplayMetrics().density * 16);
+        container.setPadding(pad, pad, pad, pad);
+
+        // Helper to add a button
+        java.util.function.BiConsumer<String, Runnable> addItem = (label, action) -> {
+            MaterialButton btn = new MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            btn.setText(label);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            lp.topMargin = pad / 2;
+            btn.setLayoutParams(lp);
+            btn.setOnClickListener(v -> {
+                sheet.dismiss();
+                action.run();
+            });
+            container.addView(btn);
+        };
+
+        addItem.accept("Open Gallery (Console)", this::openConsoleGallery);
+        addItem.accept("Favorites", this::openFavorites);
+        addItem.accept("Console Manager", this::openConsoleManager);
+        addItem.accept("Console Config", this::openConsoleConfig);
+        addItem.accept("Random Game", this::selectRandomGame);
+        addItem.accept("Pagination…", this::showPagination);
+        addItem.accept(searchAllConsoles ? "Search Scope: ALL (tap to switch)" : "Search Scope: CURRENT (tap to switch)", () -> {
+            toggleSearchScope();
         });
-        popup.show();
+
+        scrollView.addView(container, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ));
+        sheet.setContentView(scrollView);
+        sheet.show();
     }
     
     private void setupRecyclerView() {

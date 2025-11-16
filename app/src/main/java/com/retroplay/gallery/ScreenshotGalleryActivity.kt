@@ -45,7 +45,11 @@ class ScreenshotGalleryActivity : ComponentActivity() {
                 }
                 ScreenshotGalleryScreen(
                     state = state,
-                    title = gameName,
+                    title = if (gameId == com.retroplay.gallery.ScreenshotRepository.ALL_GAMES_KEY) {
+                        "${console.upperCaseOrSelf()} Gallery"
+                    } else {
+                        gameName
+                    },
                     onBack = { finish() }
                 )
             }
@@ -56,6 +60,14 @@ class ScreenshotGalleryActivity : ComponentActivity() {
         const val EXTRA_CONSOLE = "console"
         const val EXTRA_GAME_ID = "gameId"
         const val EXTRA_GAME_NAME = "gameName"
+    }
+}
+
+private fun String.upperCaseOrSelf(): String {
+    return try {
+        this.uppercase()
+    } catch (e: Exception) {
+        this
     }
 }
 

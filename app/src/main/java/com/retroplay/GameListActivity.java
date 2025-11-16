@@ -1099,7 +1099,19 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         });
         
         builder.setNegativeButton("Annuler", (dialog, which) -> dialog.dismiss());
+        builder.setNeutralButton("GALLERY", (dialog, which) -> {
+            dialog.dismiss();
+            openConsoleGallery();
+        });
         builder.show();
+    }
+
+    private void openConsoleGallery() {
+        Intent intent = new Intent(this, com.retroplay.gallery.ScreenshotGalleryActivity.class);
+        intent.putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_CONSOLE, currentConsole);
+        intent.putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_ID, com.retroplay.gallery.ScreenshotRepository.ALL_GAMES_KEY);
+        // Title will be derived in activity when ALL_GAMES_KEY is used
+        startActivity(intent);
     }
     
     private void switchToConsole(String console) {

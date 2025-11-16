@@ -2495,12 +2495,13 @@ private fun ComposeEmulatorScreen(
                         },
                         onOpenGallery = {
                             showGameInfoDialog.value = false
-                            val intent = Intent(this@NativeComposeEmulatorActivity, com.retroplay.gallery.ScreenshotGalleryActivity::class.java).apply {
+                            val ctx = androidx.compose.ui.platform.LocalContext.current
+                            val intent = Intent(ctx, com.retroplay.gallery.ScreenshotGalleryActivity::class.java).apply {
                                 putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_CONSOLE, console)
-                                putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_ID, screenshotGameId)
+                                putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_ID, galleryGameId)
                                 putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_NAME, gameName)
                             }
-                            startActivity(intent)
+                            ctx.startActivity(intent)
                         }
                     )
                 }

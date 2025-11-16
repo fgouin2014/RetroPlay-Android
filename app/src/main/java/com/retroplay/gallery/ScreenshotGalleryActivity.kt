@@ -45,11 +45,9 @@ class ScreenshotGalleryActivity : ComponentActivity() {
                 }
                 ScreenshotGalleryScreen(
                     state = state,
-                    title = if (gameId == com.retroplay.gallery.ScreenshotRepository.ALL_GAMES_KEY) {
-                        "${console.upperCaseOrSelf()} Gallery"
-                    } else {
-                        gameName
-                    },
+                    console = console,
+                    gameId = gameId,
+                    gameName = gameName,
                     onBack = { finish() }
                 )
             }
@@ -75,17 +73,22 @@ private fun String.upperCaseOrSelf(): String {
 @Composable
 private fun ScreenshotGalleryScreen(
     state: ScreenshotGalleryState,
-    title: String,
+    console: String,
+    gameId: String,
+    gameName: String,
     onBack: () -> Unit
 ) {
     val selectedIndex = state.selectedIndex.collectAsState()
     val items = state.items.collectAsState()
     val count = items.value.size
-    val subtitle = if (count == 0) {
-        "No screenshots"
+    val isConsoleMode = gameId == com.retroplay.gallery.ScreenshotRepository.ALL_GAMES_KEY
+    val title = if (isConsoleMode) "Console Gallery" else "Gallery"
+    val contextLine = if (isConsoleMode) {
+        console.upperCaseOrSelf()
     } else {
-        "$count screenshot" + if (count > 1) "s" else ""
+        "$gameName • ${console.upperCaseOrSelf()}"
     }
+    val countLine = if (count == 0) "No screenshots" else "$count screenshot" + if (count > 1) "s" else ""
 
     BackHandler(enabled = selectedIndex.value != null) {
         state.select(null)
@@ -98,7 +101,7 @@ private fun ScreenshotGalleryScreen(
                     Column {
                         Text(title)
                         Text(
-                            text = subtitle,
+                            text = "$contextLine • $countLine",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.Gray
                         )

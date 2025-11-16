@@ -1799,6 +1799,15 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     onOpenSmartConfig = {
                         showGameInfoDialog.value = false
                         showSmartConfigDialog.value = true
+                    },
+                    onOpenGallery = {
+                        showGameInfoDialog.value = false
+                        val intent = Intent(this@RetroArchEmulatorActivity, com.retroplay.gallery.ScreenshotGalleryActivity::class.java).apply {
+                            putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_CONSOLE, console)
+                            putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_ID, screenshotGameId)
+                            putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_NAME, gameName)
+                        }
+                        startActivity(intent)
                     }
                 )
             }

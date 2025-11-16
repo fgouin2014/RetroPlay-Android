@@ -31,7 +31,8 @@ fun GameInfoDialog(
     cheatFile: File?,
     onDismiss: () -> Unit,
     onOpenPerGameConfig: ((String, String) -> Unit)? = null,
-    onOpenSmartConfig: (() -> Unit)? = null
+    onOpenSmartConfig: (() -> Unit)? = null,
+    onOpenGallery: (() -> Unit)? = null
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -97,6 +98,21 @@ fun GameInfoDialog(
                             text = if (hasOverride) "⚙️ EDIT GAME CONFIG (CUSTOM)" else "⚙️ CONFIGURE THIS GAME",
                             fontSize = 16.sp
                         )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                
+                // Open Gallery button (if handler provided)
+                if (onOpenGallery != null) {
+                    OutlinedButton(
+                        onClick = onOpenGallery,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFF9C27B0)
+                        )
+                    ) {
+                        Text("OPEN GALLERY", fontSize = 16.sp)
                     }
                     
                     Spacer(modifier = Modifier.height(12.dp))

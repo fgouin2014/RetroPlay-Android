@@ -55,6 +55,23 @@ fun ScreenshotViewer(
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        // Page indicator (center top) already provided by ViewerTopBar
+        // Add a small bottom context with index/total for quick glance
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+                .background(Color(0x66000000), RoundedCornerShape(16.dp))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${pagerState.currentPage + 1} / ${items.size}",
+                color = Color.White,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+            )
+        }
+
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),

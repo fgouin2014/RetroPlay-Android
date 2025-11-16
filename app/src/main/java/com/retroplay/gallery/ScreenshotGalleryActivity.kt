@@ -79,6 +79,13 @@ private fun ScreenshotGalleryScreen(
     onBack: () -> Unit
 ) {
     val selectedIndex = state.selectedIndex.collectAsState()
+    val items = state.items.collectAsState()
+    val count = items.value.size
+    val subtitle = if (count == 0) {
+        "No screenshots"
+    } else {
+        "$count screenshot" + if (count > 1) "s" else ""
+    }
 
     BackHandler(enabled = selectedIndex.value != null) {
         state.select(null)
@@ -87,7 +94,16 @@ private fun ScreenshotGalleryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title) },
+                title = {
+                    Column {
+                        Text(title)
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = {
                         if (selectedIndex.value != null) {

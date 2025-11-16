@@ -127,11 +127,20 @@ private fun ScreenshotGalleryScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            ScreenshotGallery(
-                state = state,
-                modifier = Modifier.fillMaxSize(),
-                onItemSelected = { /* viewer triggered below */ }
-            )
+            if (gameId == com.retroplay.gallery.ScreenshotRepository.ALL_GAMES_KEY) {
+                ConsoleGroupedGallery(
+                    state = state,
+                    systemName = console.upperCaseOrSelf(),
+                    modifier = Modifier.fillMaxSize(),
+                    onItemSelected = { /* viewer triggered below */ }
+                )
+            } else {
+                ScreenshotGallery(
+                    state = state,
+                    modifier = Modifier.fillMaxSize(),
+                    onItemSelected = { /* viewer triggered below */ }
+                )
+            }
 
             AnimatedVisibility(
                 visible = selectedIndex.value != null,

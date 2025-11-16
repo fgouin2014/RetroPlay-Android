@@ -15,16 +15,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.retroplay.config.RetroPlayConfigManager
+import com.retroplay.database.SmartConfig
+import com.retroplay.database.SmartConfigManager
 import com.retroplay.database.GameInfo
 import java.io.File
+import java.util.Locale
+import kotlin.math.abs
 
 @Composable
 fun GameInfoDialog(
     gameInfo: GameInfo?,
     gameCRC: String?,
+    console: String?,
     cheatFile: File?,
     onDismiss: () -> Unit,
-    onOpenPerGameConfig: ((String, String) -> Unit)? = null
+    onOpenPerGameConfig: ((String, String) -> Unit)? = null,
+    onOpenSmartConfig: (() -> Unit)? = null
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -41,7 +48,7 @@ fun GameInfoDialog(
             ) {
                 // Header
                 Text(
-                    text = "📊 GAME INFORMATION",
+                    text = "📘 GAME INTEL",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF4CAF50)
@@ -50,7 +57,7 @@ fun GameInfoDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 Text(
-                    text = "libretro-database lookup",
+                    text = "Source: libretro-database metadata",
                     fontSize = 14.sp,
                     color = Color(0xFF9E9E9E)
                 )
@@ -59,10 +66,16 @@ fun GameInfoDialog(
                 
                 if (gameInfo != null) {
                     // Game found in database
-                    GameInfoContent(gameInfo, gameCRC, cheatFile)
+                    GameInfoContent(
+                        gameInfo = gameInfo,
+                        gameCRC = gameCRC,
+                        console = console,
+                        cheatFile = cheatFile,
+                        onOpenSmartConfig = onOpenSmartConfig
+                    )
                 } else {
                     // Game not found
-                    GameNotFoundContent(gameCRC)
+                    GameNotFoundContent(gameCRC, console)
                 }
                 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -105,7 +118,13 @@ fun GameInfoDialog(
 }
 
 @Composable
-private fun GameInfoContent(gameInfo: GameInfo, gameCRC: String?, cheatFile: File?) {
+private fun GameInfoContent(
+    gameInfo: GameInfo,
+    gameCRC: String?,
+    console: String?,
+    cheatFile: File?,
+    onOpenSmartConfig: (() -> Unit)?
+) {
     Column {
         // Game Name
         InfoRow(
@@ -117,61 +136,77 @@ private fun GameInfoContent(gameInfo: GameInfo, gameCRC: String?, cheatFile: Fil
         
         Spacer(modifier = Modifier.height(12.dp))
         
+        // Console
+        val consoleDisplay = console ?: gameInfo.console
+        InfoRow(
+            icon = "🕹️",
+            label = "Console",
+            value = consoleDisplay
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        
         // CRC32
         if (gameCRC != null) {
             InfoRow(
                 icon = "🔍",
-                label = "CRC32",
+                label = "Loaded CRC32",
                 value = gameCRC,
                 mono = true
             )
+            
+            if (!gameInfo.crc.equals(gameCRC, ignoreCase = true) && gameInfo.crc.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                InfoRow(
+                    icon = "📚",
+                    label = "Database CRC32",
+                    value = gameInfo.crc,
+                    mono = true,
+                    highlight = true
+                )
+            }
+            
             Spacer(modifier = Modifier.height(12.dp))
         }
         
         // Genre
-        gameInfo.genre?.let { genre ->
-            InfoRow(
-                icon = "🎭",
-                label = "Genre",
-                value = genre
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
+        val genre = gameInfo.genre?.takeIf { it.isNotBlank() } ?: "Not catalogued"
+        InfoRow(
+            icon = "🎭",
+            label = "Genre",
+            value = genre
+        )
+        Spacer(modifier = Modifier.height(12.dp))
         
         // Developer
-        gameInfo.developer?.let { dev ->
-            InfoRow(
-                icon = "🏢",
-                label = "Developer",
-                value = dev
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
+        val developer = gameInfo.developer?.takeIf { it.isNotBlank() } ?: "Unknown"
+        InfoRow(
+            icon = "🏢",
+            label = "Developer",
+            value = developer
+        )
+        Spacer(modifier = Modifier.height(12.dp))
         
         // Publisher
-        gameInfo.publisher?.let { pub ->
-            InfoRow(
-                icon = "📦",
-                label = "Publisher",
-                value = pub
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
+        val publisher = gameInfo.publisher?.takeIf { it.isNotBlank() } ?: "Unknown"
+        InfoRow(
+            icon = "📦",
+            label = "Publisher",
+            value = publisher
+        )
+        Spacer(modifier = Modifier.height(12.dp))
         
         // Release Year
-        gameInfo.releaseYear?.let { year ->
-            val fullDate = if (gameInfo.releaseMonth != null) {
-                "${gameInfo.releaseMonth}/$year"
-            } else {
-                year.toString()
-            }
-            InfoRow(
-                icon = "📅",
-                label = "Released",
-                value = fullDate
-            )
-            Spacer(modifier = Modifier.height(12.dp))
+        val releaseInfo = when {
+            gameInfo.releaseYear != null && gameInfo.releaseMonth != null -> "${gameInfo.releaseMonth}/${gameInfo.releaseYear}"
+            gameInfo.releaseYear != null -> gameInfo.releaseYear.toString()
+            else -> "Unknown"
         }
+        InfoRow(
+            icon = "📅",
+            label = "Released",
+            value = releaseInfo
+        )
+        Spacer(modifier = Modifier.height(12.dp))
         
         // Max Players
         if (gameInfo.maxPlayers > 1) {
@@ -190,14 +225,17 @@ private fun GameInfoContent(gameInfo: GameInfo, gameCRC: String?, cheatFile: Fil
         if (gameInfo.isHack) features.add("Fan Mod")
         if (gameInfo.isHomebrew) features.add("Homebrew")
         
-        if (features.isNotEmpty()) {
-            InfoRow(
-                icon = "⭐",
-                label = "Features",
-                value = features.joinToString(", ")
-            )
-            Spacer(modifier = Modifier.height(12.dp))
+        val featuresSummary = if (features.isNotEmpty()) {
+            features.joinToString(", ")
+        } else {
+            "None detected"
         }
+        InfoRow(
+            icon = "⭐",
+            label = "Features",
+            value = featuresSummary
+        )
+        Spacer(modifier = Modifier.height(12.dp))
         
         // Divider
         HorizontalDivider(
@@ -226,12 +264,30 @@ private fun GameInfoContent(gameInfo: GameInfo, gameCRC: String?, cheatFile: Fil
             color = Color(0xFF424242)
         )
         
-        SmartConfigSection(gameInfo)
+        val recommendedConfig = SmartConfigManager.getSmartConfig(gameInfo, gameInfo.console)
+        val appliedConfig = RetroPlayConfigManager.getEffectiveConfig(gameCRC)
+        val hasPerGameOverride = gameCRC?.let { RetroPlayConfigManager.hasGameConfig(it) } == true
+
+        SmartConfigSection(
+            gameInfo = gameInfo,
+            gameCRC = gameCRC,
+            recommended = recommendedConfig,
+            appliedConfig = appliedConfig,
+            hasPerGameOverride = hasPerGameOverride,
+            onOpenSmartConfig = onOpenSmartConfig
+        )
     }
 }
 
 @Composable
-private fun SmartConfigSection(gameInfo: GameInfo) {
+private fun SmartConfigSection(
+    gameInfo: GameInfo,
+    gameCRC: String?,
+    recommended: SmartConfig,
+    appliedConfig: RetroPlayConfigManager.RetroPlayConfig,
+    hasPerGameOverride: Boolean,
+    onOpenSmartConfig: (() -> Unit)?
+) {
     Column {
         // Section Header
         Row(
@@ -239,7 +295,7 @@ private fun SmartConfigSection(gameInfo: GameInfo) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                text = "💡 SMART CONFIG RECOMMENDATIONS",
+                text = "⚙ SMART CONFIG CENTER",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF2196F3)
@@ -250,89 +306,176 @@ private fun SmartConfigSection(gameInfo: GameInfo) {
         
         // Disclaimer
         Text(
-            text = "Based on ${gameInfo.genre ?: "game"} genre analysis • Suggestions only",
+            text = "Compare libretro recommendations with RetroPlay applied settings",
             fontSize = 12.sp,
             color = Color(0xFF9E9E9E),
             fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
         )
         
         Spacer(modifier = Modifier.height(16.dp))
-        
-        val smartConfig = com.retroplay.database.SmartConfigManager.getSmartConfig(gameInfo, gameInfo.console)
-        
-        // Run-Ahead Card
+
+        val smartConfigStatus = buildString {
+            append(if (appliedConfig.smartConfigEnabled) "Enabled" else "Disabled")
+            append(" • Auto Run-Ahead: ")
+            append(if (appliedConfig.smartConfigAutoRunAhead) "On" else "Off")
+            append(" • Auto Rewind: ")
+            append(if (appliedConfig.smartConfigAutoRewind) "On" else "Off")
+            append(" • Auto Overlay: ")
+            append(if (appliedConfig.smartConfigAutoOverlay) "On" else "Off")
+            append(" • OSD: ")
+            append(if (appliedConfig.smartConfigShowOSD) "On" else "Off")
+        }
+
+        InfoRow(
+            icon = "⚙️",
+            label = "Smart Config",
+            value = smartConfigStatus,
+            highlight = appliedConfig.smartConfigEnabled
+        )
+
+        if (hasPerGameOverride && gameCRC != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Per-game override active for CRC $gameCRC",
+                fontSize = 12.sp,
+                color = Color(0xFFFFC107),
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        val recommendedRunAheadText = if (recommended.runAheadEnabled) {
+            formatFrames(recommended.runAheadFrames)
+        } else {
+            "Disabled"
+        }
+        val appliedRunAheadText = when {
+            !appliedConfig.smartConfigEnabled -> "Smart Config disabled"
+            appliedConfig.smartConfigAutoRunAhead -> "Auto (${formatFrames(recommended.runAheadFrames)})"
+            appliedConfig.runAheadEnabled -> "Manual ${formatFrames(appliedConfig.runAheadFrames)}"
+            else -> "Disabled"
+        }
+        val runAheadMatches = when {
+            !appliedConfig.smartConfigEnabled -> !recommended.runAheadEnabled
+            appliedConfig.smartConfigAutoRunAhead -> recommended.runAheadEnabled
+            else -> recommended.runAheadEnabled == appliedConfig.runAheadEnabled &&
+                    (!recommended.runAheadEnabled || recommended.runAheadFrames == appliedConfig.runAheadFrames)
+        }
+
         SmartConfigCard(
             icon = "⚡",
             title = "Run-Ahead",
-            enabled = smartConfig.runAheadEnabled,
-            value = if (smartConfig.runAheadEnabled) {
-                "${smartConfig.runAheadFrames} frames"
-            } else {
-                "Disabled"
-            },
-            description = if (smartConfig.runAheadEnabled) {
-                "Reduces input lag by ~${smartConfig.runAheadFrames * 16}ms. Recommended for ${gameInfo.genre} games."
+            recommendedValue = recommendedRunAheadText,
+            recommendedColor = if (recommended.runAheadEnabled) Color(0xFF4CAF50) else Color(0xFF757575),
+            appliedValue = appliedRunAheadText,
+            appliedColor = if (runAheadMatches) Color(0xFF64B5F6) else Color(0xFFFFC107),
+            mismatch = !runAheadMatches,
+            description = if (recommended.runAheadEnabled) {
+                "Reduces input lag by ~${recommended.runAheadFrames * 16}ms. Recommended for ${gameInfo.genre} games."
             } else {
                 "Not recommended for ${gameInfo.genre ?: "this genre"}. May cause instability."
-            },
-            color = if (smartConfig.runAheadEnabled) Color(0xFF4CAF50) else Color(0xFF757575)
+            }
         )
-        
+
         Spacer(modifier = Modifier.height(12.dp))
-        
-        // Rewind Card
+
+        val recommendedRewindText = if (recommended.rewindEnabled) {
+            formatMegabytes(recommended.rewindBufferSize)
+        } else {
+            "Disabled"
+        }
+        val appliedRewindText = when {
+            !appliedConfig.smartConfigEnabled -> "Smart Config disabled"
+            appliedConfig.smartConfigAutoRewind -> "Auto (${formatMegabytes(recommended.rewindBufferSize)})"
+            appliedConfig.rewindEnable -> "Manual ${formatMegabytes(appliedConfig.rewindBufferSize)}"
+            else -> "Disabled"
+        }
+        val rewindBufferMatches = abs(appliedConfig.rewindBufferSize - recommended.rewindBufferSize) <= 1 * 1024 * 1024
+        val rewindMatches = when {
+            !appliedConfig.smartConfigEnabled -> !recommended.rewindEnabled
+            appliedConfig.smartConfigAutoRewind -> recommended.rewindEnabled
+            else -> recommended.rewindEnabled == appliedConfig.rewindEnable &&
+                    (!recommended.rewindEnabled || rewindBufferMatches)
+        }
+
         SmartConfigCard(
             icon = "⏪",
             title = "Rewind",
-            enabled = smartConfig.rewindEnabled,
-            value = if (smartConfig.rewindEnabled) {
-                "${smartConfig.rewindBufferSize / 1024 / 1024}MB buffer"
-            } else {
-                "Disabled"
-            },
-            description = if (smartConfig.rewindEnabled) {
+            recommendedValue = recommendedRewindText,
+            recommendedColor = if (recommended.rewindEnabled) Color(0xFFFF9800) else Color(0xFF757575),
+            appliedValue = appliedRewindText,
+            appliedColor = if (rewindMatches) Color(0xFF4CAF50) else Color(0xFFFFC107),
+            mismatch = !rewindMatches,
+            description = if (recommended.rewindEnabled) {
                 "Helpful for puzzle and adventure games. Uses RAM for replay buffer."
             } else {
                 "Not needed for ${gameInfo.genre ?: "this genre"}. Saves memory and CPU."
-            },
-            color = if (smartConfig.rewindEnabled) Color(0xFFFF9800) else Color(0xFF757575)
+            }
         )
-        
+
         Spacer(modifier = Modifier.height(12.dp))
-        
-        // Overlay Card
+
+        val recommendedOverlayText = recommended.overlayName
+        val appliedOverlayText = when {
+            !appliedConfig.smartConfigEnabled -> "Smart Config disabled"
+            appliedConfig.smartConfigAutoOverlay -> "Auto ($recommendedOverlayText)"
+            else -> "Manual"
+        }
+        val overlayMatches = appliedConfig.smartConfigEnabled && appliedConfig.smartConfigAutoOverlay
+
         SmartConfigCard(
             icon = "🎨",
             title = "Optimal Overlay",
-            enabled = true,
-            value = smartConfig.overlayName,
-            description = "Recommended touch controls layout for ${gameInfo.console} games.",
-            color = Color(0xFF9C27B0)
+            recommendedValue = recommendedOverlayText,
+            recommendedColor = Color(0xFF9C27B0),
+            appliedValue = appliedOverlayText,
+            appliedColor = if (overlayMatches) Color(0xFF64B5F6) else Color(0xFFFFC107),
+            mismatch = !overlayMatches,
+            description = "Recommended touch controls layout for ${gameInfo.console} games."
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
-        // Info Note
+
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(8.dp),
             color = Color(0xFF263238)
         ) {
-            Row(
+            Column(
                 modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = "ℹ️",
-                    fontSize = 20.sp,
-                    modifier = Modifier.padding(end = 12.dp)
-                )
-                Text(
-                    text = "These are recommendations only. Enable Smart Config in Main Menu to apply automatically.",
-                    fontSize = 13.sp,
-                    color = Color(0xFFB0BEC5),
-                    lineHeight = 18.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "ℹ️",
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(end = 12.dp)
+                    )
+                    Text(
+                        text = "Smart Config writes to retroplay.cfg and optional per-game overrides. Restart the game to apply new values.",
+                        fontSize = 13.sp,
+                        color = Color(0xFFB0BEC5),
+                        lineHeight = 18.sp
+                    )
+                }
+                if (onOpenSmartConfig != null) {
+                    Text(
+                        text = "Need adjustments? Open the Smart Config Center to switch between global and per-game automation.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF90A4AE)
+                    )
+                }
+            }
+        }
+
+        if (onOpenSmartConfig != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = onOpenSmartConfig,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Open Smart Config Center")
             }
         }
     }
@@ -342,10 +485,12 @@ private fun SmartConfigSection(gameInfo: GameInfo) {
 private fun SmartConfigCard(
     icon: String,
     title: String,
-    enabled: Boolean,
-    value: String,
-    description: String,
-    color: Color
+    recommendedValue: String,
+    recommendedColor: Color,
+    appliedValue: String,
+    appliedColor: Color,
+    mismatch: Boolean,
+    description: String
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -360,7 +505,7 @@ private fun SmartConfigCard(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .background(color.copy(alpha = 0.2f), RoundedCornerShape(8.dp)),
+                    .background(recommendedColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -372,35 +517,44 @@ private fun SmartConfigCard(
             Spacer(modifier = Modifier.width(16.dp))
             
             Column(modifier = Modifier.weight(1f)) {
-                // Title and Value
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    
-                    Text(
-                        text = value,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = color
-                    )
-                }
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
                 
                 Spacer(modifier = Modifier.height(6.dp))
                 
-                // Description
+                SmartConfigComparisonRow(
+                    label = "Recommended",
+                    value = recommendedValue,
+                    color = recommendedColor
+                )
+
+                SmartConfigComparisonRow(
+                    label = "Applied",
+                    value = appliedValue,
+                    color = appliedColor
+                )
+
+                if (mismatch) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "⚠ Differs from recommendation",
+                        fontSize = 11.sp,
+                        color = Color(0xFFFFC107),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
                 Text(
                     text = description,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     color = Color(0xFFB0BEC5),
-                    lineHeight = 18.sp
+                    lineHeight = 16.sp
                 )
             }
         }
@@ -408,7 +562,32 @@ private fun SmartConfigCard(
 }
 
 @Composable
-private fun GameNotFoundContent(gameCRC: String?) {
+private fun SmartConfigComparisonRow(
+    label: String,
+    value: String,
+    color: Color
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = Color(0xFF9E9E9E)
+        )
+        Text(
+            text = value,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = color
+        )
+    }
+}
+
+@Composable
+private fun GameNotFoundContent(gameCRC: String?, console: String?) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
@@ -429,9 +608,20 @@ private fun GameNotFoundContent(gameCRC: String?) {
         
         Spacer(modifier = Modifier.height(12.dp))
         
+        console?.let {
+            Text(
+                text = "Console: $it",
+                fontSize = 14.sp,
+                color = Color(0xFF9E9E9E),
+                fontFamily = FontFamily.Monospace
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        
         if (gameCRC != null) {
             Text(
-                text = "CRC32: $gameCRC",
+                text = "Loaded CRC32: $gameCRC",
                 fontSize = 14.sp,
                 color = Color(0xFF9E9E9E),
                 fontFamily = FontFamily.Monospace
@@ -488,6 +678,19 @@ private fun InfoRow(
             fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
             modifier = Modifier.weight(1f)
         )
+    }
+}
+
+private fun formatFrames(frames: Int): String {
+    return if (frames == 1) "1 frame" else "$frames frames"
+}
+
+private fun formatMegabytes(bytes: Int): String {
+    val megabytes = bytes / (1024f * 1024f)
+    return if (megabytes >= 10f) {
+        String.format(Locale.US, "%.0f MB", megabytes)
+    } else {
+        String.format(Locale.US, "%.1f MB", megabytes)
     }
 }
 

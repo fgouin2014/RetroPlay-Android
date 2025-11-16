@@ -2325,7 +2325,7 @@ private fun ComposeEmulatorScreen(
                             context.startActivity(intent)
                         },
                         onSmartConfig = {
-                            showQuickMenu.value = false
+                            closeQuickMenuWithCooldown()
                             showSmartConfigDialog.value = true
                         },
                         onToggleFastForward = {
@@ -2468,7 +2468,13 @@ private fun ComposeEmulatorScreen(
                 // Smart Config Dialog
                 if (showSmartConfigDialog.value) {
                     SmartConfigDialog(
-                        onDismiss = { showSmartConfigDialog.value = false }
+                        onDismiss = { showSmartConfigDialog.value = false },
+                        gameName = gameName,
+                        consoleName = console,
+                        onViewMetadata = {
+                            showSmartConfigDialog.value = false
+                            showGameInfoDialog.value = true
+                        }
                     )
                 }
 
@@ -2480,8 +2486,13 @@ private fun ComposeEmulatorScreen(
                     GameInfoDialog(
                         gameInfo = gameInfo,
                         gameCRC = currentCrc,
+                        console = console,
                         cheatFile = cheatFile,
-                        onDismiss = { showGameInfoDialog.value = false }
+                        onDismiss = { showGameInfoDialog.value = false },
+                        onOpenSmartConfig = {
+                            showGameInfoDialog.value = false
+                            showSmartConfigDialog.value = true
+                        }
                     )
                 }
 

@@ -146,6 +146,7 @@ private fun GameInfoContent(
         GameInfoDialog(
             gameInfo = gameInfo,
             gameCRC = gameCRC,
+            console = console,
             cheatFile = cheatFile,
             onDismiss = onDismiss,
             onOpenPerGameConfig = { _, _ -> showPerGameConfig = true }

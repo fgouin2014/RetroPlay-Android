@@ -6,13 +6,21 @@ import java.io.File
 import java.io.FileInputStream
 import java.util.zip.CRC32
 import java.util.zip.ZipFile
+import java.util.Locale
 
 object DatabaseManager {
     private const val TAG = "DatabaseManager"
     private const val DATABASE_BASE_PATH = "/storage/emulated/0/RetroPlay-Data/database/rdb"
     private const val CACHE_BASE_PATH = "/storage/emulated/0/RetroPlay-Data/database/cache"
+    private val NOINTRO_BASE_PATHS = listOf(
+        "/storage/emulated/0/RetroPlay-Data/database/no-intro",
+        "/storage/emulated/0/RetroPlay-Data/database/metadat/no-intro"
+    )
     
     private val gameCache = mutableMapOf<String, MutableMap<String, GameInfo>>()
+    private val noIntroCacheDir = File("$CACHE_BASE_PATH/no-intro")
+    private val noIntroCrcPattern = Regex("""crc\s+([0-9a-fA-F]{8})""")
+    private val noIntroGameNamePattern = Regex("""game\s*\(\s*name\s+"([^"]+)"""")
     
     // Coroutine scope for async operations
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -74,7 +82,6 @@ object DatabaseManager {
             null
         }
     }
-    
     private fun calculateCRC32FromArchive(archiveFile: File): String? {
         return try {
             if (!archiveFile.name.endsWith(".zip", ignoreCase = true)) {
@@ -239,11 +246,13 @@ object DatabaseManager {
         val cacheFile = File("$CACHE_BASE_PATH/$consoleName.cache")
         val cacheValid = cacheFile.exists() && cacheFile.lastModified() >= rdbFile.lastModified()
         
-        val games: Map<String, GameInfo> = if (cacheValid) {
+        val games: MutableMap<String, GameInfo> = if (cacheValid) {
             // Load from cache (much faster!)
             Log.i(TAG, "Loading database for $consoleName from disk cache...")
             try {
-                loadFromCache(cacheFile, console)
+                loadFromCache(cacheFile, console).toMutableMap().also {
+                    augmentWithNoIntroVariants(it, console)
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Cache corrupted, re-parsing .rdb: ${e.message}")
                 parseAndCache(rdbFile, cacheFile, console)
@@ -254,19 +263,21 @@ object DatabaseManager {
             parseAndCache(rdbFile, cacheFile, console)
         }
         
-        gameCache[console] = games.toMutableMap()
+        gameCache[console] = games
         
         Log.i(TAG, "✅ Database loaded for $consoleName: ${games.size} games")
     }
     
-    private fun parseAndCache(rdbFile: File, cacheFile: File, console: String): Map<String, GameInfo> {
+    private fun parseAndCache(rdbFile: File, cacheFile: File, console: String): MutableMap<String, GameInfo> {
         // Parse .rdb file with RdbParser
         val games = RdbParser.parseRdbFile(rdbFile)
         
         // Update console field for all games
         val consoleMap = games.mapValues { (_, game) ->
             game.copy(console = console)
-        }
+        }.toMutableMap()
+        
+        augmentWithNoIntroVariants(consoleMap, console)
         
         // Save to disk cache
         try {
@@ -300,6 +311,161 @@ object DatabaseManager {
         }
     }
     
+    private fun augmentWithNoIntroVariants(
+        gamesByCrc: MutableMap<String, GameInfo>,
+        console: String
+    ) {
+        val consoleName = getConsoleFullName(console)
+        Log.i(TAG, "No-Intro augmentation started for $consoleName")
+        val noIntroFile = resolveNoIntroFile(consoleName) ?: run {
+            Log.i(TAG, "No-Intro metadata missing for $consoleName (searched ${NOINTRO_BASE_PATHS.joinToString()})")
+            return
+        }
+
+        val nameIndex = gamesByCrc.values.groupBy { it.name }
+        var currentComment: String? = null
+        var currentGameName: String? = null
+        var added = 0
+        var romLines = 0
+        var matchedBase = 0
+
+        noIntroFile.useLines { lines ->
+            lines.forEach { line ->
+                val trimmed = line.trim()
+                when {
+                    // Capture official game name from No-Intro block header
+                    trimmed.startsWith("game ") -> {
+                        val m = noIntroGameNamePattern.find(trimmed)
+                        currentGameName = m?.groupValues?.getOrNull(1)
+                    }
+                    trimmed.startsWith("comment ") -> {
+                        currentComment = trimmed.substringAfter("comment")
+                            .trim()
+                            .trim('"')
+                    }
+                    trimmed.startsWith("rom ") -> {
+                        romLines++
+                        val crcMatch = noIntroCrcPattern.find(trimmed) ?: return@forEach
+                        val crc = crcMatch.groupValues[1].uppercase(Locale.US)
+                        if (gamesByCrc.containsKey(crc)) {
+                            return@forEach
+                        }
+                        // Prefer official game name from 'game (...)', fallback to comment if used
+                        val baseKey = currentGameName ?: currentComment ?: return@forEach
+                        val baseGame = nameIndex[baseKey]?.firstOrNull()
+                        if (baseGame != null) {
+                            gamesByCrc[crc] = baseGame.copy(crc = crc)
+                            added++
+                            matchedBase++
+                        }
+                    }
+                    trimmed == ")" -> {
+                        currentComment = null
+                        currentGameName = null
+                    }
+                }
+            }
+        }
+
+        Log.i(
+            TAG,
+            "No-Intro augmentation finished for $consoleName, roms=$romLines, matched=$matchedBase, added=$added (source=${noIntroFile.absolutePath})"
+        )
+    }
+    
+    private fun resolveNoIntroFile(consoleFullName: String): File? {
+        if (!noIntroCacheDir.exists()) {
+            noIntroCacheDir.mkdirs()
+        }
+
+        NOINTRO_BASE_PATHS.forEach { base ->
+            // 1) Exact match (.dat)
+            val exactPlain = File("$base/$consoleFullName.dat")
+            if (exactPlain.exists()) {
+                Log.i(TAG, "Using No-Intro DAT (exact): ${exactPlain.absolutePath}")
+                return exactPlain
+            }
+
+            // 2) Exact match zipped (.dat.zip)
+            val exactZip = File("$base/$consoleFullName.dat.zip")
+            if (exactZip.exists()) {
+                val cachedFile = File(noIntroCacheDir, "$consoleFullName.dat")
+                val needsExtraction = !cachedFile.exists() || cachedFile.lastModified() < exactZip.lastModified()
+                if (needsExtraction) {
+                    try {
+                        unzipDatFile(exactZip, cachedFile)
+                        Log.i(TAG, "Extracted ${exactZip.name} to cache for $consoleFullName")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to extract ${exactZip.name}: ${e.message}", e)
+                        if (cachedFile.exists()) cachedFile.delete()
+                        return@forEach
+                    }
+                }
+                if (cachedFile.exists()) {
+                    Log.i(TAG, "Using No-Intro DAT (cached from zip): ${cachedFile.absolutePath}")
+                    return cachedFile
+                }
+            }
+
+            // 3) Fallback: any DAT whose name starts with or contains the consoleFullName (handles variants)
+            val baseDir = File(base)
+            if (baseDir.exists() && baseDir.isDirectory) {
+                val candidates = baseDir.listFiles { file ->
+                    val n = file.name
+                    file.isFile && n.endsWith(".dat", ignoreCase = true) &&
+                        (n.startsWith(consoleFullName, ignoreCase = true) || n.contains(consoleFullName, ignoreCase = true))
+                }?.sortedBy { it.name } ?: emptyList()
+
+                if (candidates.isNotEmpty()) {
+                    Log.i(TAG, "Using No-Intro DAT (variant): ${candidates.first().absolutePath}")
+                    return candidates.first()
+                }
+
+                // 4) Fallback for zipped variants
+                val zippedCandidates = baseDir.listFiles { file ->
+                    val n = file.name
+                    file.isFile && n.endsWith(".dat.zip", ignoreCase = true) &&
+                        (n.startsWith(consoleFullName, ignoreCase = true) || n.contains(consoleFullName, ignoreCase = true))
+                } ?: emptyArray()
+                if (zippedCandidates.isNotEmpty()) {
+                    val chosen = zippedCandidates.sortedBy { it.name }.first()
+                    val cachedFile = File(noIntroCacheDir, "${consoleFullName}.dat")
+                    val needsExtraction = !cachedFile.exists() || cachedFile.lastModified() < chosen.lastModified()
+                    if (needsExtraction) {
+                        try {
+                            unzipDatFile(chosen, cachedFile)
+                            Log.i(TAG, "Extracted ${chosen.name} (variant) to cache for $consoleFullName")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to extract ${chosen.name}: ${e.message}", e)
+                            if (cachedFile.exists()) cachedFile.delete()
+                            return@forEach
+                        }
+                    }
+                    if (cachedFile.exists()) {
+                        Log.i(TAG, "Using No-Intro DAT (cached from zip variant): ${cachedFile.absolutePath}")
+                        return cachedFile
+                    }
+                }
+            }
+        }
+        return null
+    }
+    
+    private fun unzipDatFile(zipFile: File, outputFile: File) {
+        ZipFile(zipFile).use { zip ->
+            val entry = zip.entries().asSequence()
+                .firstOrNull { !it.isDirectory && it.name.endsWith(".dat", ignoreCase = true) }
+                ?: throw IllegalArgumentException("No .dat entry found in ${zipFile.name}")
+
+            outputFile.outputStream().use { out ->
+                zip.getInputStream(entry).use { input ->
+                    input.copyTo(out)
+                }
+            }
+            outputFile.setLastModified(zipFile.lastModified())
+        }
+    }
+
     fun getCheatsPath(gameInfo: GameInfo, console: String): File? {
         val consoleName = getConsoleFullName(console)
         

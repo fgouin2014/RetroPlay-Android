@@ -13,13 +13,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.retroplay.smartconfig.SmartConfigPreferences
-import com.retroplay.smartconfig.SmartConfigSettings
 
 @Composable
 fun SmartConfigDialog(
     onDismiss: () -> Unit,
-    onSettingsChanged: () -> Unit = {}
+    onSettingsChanged: () -> Unit = {},
+    gameName: String? = null,
+    consoleName: String? = null,
+    onViewMetadata: (() -> Unit)? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     
@@ -46,17 +47,54 @@ fun SmartConfigDialog(
                 ) {
                     // Header
                     Text(
-                        text = "💡 SMART CONFIG",
+                        text = "⚙ SMART CONFIG CENTER",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF4CAF50)
                     )
                     
                     Text(
-                        text = "Automatic optimal settings based on game metadata",
+                        text = "Configure global automation powered by libretro metadata",
                         fontSize = 14.sp,
                         color = Color(0xFF9E9E9E)
                     )
+                    
+                    if (gameName != null || consoleName != null || onViewMetadata != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF263238))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                if (gameName != null) {
+                                    Text(
+                                        text = gameName,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White
+                                    )
+                                }
+                                if (consoleName != null) {
+                                    Text(
+                                        text = "Console: $consoleName",
+                                        fontSize = 13.sp,
+                                        color = Color(0xFFB0BEC5)
+                                    )
+                                }
+                                if (onViewMetadata != null) {
+                                    TextButton(
+                                        onClick = onViewMetadata,
+                                        contentPadding = PaddingValues(horizontal = 0.dp)
+                                    ) {
+                                        Text("View Game Intel")
+                                    }
+                                }
+                            }
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     

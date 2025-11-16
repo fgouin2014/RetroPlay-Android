@@ -1787,6 +1787,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 GameInfoDialog(
                     gameInfo = gameInfo,
                     gameCRC = gameCRC,
+                    console = console,
                     cheatFile = cheatFile,
                     onDismiss = { showGameInfoDialog.value = false },
                     onOpenPerGameConfig = { crc, name ->
@@ -1794,6 +1795,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                         perGameConfigGameName = name
                         showGameInfoDialog.value = false
                         showPerGameConfigDialog.value = true
+                    },
+                    onOpenSmartConfig = {
+                        showGameInfoDialog.value = false
+                        showSmartConfigDialog.value = true
                     }
                 )
             }
@@ -1868,6 +1873,12 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     onSettingsChanged = {
                         Log.i(TAG, "Smart Config settings saved to retroplay.cfg")
                         Toast.makeText(this, "Smart Config saved to retroplay.cfg", Toast.LENGTH_SHORT).show()
+                    },
+                    gameName = gameName,
+                    consoleName = console,
+                    onViewMetadata = {
+                        showSmartConfigDialog.value = false
+                        showGameInfoDialog.value = true
                     }
                 )
             }
@@ -3147,7 +3158,7 @@ private fun ComposeEmulatorScreen(
                             onOpenGallery()
                         },
                         onSmartConfig = {
-                            showQuickMenu.value = false
+                            closeQuickMenuWithCooldown()
                             showSmartConfigDialog.value = true
                         },
                         onCheats = {
@@ -3247,7 +3258,7 @@ private fun ComposeEmulatorScreen(
                             showCoreOptionsDialog.value = true
                         },
                         onSmartConfig = {
-                            showMainMenu.value = false
+                            closeQuickMenuWithCooldown()
                             showSmartConfigDialog.value = true
                         },
                         onDiskSwapper = {
@@ -3558,11 +3569,13 @@ private fun MainMenuDialog(
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
-                    .wrapContentHeight(),
+                    .fillMaxHeight(0.85f),
                 colors = CardDefaults.cardColors(containerColor = Color(0xDD000000))
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Titre

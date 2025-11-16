@@ -556,6 +556,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         screenshotGameId = ScreenshotRepository.sanitizeGameKey(rawGameId.ifBlank { gameName })
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
         val galleryGameId = screenshotGameId
+        val activityRef = this
 
         applyPerGameConfig(gameCRC)
         
@@ -2495,12 +2496,12 @@ private fun ComposeEmulatorScreen(
                         },
                         onOpenGallery = {
                             showGameInfoDialog.value = false
-                            val intent = Intent(this@NativeComposeEmulatorActivity, com.retroplay.gallery.ScreenshotGalleryActivity::class.java).apply {
+                            val intent = Intent(activityRef, com.retroplay.gallery.ScreenshotGalleryActivity::class.java).apply {
                                 putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_CONSOLE, console)
                                 putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_ID, galleryGameId)
                                 putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_NAME, gameName)
                             }
-                            this@NativeComposeEmulatorActivity.startActivity(intent)
+                            activityRef.startActivity(intent)
                         }
                     )
                 }

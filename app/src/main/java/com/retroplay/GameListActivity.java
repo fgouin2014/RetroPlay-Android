@@ -989,8 +989,10 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             button.setLayoutParams(params);
             
             ThemeManager themeManager = ThemeManager.getInstance(this);
+            ThemeManager.Theme currentTheme = themeManager.getCurrentTheme();
             int primaryColor = themeManager.getPrimaryColor(this);
             int mediumColor = themeManager.getMediumColor(this);
+            boolean isKittRed = currentTheme == ThemeManager.Theme.KITT_RED;
             
             button.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
             button.setClickable(true);
@@ -1002,10 +1004,12 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             drawable.setCornerRadius(6 * getResources().getDisplayMetrics().density); // 6dp
             if ("#".equals(letter)) {
                 drawable.setColor(primaryColor);
-                button.setTextColor(getResources().getColor(android.R.color.white));
+                // KITT-Red: texte noir quand sélectionné (#), autres thèmes: texte blanc
+                button.setTextColor(isKittRed ? getResources().getColor(R.color.kitt_black) : getResources().getColor(android.R.color.white));
             } else {
                 drawable.setColor(mediumColor);
-                button.setTextColor(getResources().getColor(R.color.kitt_black));
+                // KITT-Red: texte rouge par défaut, autres thèmes: texte noir
+                button.setTextColor(isKittRed ? primaryColor : getResources().getColor(R.color.kitt_black));
             }
             drawable.setStroke((int)(1 * getResources().getDisplayMetrics().density), primaryColor); // 1dp stroke
             button.setBackground(drawable);
@@ -1061,11 +1065,15 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
      */
     private void updateAlphabetRowAvailability(LinearLayout row, java.util.Map<String, Integer> letterCounts) {
         ThemeManager themeManager = ThemeManager.getInstance(this);
+        ThemeManager.Theme currentTheme = themeManager.getCurrentTheme();
         int primaryColor = themeManager.getPrimaryColor(this);
         int mediumColor = themeManager.getMediumColor(this);
         int blackColor = getResources().getColor(R.color.kitt_black);
         int whiteColor = getResources().getColor(android.R.color.white);
         float density = getResources().getDisplayMetrics().density;
+        
+        // Special behavior for KITT-Red theme only
+        boolean isKittRed = currentTheme == ThemeManager.Theme.KITT_RED;
         
         for (int i = 0; i < row.getChildCount(); i++) {
             TextView button = (TextView) row.getChildAt(i);
@@ -1084,15 +1092,17 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 button.setClickable(true);
                 button.setAlpha(1.0f);
                 
-                // Si c'est la lettre sélectionnée, la mettre en surbrillance avec texte blanc
+                // Si c'est la lettre sélectionnée
                 if (letter.equals(currentLetter)) {
                     drawable.setColor(primaryColor);
                     button.setBackground(drawable);
-                    button.setTextColor(whiteColor); // Blanc pour contraste sur fond coloré
+                    // KITT-Red: texte noir quand sélectionné, autres thèmes: texte blanc
+                    button.setTextColor(isKittRed ? blackColor : whiteColor);
                 } else {
                     drawable.setColor(mediumColor);
                     button.setBackground(drawable);
-                    button.setTextColor(blackColor); // Noir par défaut, opaque
+                    // KITT-Red: texte rouge par défaut, autres thèmes: texte noir
+                    button.setTextColor(isKittRed ? primaryColor : blackColor);
                 }
             } else {
                 // Lettre sans jeux - désactivée et transparente (garde les mêmes couleurs)

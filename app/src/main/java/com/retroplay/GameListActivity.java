@@ -975,7 +975,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             ThemeManager themeManager = ThemeManager.getInstance(this);
             if ("#".equals(letter)) {
                 button.setBackgroundColor(themeManager.getPrimaryColor(this));
-                button.setTextColor(getResources().getColor(android.R.color.white));
+                button.setTextColor(getResources().getColor(R.color.kitt_black));
             } else {
                 button.setBackgroundColor(themeManager.getMediumColor(this));
                 button.setTextColor(themeManager.getPrimaryColor(this));
@@ -1050,7 +1050,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         ThemeManager themeManager = ThemeManager.getInstance(this);
         int primaryColor = themeManager.getPrimaryColor(this);
         int mediumColor = themeManager.getMediumColor(this);
-        int whiteColor = getResources().getColor(android.R.color.white);
+        int blackColor = getResources().getColor(R.color.kitt_black);
         float density = getResources().getDisplayMetrics().density;
         
         for (int i = 0; i < row.getChildCount(); i++) {
@@ -1070,11 +1070,11 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 button.setClickable(true);
                 button.setAlpha(1.0f);
                 
-                // Si c'est la lettre sélectionnée, la mettre en surbrillance avec texte blanc
+                // Si c'est la lettre sélectionnée, la mettre en surbrillance avec texte noir
                 if (letter.equals(currentLetter)) {
                     drawable.setColor(primaryColor);
                     button.setBackground(drawable);
-                    button.setTextColor(whiteColor); // Blanc pour contraste sur fond coloré
+                    button.setTextColor(blackColor); // Noir pour contraste sur fond coloré
                 } else {
                     drawable.setColor(mediumColor);
                     button.setBackground(drawable);

@@ -16,7 +16,7 @@ public class ThemeManager {
     public enum Theme {
         KITT_RED("KITT Red", "kitt_red"),
         AMBER("Amber", "amber_primary"),
-        CYAN("Cyan", "cyan_primary");
+        MATRIX("Matrix Green", "matrix_primary");
         
         private final String displayName;
         private final String primaryColorName;
@@ -75,6 +75,56 @@ public class ThemeManager {
     
     public int getPrimaryColor(Context context) {
         return context.getResources().getColor(getPrimaryColorResId(context), null);
+    }
+    
+    public int getPrimaryColorResIdByName(Context context, String colorName) {
+        return context.getResources().getIdentifier(colorName, "color", context.getPackageName());
+    }
+    
+    public int getMediumColorResId(Context context) {
+        Theme current = getCurrentTheme();
+        String colorName;
+        switch (current) {
+            case KITT_RED:
+                colorName = "kitt_medium_red";
+                break;
+            case AMBER:
+                colorName = "amber_primary_dark";
+                break;
+            case MATRIX:
+                colorName = "matrix_primary_dark";
+                break;
+            default:
+                colorName = "kitt_medium_red";
+        }
+        return getPrimaryColorResIdByName(context, colorName);
+    }
+    
+    public int getMediumColor(Context context) {
+        return context.getResources().getColor(getMediumColorResId(context), null);
+    }
+    
+    public int getLightColorResId(Context context) {
+        Theme current = getCurrentTheme();
+        String colorName;
+        switch (current) {
+            case KITT_RED:
+                colorName = "kitt_red_light";
+                break;
+            case AMBER:
+                colorName = "amber_primary_light";
+                break;
+            case MATRIX:
+                colorName = "matrix_primary_light";
+                break;
+            default:
+                colorName = "kitt_red_light";
+        }
+        return getPrimaryColorResIdByName(context, colorName);
+    }
+    
+    public int getLightColor(Context context) {
+        return context.getResources().getColor(getLightColorResId(context), null);
     }
 }
 

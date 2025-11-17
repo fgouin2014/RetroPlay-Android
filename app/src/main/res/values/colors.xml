@@ -78,18 +78,18 @@
     <!-- Amber Theme Alpha Colors -->
     <color name="amber_alpha">#1AFF8800</color>
     
-    <!-- Cyan Theme Colors (New Alternative Theme) -->
-    <color name="cyan_primary">#00BCD4</color>
-    <color name="cyan_primary_dark">#0097A7</color>
-    <color name="cyan_primary_light">#4DD0E1</color>
-    <color name="cyan_secondary">#80DEEA</color>
-    <color name="cyan_accent">#B2EBF2</color>
-    <color name="cyan_surface">#001A1C</color>
-    <color name="cyan_surface_variant">#002D30</color>
-    <color name="cyan_on_surface">#B2EBF2</color>
-    <color name="cyan_on_primary">#000000</color>
-    <color name="cyan_on_secondary">#000000</color>
+    <!-- Matrix Green Theme Colors -->
+    <color name="matrix_primary">#00FF41</color>
+    <color name="matrix_primary_dark">#00CC33</color>
+    <color name="matrix_primary_light">#33FF66</color>
+    <color name="matrix_secondary">#66FF88</color>
+    <color name="matrix_accent">#99FFAA</color>
+    <color name="matrix_surface">#001A00</color>
+    <color name="matrix_surface_variant">#003300</color>
+    <color name="matrix_on_surface">#99FFAA</color>
+    <color name="matrix_on_primary">#000000</color>
+    <color name="matrix_on_secondary">#000000</color>
     
-    <!-- Cyan Theme Alpha Colors -->
-    <color name="cyan_alpha">#1A00BCD4</color>
+    <!-- Matrix Theme Alpha Colors -->
+    <color name="matrix_alpha">#1A00FF41</color>
 </resources>

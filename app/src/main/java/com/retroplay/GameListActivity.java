@@ -158,6 +158,9 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
         // Preload databases in background (for faster game info lookup)
         preloadDatabases();
+        
+        // Appliquer le thème sélectionné
+        applyTheme();
     }
     
     /**
@@ -202,6 +205,31 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         super.onResume();
         // Recharger les consoles au cas où elles aient été modifiées dans Console Manager
         loadAvailableConsoles();
+        // Réappliquer le thème au cas où il aurait changé
+        applyTheme();
+    }
+    
+    private void applyTheme() {
+        ThemeManager themeManager = ThemeManager.getInstance(this);
+        int primaryColor = themeManager.getPrimaryColor(this);
+        int mediumColor = themeManager.getMediumColor(this);
+        
+        // Appliquer au bouton de filtre favoris
+        if (favoritesFilterButton != null) {
+            if (showOnlyFavorites) {
+                favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColor));
+                favoritesFilterButton.setIconTintResource(R.color.kitt_black);
+            } else {
+                favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
+                favoritesFilterButton.setIconTintResource(themeManager.getPrimaryColorResId(this));
+            }
+        }
+        
+        // Appliquer au toggle de scope de recherche
+        updateSearchScopeButton();
+        
+        // Appliquer aux boutons alphabétiques
+        updateAlphabetAvailability();
     }
     
     private void setupFullscreenMode() {
@@ -573,15 +601,16 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         showOnlyFavorites = !showOnlyFavorites;
         
         // Mettre à jour l'apparence du bouton
+        ThemeManager themeManager = ThemeManager.getInstance(this);
         if (showOnlyFavorites) {
             favoritesFilterButton.setIconResource(R.drawable.ic_favorite_24);
-            favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.kitt_red)));
+            favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(themeManager.getPrimaryColor(this)));
             favoritesFilterButton.setIconTintResource(R.color.kitt_black);
             Log.i(TAG, "Favorites filter ENABLED");
         } else {
             favoritesFilterButton.setIconResource(R.drawable.ic_favorite_border_24);
-            favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.kitt_medium_red)));
-            favoritesFilterButton.setIconTintResource(R.color.kitt_red);
+            favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(themeManager.getMediumColor(this)));
+            favoritesFilterButton.setIconTintResource(themeManager.getPrimaryColorResId(this));
             Log.i(TAG, "Favorites filter DISABLED");
         }
         
@@ -767,13 +796,14 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     
     private void updateSearchScopeButton() {
         if (searchScopeToggle != null) {
+            ThemeManager themeManager = ThemeManager.getInstance(this);
             if (searchAllConsoles) {
                 searchScopeToggle.setText("ALL");
                 searchScopeToggle.setTextColor(getResources().getColor(R.color.kitt_green));
             } else {
                 String shortName = currentConsole.length() > 4 ? currentConsole.substring(0, 4).toUpperCase() : currentConsole.toUpperCase();
                 searchScopeToggle.setText(shortName);
-                searchScopeToggle.setTextColor(getResources().getColor(R.color.kitt_red_light));
+                searchScopeToggle.setTextColor(themeManager.getLightColor(this));
             }
         }
     }
@@ -807,12 +837,13 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             params.setMargins(2, 2, 2, 2);
             button.setLayoutParams(params);
             
+            ThemeManager themeManager = ThemeManager.getInstance(this);
             if ("#".equals(letter)) {
-                button.setBackgroundColor(getResources().getColor(R.color.kitt_red));
+                button.setBackgroundColor(themeManager.getPrimaryColor(this));
                 button.setTextColor(getResources().getColor(R.color.kitt_black));
             } else {
-                button.setBackgroundColor(getResources().getColor(R.color.kitt_medium_red));
-                button.setTextColor(getResources().getColor(R.color.kitt_red));
+                button.setBackgroundColor(themeManager.getMediumColor(this));
+                button.setTextColor(themeManager.getPrimaryColor(this));
             }
             
             button.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
@@ -870,6 +901,10 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
      * Mettre à jour la disponibilité des boutons dans une rangée
      */
     private void updateAlphabetRowAvailability(LinearLayout row, java.util.Map<String, Integer> letterCounts) {
+        ThemeManager themeManager = ThemeManager.getInstance(this);
+        int primaryColor = themeManager.getPrimaryColor(this);
+        int mediumColor = themeManager.getMediumColor(this);
+        
         for (int i = 0; i < row.getChildCount(); i++) {
             TextView button = (TextView) row.getChildAt(i);
             String letter = button.getText().toString();
@@ -883,11 +918,11 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 
                 // Si c'est la lettre sélectionnée, la mettre en surbrillance
                 if (letter.equals(currentLetter)) {
-                    button.setBackgroundColor(getResources().getColor(R.color.kitt_red));
+                    button.setBackgroundColor(primaryColor);
                     button.setTextColor(getResources().getColor(R.color.kitt_black));
                 } else {
-                    button.setBackgroundColor(getResources().getColor(R.color.kitt_medium_red));
-                    button.setTextColor(getResources().getColor(R.color.kitt_red));
+                    button.setBackgroundColor(mediumColor);
+                    button.setTextColor(primaryColor);
                 }
             } else {
                 // Lettre sans jeux - désactivée et transparente (garde les mêmes couleurs)
@@ -895,8 +930,8 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 button.setAlpha(0.25f);
                 
                 // Garder les couleurs normales (non sélectionnées)
-                button.setBackgroundColor(getResources().getColor(R.color.kitt_medium_red));
-                button.setTextColor(getResources().getColor(R.color.kitt_red));
+                button.setBackgroundColor(mediumColor);
+                button.setTextColor(primaryColor);
             }
         }
     }
@@ -1042,9 +1077,10 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         Game randomGame = currentPageGames.get(randomIndex);
         
         // Show snackbar with random game
+        ThemeManager themeManager = ThemeManager.getInstance(this);
         Snackbar.make(recyclerView, "Jeu aléatoire: " + randomGame.getName(), Snackbar.LENGTH_LONG)
                 .setAction("JOUER", v -> onClick(randomGame))
-                .setActionTextColor(getResources().getColor(R.color.kitt_red))
+                .setActionTextColor(themeManager.getPrimaryColor(this))
                 .show();
     }
     

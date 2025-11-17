@@ -127,10 +127,6 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         android.content.Context context = holder.itemView.getContext();
         ThemeManager themeManager = ThemeManager.getInstance(context);
         int primaryColor = themeManager.getPrimaryColor(context);
-        int primaryColorOpaque = android.graphics.Color.argb(255, 
-            android.graphics.Color.red(primaryColor),
-            android.graphics.Color.green(primaryColor),
-            android.graphics.Color.blue(primaryColor));
         int mediumColor = themeManager.getMediumColor(context);
         int textPrimaryColor = themeManager.getTextPrimaryColor(context);
         int textSecondaryColor = themeManager.getTextSecondaryColor(context);
@@ -139,12 +135,12 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         // Card stroke and background
         if (holder.itemView instanceof com.google.android.material.card.MaterialCardView) {
             com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) holder.itemView;
-            card.setStrokeColor(primaryColorOpaque);
+            card.setStrokeColor(primaryColor);
             card.setCardBackgroundColor(mediumColor);
         }
         
         // Title
-        holder.title.setTextColor(primaryColorOpaque);
+        holder.title.setTextColor(primaryColor);
         holder.title.setAlpha(1.0f);
         
         // Info texts (players, year, genre)
@@ -164,23 +160,23 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         imageDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         imageDrawable.setCornerRadius(6 * density); // 6dp
         imageDrawable.setColor(mediumColor); // Background color
-        imageDrawable.setStroke((int)(2 * density), primaryColorOpaque); // 2dp stroke with theme color
+        imageDrawable.setStroke((int)(2 * density), primaryColor); // 2dp stroke with theme color
         holder.image.setBackground(imageDrawable);
         holder.image.setAlpha(1.0f);
         
         // Play button
-        holder.playButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
+        holder.playButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColor));
         holder.playButton.setIconTint(android.content.res.ColorStateList.valueOf(context.getResources().getColor(R.color.kitt_black)));
         holder.playButton.setAlpha(1.0f);
         
         // Favorite button
-        holder.favoriteButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
+        holder.favoriteButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
         holder.favoriteButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
-        holder.favoriteButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
+        holder.favoriteButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
         holder.favoriteButton.setAlpha(1.0f);
         
         // Loading progress
-        holder.loadingProgress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
+        holder.loadingProgress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(primaryColor));
     }
     
     private String extractYear(String releaseDate) {

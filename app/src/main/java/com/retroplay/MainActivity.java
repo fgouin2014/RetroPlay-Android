@@ -69,7 +69,23 @@ public class MainActivity extends FragmentActivity {
             installRetroArchOverlays();
         }
         
+        // Apply theme to UI elements
+        applyTheme();
+        
         Log.i(TAG, "MainActivity onCreate finished");
+    }
+    
+    private void applyTheme() {
+        ThemeManager themeManager = ThemeManager.getInstance(this);
+        int primaryColor = themeManager.getPrimaryColor(this);
+        
+        // Apply theme to games button
+        Button gamesButton = findViewById(R.id.fab_games);
+        if (gamesButton != null) {
+            gamesButton.setBackgroundColor(primaryColor);
+            gamesButton.setTextColor(android.graphics.Color.WHITE);
+            gamesButton.setAlpha(1.0f);
+        }
     }
     
     /**
@@ -320,6 +336,9 @@ public class MainActivity extends FragmentActivity {
     protected void onResume() {
         super.onResume();
         Log.i(TAG, "App resumed, hasLaunchedGameList=" + hasLaunchedGameList);
+        
+        // Reapply theme in case it changed
+        applyTheme();
         
         // Check permissions again when returning from settings
         if (!hasLaunchedGameList && checkPermissions()) {

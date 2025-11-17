@@ -67,7 +67,7 @@ fun ScreenshotViewer(
         ) {
             Text(
                 text = "${pagerState.currentPage + 1} / ${items.size}",
-                color = Color.White,
+                color = Color(0xFFFF3333), // kitt_red
                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
             )
         }
@@ -124,24 +124,24 @@ private fun ViewerTopBar(
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         IconButton(onClick = onClose) {
-            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFFFF3333)) // kitt_red
         }
         Column(
             modifier = Modifier.weight(1f)
         ) {
             Text(
                 text = "$index / $total",
-                color = Color.White,
+                color = Color(0xFFFF3333), // kitt_red
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
             )
             Text(
                 text = date,
-                color = Color(0xFFEEEEEE),
+                color = Color(0xFF666666), // kitt_light_gray
                 style = MaterialTheme.typography.bodySmall
             )
         }
         IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
+            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFFF3333)) // kitt_red
         }
     }
 }

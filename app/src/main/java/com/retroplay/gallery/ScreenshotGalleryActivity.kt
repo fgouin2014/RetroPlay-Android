@@ -96,18 +96,27 @@ private fun ScreenshotGalleryScreen(
     }
 
     Scaffold(
+        containerColor = Color(0xFF000000), // kitt_black
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(title)
+                        Text(
+                            text = title,
+                            color = Color(0xFFFF3333) // kitt_red
+                        )
                         Text(
                             text = "$contextLine • $countLine",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
+                            color = Color(0xFF666666) // kitt_light_gray
                         )
                     }
                 },
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF1A1A1A), // dark_gray_dark
+                    titleContentColor = Color(0xFFFF3333), // kitt_red
+                    navigationIconContentColor = Color(0xFFFF3333) // kitt_red
+                ),
                 navigationIcon = {
                     IconButton(onClick = {
                         if (selectedIndex.value != null) {
@@ -116,7 +125,11 @@ private fun ScreenshotGalleryScreen(
                             onBack()
                         }
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color(0xFFFF3333) // kitt_red
+                        )
                     }
                 }
             )
@@ -125,6 +138,7 @@ private fun ScreenshotGalleryScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color(0xFF000000)) // kitt_black background
                 .padding(padding)
         ) {
             if (gameId == com.retroplay.gallery.ScreenshotRepository.ALL_GAMES_KEY) {

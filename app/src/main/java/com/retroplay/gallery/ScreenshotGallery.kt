@@ -63,7 +63,7 @@ fun ScreenshotGallery(
             items.isEmpty() -> {
                 Text(
                     text = emptyMessage,
-                    style = MaterialTheme.typography.bodyMedium.copy(color = Color.Gray),
+                    style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF666666)), // kitt_light_gray
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
@@ -152,7 +152,7 @@ fun ConsoleGroupedGallery(
             items.isEmpty() -> {
                 Text(
                     text = "No screenshots for $systemName",
-                    style = MaterialTheme.typography.bodyMedium.copy(color = Color.Gray),
+                    style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF666666)), // kitt_light_gray
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
@@ -172,13 +172,13 @@ fun ConsoleGroupedGallery(
                                 Text(
                                     text = beautifyGameKey(gameKey),
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    color = Color(0xFFFF3333) // kitt_red
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = "(${gameItems.size})",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.Gray
+                                    color = Color(0xFF666666) // kitt_light_gray
                                 )
                             }
                         }

@@ -223,54 +223,60 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             headerParent.setBackgroundColor(mediumColor);
         }
         
+        // Helper to create ColorStateList with alpha 1.0f
+        int primaryColorOpaque = android.graphics.Color.argb(255, 
+            android.graphics.Color.red(primaryColor),
+            android.graphics.Color.green(primaryColor),
+            android.graphics.Color.blue(primaryColor));
+        
         // Console Selector Button (with dynamic drawable)
         if (consoleSelectorButton != null) {
-            consoleSelectorButton.setTextColor(primaryColor);
+            consoleSelectorButton.setTextColor(primaryColorOpaque);
             consoleSelectorButton.setAlpha(1.0f);
             // Create drawable programmatically with theme colors
             android.graphics.drawable.GradientDrawable selectorDrawable = new android.graphics.drawable.GradientDrawable();
             selectorDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             selectorDrawable.setCornerRadius(6 * getResources().getDisplayMetrics().density); // 6dp
             selectorDrawable.setColor(mediumColor);
-            selectorDrawable.setStroke((int)(1 * getResources().getDisplayMetrics().density), primaryColor); // 1dp stroke with theme color
+            selectorDrawable.setStroke((int)(1 * getResources().getDisplayMetrics().density), primaryColorOpaque); // 1dp stroke with theme color
             consoleSelectorButton.setBackground(selectorDrawable);
         }
         
         // Console Config Button
         if (consoleConfigButton != null) {
-            consoleConfigButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+            consoleConfigButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
             consoleConfigButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
-            consoleConfigButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+            consoleConfigButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
             consoleConfigButton.setAlpha(1.0f);
         }
         
         // Console Manager Button
         if (consoleManagerButton != null) {
-            consoleManagerButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+            consoleManagerButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
             consoleManagerButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
-            consoleManagerButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+            consoleManagerButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
             consoleManagerButton.setAlpha(1.0f);
         }
         
         // Favorites Button
         if (favoritesButton != null) {
-            favoritesButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+            favoritesButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
             favoritesButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
-            favoritesButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+            favoritesButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
             favoritesButton.setAlpha(1.0f);
         }
         
         // Search Toggle Button
         if (searchToggleButton != null) {
-            searchToggleButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+            searchToggleButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
             searchToggleButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
-            searchToggleButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+            searchToggleButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
             searchToggleButton.setAlpha(1.0f);
         }
         
         // Search Input
         if (searchInput != null) {
-            searchInput.setTextColor(primaryColor);
+            searchInput.setTextColor(primaryColorOpaque);
             searchInput.setHintTextColor(lightColor);
             searchInput.setAlpha(1.0f);
         }
@@ -286,14 +292,14 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
         // Filter Chip (with dynamic drawable)
         if (filterChip != null) {
-            filterChip.setTextColor(primaryColor);
+            filterChip.setTextColor(primaryColorOpaque);
             filterChip.setAlpha(1.0f);
             // Create drawable programmatically with theme colors
             android.graphics.drawable.GradientDrawable chipDrawable = new android.graphics.drawable.GradientDrawable();
             chipDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             chipDrawable.setCornerRadius(6 * getResources().getDisplayMetrics().density); // 6dp
             chipDrawable.setColor(mediumColor);
-            chipDrawable.setStroke((int)(1 * getResources().getDisplayMetrics().density), primaryColor); // 1dp stroke with theme color
+            chipDrawable.setStroke((int)(1 * getResources().getDisplayMetrics().density), primaryColorOpaque); // 1dp stroke with theme color
             filterChip.setBackground(chipDrawable);
         }
         
@@ -301,7 +307,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         if (favoritesFilterButton != null) {
             favoritesFilterButton.setAlpha(1.0f);
             if (showOnlyFavorites) {
-                favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColor));
+                favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
                 favoritesFilterButton.setIconTintResource(R.color.kitt_black);
             } else {
                 favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
@@ -326,7 +332,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
         // FAB Random
         if (fabRandom != null) {
-            fabRandom.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColor));
+            fabRandom.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColorOpaque));
             fabRandom.setImageTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.kitt_black)));
             fabRandom.setAlpha(1.0f);
         }
@@ -340,29 +346,29 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Pagination Buttons (with dynamic drawables)
         float density = getResources().getDisplayMetrics().density;
         if (paginationPrev != null) {
-            paginationPrev.setTextColor(primaryColor);
+            paginationPrev.setTextColor(primaryColorOpaque);
             paginationPrev.setAlpha(1.0f);
             // Create drawable programmatically with theme colors
             android.graphics.drawable.GradientDrawable prevDrawable = new android.graphics.drawable.GradientDrawable();
             prevDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             prevDrawable.setCornerRadius(6 * density); // 6dp
             prevDrawable.setColor(mediumColor);
-            prevDrawable.setStroke((int)(1 * density), primaryColor); // 1dp stroke with theme color
+            prevDrawable.setStroke((int)(1 * density), primaryColorOpaque); // 1dp stroke with theme color
             paginationPrev.setBackground(prevDrawable);
         }
         if (paginationInfo != null) {
-            paginationInfo.setTextColor(primaryColor);
+            paginationInfo.setTextColor(primaryColorOpaque);
             paginationInfo.setAlpha(1.0f);
         }
         if (paginationNext != null) {
-            paginationNext.setTextColor(primaryColor);
+            paginationNext.setTextColor(primaryColorOpaque);
             paginationNext.setAlpha(1.0f);
             // Create drawable programmatically with theme colors
             android.graphics.drawable.GradientDrawable nextDrawable = new android.graphics.drawable.GradientDrawable();
             nextDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             nextDrawable.setCornerRadius(6 * density); // 6dp
             nextDrawable.setColor(mediumColor);
-            nextDrawable.setStroke((int)(1 * density), primaryColor); // 1dp stroke with theme color
+            nextDrawable.setStroke((int)(1 * density), primaryColorOpaque); // 1dp stroke with theme color
             paginationNext.setBackground(nextDrawable);
         }
         
@@ -936,6 +942,10 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         if (searchScopeToggle != null) {
             ThemeManager themeManager = ThemeManager.getInstance(this);
             int primaryColor = themeManager.getPrimaryColor(this);
+            int primaryColorOpaque = android.graphics.Color.argb(255, 
+                android.graphics.Color.red(primaryColor),
+                android.graphics.Color.green(primaryColor),
+                android.graphics.Color.blue(primaryColor));
             int mediumColor = themeManager.getMediumColor(this);
             float density = getResources().getDisplayMetrics().density;
             
@@ -944,7 +954,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             scopeDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             scopeDrawable.setCornerRadius(6 * density); // 6dp
             scopeDrawable.setColor(mediumColor);
-            scopeDrawable.setStroke((int)(1 * density), primaryColor); // 1dp stroke with theme color
+            scopeDrawable.setStroke((int)(1 * density), primaryColorOpaque); // 1dp stroke with theme color
             searchScopeToggle.setBackground(scopeDrawable);
             searchScopeToggle.setAlpha(1.0f);
             
@@ -989,8 +999,14 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             button.setLayoutParams(params);
             
             ThemeManager themeManager = ThemeManager.getInstance(this);
+            int primaryColor = themeManager.getPrimaryColor(this);
+            int primaryColorOpaque = android.graphics.Color.argb(255, 
+                android.graphics.Color.red(primaryColor),
+                android.graphics.Color.green(primaryColor),
+                android.graphics.Color.blue(primaryColor));
+            
             if ("#".equals(letter)) {
-                button.setBackgroundColor(themeManager.getPrimaryColor(this));
+                button.setBackgroundColor(primaryColorOpaque);
                 button.setTextColor(getResources().getColor(android.R.color.white));
             } else {
                 button.setBackgroundColor(themeManager.getMediumColor(this));
@@ -1006,11 +1022,11 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             drawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             drawable.setCornerRadius(6 * getResources().getDisplayMetrics().density); // 6dp
             if ("#".equals(letter)) {
-                drawable.setColor(themeManager.getPrimaryColor(this));
+                drawable.setColor(primaryColorOpaque);
             } else {
                 drawable.setColor(themeManager.getMediumColor(this));
             }
-            drawable.setStroke((int)(1 * getResources().getDisplayMetrics().density), themeManager.getPrimaryColor(this)); // 1dp stroke
+            drawable.setStroke((int)(1 * getResources().getDisplayMetrics().density), primaryColorOpaque); // 1dp stroke
             button.setBackground(drawable);
             
             button.setOnClickListener(v -> filterByLetter(letter));
@@ -1065,6 +1081,10 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     private void updateAlphabetRowAvailability(LinearLayout row, java.util.Map<String, Integer> letterCounts) {
         ThemeManager themeManager = ThemeManager.getInstance(this);
         int primaryColor = themeManager.getPrimaryColor(this);
+        int primaryColorOpaque = android.graphics.Color.argb(255, 
+            android.graphics.Color.red(primaryColor),
+            android.graphics.Color.green(primaryColor),
+            android.graphics.Color.blue(primaryColor));
         int mediumColor = themeManager.getMediumColor(this);
         int blackColor = getResources().getColor(R.color.kitt_black);
         int whiteColor = getResources().getColor(android.R.color.white);
@@ -1080,7 +1100,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             android.graphics.drawable.GradientDrawable drawable = new android.graphics.drawable.GradientDrawable();
             drawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             drawable.setCornerRadius(6 * density); // 6dp
-            drawable.setStroke((int)(1 * density), primaryColor); // 1dp stroke with theme color
+            drawable.setStroke((int)(1 * density), primaryColorOpaque); // 1dp stroke with theme color
             
             if (hasGames) {
                 // Lettre avec jeux - active et opaque
@@ -1089,7 +1109,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 
                 // Si c'est la lettre sélectionnée, la mettre en surbrillance avec texte blanc
                 if (letter.equals(currentLetter)) {
-                    drawable.setColor(primaryColor);
+                    drawable.setColor(primaryColorOpaque);
                     button.setBackground(drawable);
                     button.setTextColor(whiteColor); // Blanc pour contraste sur fond coloré
                 } else {

@@ -226,6 +226,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Console Selector Button (with dynamic drawable)
         if (consoleSelectorButton != null) {
             consoleSelectorButton.setTextColor(primaryColor);
+            consoleSelectorButton.setAlpha(1.0f);
             // Create drawable programmatically with theme colors
             android.graphics.drawable.GradientDrawable selectorDrawable = new android.graphics.drawable.GradientDrawable();
             selectorDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
@@ -271,6 +272,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         if (searchInput != null) {
             searchInput.setTextColor(primaryColor);
             searchInput.setHintTextColor(lightColor);
+            searchInput.setAlpha(1.0f);
         }
         
         // Search Scope Toggle
@@ -279,11 +281,13 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Games Count (use text secondary for better contrast)
         if (gamesCount != null) {
             gamesCount.setTextColor(themeManager.getTextSecondaryColor(this));
+            gamesCount.setAlpha(1.0f);
         }
         
         // Filter Chip (with dynamic drawable)
         if (filterChip != null) {
             filterChip.setTextColor(primaryColor);
+            filterChip.setAlpha(1.0f);
             // Create drawable programmatically with theme colors
             android.graphics.drawable.GradientDrawable chipDrawable = new android.graphics.drawable.GradientDrawable();
             chipDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
@@ -313,9 +317,11 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Empty State (use text primary for better contrast)
         if (emptyStateTitle != null) {
             emptyStateTitle.setTextColor(themeManager.getTextPrimaryColor(this));
+            emptyStateTitle.setAlpha(1.0f);
         }
         if (emptyStateSubtitle != null) {
             emptyStateSubtitle.setTextColor(themeManager.getTextSecondaryColor(this));
+            emptyStateSubtitle.setAlpha(1.0f);
         }
         
         // FAB Random
@@ -335,6 +341,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         float density = getResources().getDisplayMetrics().density;
         if (paginationPrev != null) {
             paginationPrev.setTextColor(primaryColor);
+            paginationPrev.setAlpha(1.0f);
             // Create drawable programmatically with theme colors
             android.graphics.drawable.GradientDrawable prevDrawable = new android.graphics.drawable.GradientDrawable();
             prevDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
@@ -345,9 +352,11 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         }
         if (paginationInfo != null) {
             paginationInfo.setTextColor(primaryColor);
+            paginationInfo.setAlpha(1.0f);
         }
         if (paginationNext != null) {
             paginationNext.setTextColor(primaryColor);
+            paginationNext.setAlpha(1.0f);
             // Create drawable programmatically with theme colors
             android.graphics.drawable.GradientDrawable nextDrawable = new android.graphics.drawable.GradientDrawable();
             nextDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
@@ -937,6 +946,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             scopeDrawable.setColor(mediumColor);
             scopeDrawable.setStroke((int)(1 * density), primaryColor); // 1dp stroke with theme color
             searchScopeToggle.setBackground(scopeDrawable);
+            searchScopeToggle.setAlpha(1.0f);
             
             if (searchAllConsoles) {
                 searchScopeToggle.setText("ALL");

@@ -152,11 +152,13 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         // Play button
         holder.playButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColor));
         holder.playButton.setIconTint(android.content.res.ColorStateList.valueOf(context.getResources().getColor(R.color.kitt_black)));
+        holder.playButton.setAlpha(1.0f);
         
         // Favorite button
         holder.favoriteButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
         holder.favoriteButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
         holder.favoriteButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+        holder.favoriteButton.setAlpha(1.0f);
         
         // Loading progress
         holder.loadingProgress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(primaryColor));

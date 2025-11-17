@@ -240,6 +240,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             consoleConfigButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
             consoleConfigButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
             consoleConfigButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+            consoleConfigButton.setAlpha(1.0f);
         }
         
         // Console Manager Button
@@ -247,6 +248,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             consoleManagerButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
             consoleManagerButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
             consoleManagerButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+            consoleManagerButton.setAlpha(1.0f);
         }
         
         // Favorites Button
@@ -254,6 +256,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             favoritesButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
             favoritesButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
             favoritesButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+            favoritesButton.setAlpha(1.0f);
         }
         
         // Search Toggle Button
@@ -261,6 +264,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             searchToggleButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
             searchToggleButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
             searchToggleButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+            searchToggleButton.setAlpha(1.0f);
         }
         
         // Search Input
@@ -291,6 +295,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
         // Appliquer au bouton de filtre favoris
         if (favoritesFilterButton != null) {
+            favoritesFilterButton.setAlpha(1.0f);
             if (showOnlyFavorites) {
                 favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColor));
                 favoritesFilterButton.setIconTintResource(R.color.kitt_black);
@@ -317,6 +322,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         if (fabRandom != null) {
             fabRandom.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColor));
             fabRandom.setImageTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.kitt_black)));
+            fabRandom.setAlpha(1.0f);
         }
         
         // Pagination Footer (background)

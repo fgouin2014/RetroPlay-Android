@@ -975,10 +975,10 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             ThemeManager themeManager = ThemeManager.getInstance(this);
             if ("#".equals(letter)) {
                 button.setBackgroundColor(themeManager.getPrimaryColor(this));
-                button.setTextColor(getResources().getColor(R.color.kitt_black));
+                button.setTextColor(getResources().getColor(android.R.color.white));
             } else {
                 button.setBackgroundColor(themeManager.getMediumColor(this));
-                button.setTextColor(themeManager.getPrimaryColor(this));
+                button.setTextColor(getResources().getColor(R.color.kitt_black));
             }
             
             button.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
@@ -1051,6 +1051,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         int primaryColor = themeManager.getPrimaryColor(this);
         int mediumColor = themeManager.getMediumColor(this);
         int blackColor = getResources().getColor(R.color.kitt_black);
+        int whiteColor = getResources().getColor(android.R.color.white);
         float density = getResources().getDisplayMetrics().density;
         
         for (int i = 0; i < row.getChildCount(); i++) {
@@ -1070,15 +1071,15 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 button.setClickable(true);
                 button.setAlpha(1.0f);
                 
-                // Si c'est la lettre sélectionnée, la mettre en surbrillance avec texte noir
+                // Si c'est la lettre sélectionnée, la mettre en surbrillance avec texte blanc
                 if (letter.equals(currentLetter)) {
                     drawable.setColor(primaryColor);
                     button.setBackground(drawable);
-                    button.setTextColor(blackColor); // Noir pour contraste sur fond coloré
+                    button.setTextColor(whiteColor); // Blanc pour contraste sur fond coloré
                 } else {
                     drawable.setColor(mediumColor);
                     button.setBackground(drawable);
-                    button.setTextColor(primaryColor);
+                    button.setTextColor(blackColor); // Noir par défaut, opaque
                 }
             } else {
                 // Lettre sans jeux - désactivée et transparente (garde les mêmes couleurs)

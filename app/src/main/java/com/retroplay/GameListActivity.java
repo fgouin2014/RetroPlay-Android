@@ -371,6 +371,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         addItem.accept(searchAllConsoles ? "Search Scope: ALL (tap to switch)" : "Search Scope: CURRENT (tap to switch)", () -> {
             toggleSearchScope();
         });
+        addItem.accept("Theme: " + ThemeManager.getInstance(this).getCurrentTheme().getDisplayName() + " (tap to change)", this::showThemeSelector);
 
         scrollView.addView(container, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
@@ -1161,6 +1162,41 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         intent.putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_ID, com.retroplay.gallery.ScreenshotRepository.ALL_GAMES_KEY);
         // Title will be derived in activity when ALL_GAMES_KEY is used
         startActivity(intent);
+    }
+    
+    private void showThemeSelector() {
+        ThemeManager.Theme currentTheme = ThemeManager.getInstance(this).getCurrentTheme();
+        ThemeManager.Theme[] themes = ThemeManager.Theme.values();
+        String[] themeNames = new String[themes.length];
+        int currentIndex = 0;
+        
+        for (int i = 0; i < themes.length; i++) {
+            themeNames[i] = themes[i].getDisplayName();
+            if (themes[i] == currentTheme) {
+                currentIndex = i;
+            }
+        }
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Select Theme");
+        builder.setSingleChoiceItems(themeNames, currentIndex, (dialog, which) -> {
+            ThemeManager.Theme selected = themes[which];
+            ThemeManager.getInstance(this).setTheme(selected);
+            dialog.dismiss();
+            
+            // Show toast and restart activity to apply theme
+            Toast.makeText(this, "Theme changed to " + selected.getDisplayName() + ". Restarting...", Toast.LENGTH_SHORT).show();
+            
+            // Restart activity to apply theme changes
+            android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+            handler.postDelayed(() -> {
+                Intent intent = getIntent();
+                finish();
+                startActivity(intent);
+            }, 500);
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss());
+        builder.show();
     }
     
     private void switchToConsole(String console) {

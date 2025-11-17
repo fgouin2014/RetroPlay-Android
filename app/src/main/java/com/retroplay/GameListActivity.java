@@ -8,6 +8,7 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
@@ -230,28 +231,28 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Console Config Button
         if (consoleConfigButton != null) {
             consoleConfigButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
-            consoleConfigButton.setBackgroundTint(android.content.res.ColorStateList.valueOf(mediumColor));
+            consoleConfigButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
             consoleConfigButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
         }
         
         // Console Manager Button
         if (consoleManagerButton != null) {
             consoleManagerButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
-            consoleManagerButton.setBackgroundTint(android.content.res.ColorStateList.valueOf(mediumColor));
+            consoleManagerButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
             consoleManagerButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
         }
         
         // Favorites Button
         if (favoritesButton != null) {
             favoritesButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
-            favoritesButton.setBackgroundTint(android.content.res.ColorStateList.valueOf(mediumColor));
+            favoritesButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
             favoritesButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
         }
         
         // Search Toggle Button
         if (searchToggleButton != null) {
             searchToggleButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
-            searchToggleButton.setBackgroundTint(android.content.res.ColorStateList.valueOf(mediumColor));
+            searchToggleButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
             searchToggleButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
         }
         
@@ -300,7 +301,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
         // FAB Random
         if (fabRandom != null) {
-            fabRandom.setBackgroundTint(android.content.res.ColorStateList.valueOf(primaryColor));
+            fabRandom.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColor));
             fabRandom.setImageTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.kitt_black)));
         }
         

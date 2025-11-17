@@ -1229,8 +1229,9 @@ public class GameDetailsActivity extends AppCompatActivity {
             return;
         }
         
-        ColorStateList accent = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_red));
-        ColorStateList medium = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_medium_red));
+        ThemeManager themeManager = ThemeManager.getInstance(this);
+        ColorStateList accent = ColorStateList.valueOf(themeManager.getPrimaryColor(this));
+        ColorStateList medium = ColorStateList.valueOf(themeManager.getMediumColor(this));
         favoriteButton.setStrokeColor(accent);
         favoriteButton.setBackgroundTintList(medium);
         if (favoritesManager.isFavorite(game)) {
@@ -1744,8 +1745,9 @@ public class GameDetailsActivity extends AppCompatActivity {
         gameInfoButton.setEnabled(enabled);
         gameInfoButton.setAlpha(enabled ? 1f : 0.5f);
         gameInfoButton.setChecked(enabled && isGameInfoDialogVisible);
-        ColorStateList accent = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_red));
-        ColorStateList medium = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_medium_red));
+        ThemeManager themeManager = ThemeManager.getInstance(this);
+        ColorStateList accent = ColorStateList.valueOf(themeManager.getPrimaryColor(this));
+        ColorStateList medium = ColorStateList.valueOf(themeManager.getMediumColor(this));
         ColorStateList iconActive = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_black));
         if (enabled && isGameInfoDialogVisible) {
             gameInfoButton.setBackgroundTintList(accent);

@@ -158,11 +158,12 @@ public class ConsoleConfigActivity extends AppCompatActivity {
 
             // Setup spinners with Pak options
             String[] pakOptions = {"🎯 Controller Pak (Memory)", "🔊 Rumble Pak (Vibration)", "🎮 Transfer Pak (Game Boy)"};
+            ThemeManager themeManager = ThemeManager.getInstance(this);
             ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, pakOptions) {
                 @Override
                 public View getView(int position, View convertView, ViewGroup parent) {
                     TextView view = (TextView) super.getView(position, convertView, parent);
-                    view.setTextColor(getResources().getColor(R.color.kitt_red));
+                    view.setTextColor(themeManager.getPrimaryColor(ConsoleConfigActivity.this));
                     view.setTextSize(12);
                     view.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
                     return view;
@@ -172,7 +173,7 @@ public class ConsoleConfigActivity extends AppCompatActivity {
                 public View getDropDownView(int position, View convertView, ViewGroup parent) {
                     TextView view = (TextView) super.getDropDownView(position, convertView, parent);
                     view.setTextColor(android.graphics.Color.WHITE);
-                    view.setBackgroundColor(getResources().getColor(R.color.kitt_dark_red));
+                    view.setBackgroundColor(themeManager.getMediumColor(ConsoleConfigActivity.this));
                     view.setTextSize(12);
                     view.setTypeface(android.graphics.Typeface.MONOSPACE);
                     view.setPadding(16, 12, 16, 12);
@@ -870,11 +871,12 @@ public class ConsoleConfigActivity extends AppCompatActivity {
     private void setupSpinner(android.widget.Spinner spinner, String[] options) {
         if (spinner == null) return;
 
+        ThemeManager themeManager = ThemeManager.getInstance(this);
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, options) {
             @Override
             public View getView(int position, View convertView, ViewGroup parent) {
                 TextView view = (TextView) super.getView(position, convertView, parent);
-                view.setTextColor(getResources().getColor(R.color.kitt_red));
+                view.setTextColor(themeManager.getPrimaryColor(ConsoleConfigActivity.this));
                 view.setTextSize(12);
                 view.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
                 return view;
@@ -884,7 +886,7 @@ public class ConsoleConfigActivity extends AppCompatActivity {
             public View getDropDownView(int position, View convertView, ViewGroup parent) {
                 TextView view = (TextView) super.getDropDownView(position, convertView, parent);
                 view.setTextColor(android.graphics.Color.WHITE);
-                view.setBackgroundColor(getResources().getColor(R.color.kitt_dark_red));
+                view.setBackgroundColor(themeManager.getMediumColor(ConsoleConfigActivity.this));
                 view.setTextSize(12);
                 view.setTypeface(android.graphics.Typeface.MONOSPACE);
                 view.setPadding(16, 12, 16, 12);

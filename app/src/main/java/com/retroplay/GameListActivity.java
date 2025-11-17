@@ -213,6 +213,66 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         ThemeManager themeManager = ThemeManager.getInstance(this);
         int primaryColor = themeManager.getPrimaryColor(this);
         int mediumColor = themeManager.getMediumColor(this);
+        int lightColor = themeManager.getLightColor(this);
+        
+        // Appliquer au header (background)
+        View headerView = findViewById(R.id.consoleSelectorButton);
+        if (headerView != null && headerView.getParent() instanceof ViewGroup) {
+            ViewGroup headerParent = (ViewGroup) headerView.getParent();
+            headerParent.setBackgroundColor(mediumColor);
+        }
+        
+        // Console Selector Button
+        if (consoleSelectorButton != null) {
+            consoleSelectorButton.setTextColor(primaryColor);
+        }
+        
+        // Console Config Button
+        if (consoleConfigButton != null) {
+            consoleConfigButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+            consoleConfigButton.setBackgroundTint(android.content.res.ColorStateList.valueOf(mediumColor));
+            consoleConfigButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+        }
+        
+        // Console Manager Button
+        if (consoleManagerButton != null) {
+            consoleManagerButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+            consoleManagerButton.setBackgroundTint(android.content.res.ColorStateList.valueOf(mediumColor));
+            consoleManagerButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+        }
+        
+        // Favorites Button
+        if (favoritesButton != null) {
+            favoritesButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+            favoritesButton.setBackgroundTint(android.content.res.ColorStateList.valueOf(mediumColor));
+            favoritesButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+        }
+        
+        // Search Toggle Button
+        if (searchToggleButton != null) {
+            searchToggleButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+            searchToggleButton.setBackgroundTint(android.content.res.ColorStateList.valueOf(mediumColor));
+            searchToggleButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+        }
+        
+        // Search Input
+        if (searchInput != null) {
+            searchInput.setTextColor(primaryColor);
+            searchInput.setHintTextColor(lightColor);
+        }
+        
+        // Search Scope Toggle
+        updateSearchScopeButton();
+        
+        // Games Count (use text secondary for better contrast)
+        if (gamesCount != null) {
+            gamesCount.setTextColor(themeManager.getTextSecondaryColor(this));
+        }
+        
+        // Filter Chip
+        if (filterChip != null) {
+            filterChip.setTextColor(primaryColor);
+        }
         
         // Appliquer au bouton de filtre favoris
         if (favoritesFilterButton != null) {
@@ -225,8 +285,41 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             }
         }
         
-        // Appliquer au toggle de scope de recherche
-        updateSearchScopeButton();
+        // Loading Progress
+        if (loadingProgress != null) {
+            loadingProgress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(primaryColor));
+        }
+        
+        // Empty State (use text primary for better contrast)
+        if (emptyStateTitle != null) {
+            emptyStateTitle.setTextColor(themeManager.getTextPrimaryColor(this));
+        }
+        if (emptyStateSubtitle != null) {
+            emptyStateSubtitle.setTextColor(themeManager.getTextSecondaryColor(this));
+        }
+        
+        // FAB Random
+        if (fabRandom != null) {
+            fabRandom.setBackgroundTint(android.content.res.ColorStateList.valueOf(primaryColor));
+            fabRandom.setImageTintList(android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.kitt_black)));
+        }
+        
+        // Pagination Footer (background)
+        View paginationFooter = findViewById(R.id.paginationFooter);
+        if (paginationFooter != null) {
+            paginationFooter.setBackgroundColor(mediumColor);
+        }
+        
+        // Pagination Buttons
+        if (paginationPrev != null) {
+            paginationPrev.setTextColor(primaryColor);
+        }
+        if (paginationInfo != null) {
+            paginationInfo.setTextColor(primaryColor);
+        }
+        if (paginationNext != null) {
+            paginationNext.setTextColor(primaryColor);
+        }
         
         // Appliquer aux boutons alphabétiques
         updateAlphabetAvailability();
@@ -803,7 +896,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             } else {
                 String shortName = currentConsole.length() > 4 ? currentConsole.substring(0, 4).toUpperCase() : currentConsole.toUpperCase();
                 searchScopeToggle.setText(shortName);
-                searchScopeToggle.setTextColor(themeManager.getLightColor(this));
+                searchScopeToggle.setTextColor(themeManager.getTextPrimaryColor(this));
             }
         }
     }

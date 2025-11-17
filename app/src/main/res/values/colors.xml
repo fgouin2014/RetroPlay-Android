@@ -81,15 +81,20 @@
     <!-- Matrix Green Theme Colors -->
     <color name="matrix_primary">#00FF41</color>
     <color name="matrix_primary_dark">#00CC33</color>
-    <color name="matrix_primary_light">#33FF66</color>
-    <color name="matrix_secondary">#66FF88</color>
-    <color name="matrix_accent">#99FFAA</color>
+    <color name="matrix_primary_light">#66FF88</color>
+    <color name="matrix_secondary">#99FFAA</color>
+    <color name="matrix_accent">#B2FFC2</color>
     <color name="matrix_surface">#001A00</color>
     <color name="matrix_surface_variant">#003300</color>
-    <color name="matrix_on_surface">#99FFAA</color>
+    <color name="matrix_on_surface">#B2FFC2</color>
     <color name="matrix_on_primary">#000000</color>
     <color name="matrix_on_secondary">#000000</color>
     
     <!-- Matrix Theme Alpha Colors -->
     <color name="matrix_alpha">#1A00FF41</color>
+    
+    <!-- Matrix Text Colors (High Contrast) -->
+    <color name="matrix_text_primary">#B2FFC2</color>
+    <color name="matrix_text_secondary">#99FFAA</color>
+    <color name="matrix_text_hint">#66FF88</color>
 </resources>

@@ -126,5 +126,51 @@ public class ThemeManager {
     public int getLightColor(Context context) {
         return context.getResources().getColor(getLightColorResId(context), null);
     }
+    
+    public int getTextPrimaryColorResId(Context context) {
+        Theme current = getCurrentTheme();
+        String colorName;
+        switch (current) {
+            case KITT_RED:
+                colorName = "kitt_red_light";
+                break;
+            case AMBER:
+                colorName = "amber_primary_light";
+                break;
+            case MATRIX:
+                colorName = "matrix_text_primary";
+                break;
+            default:
+                colorName = "kitt_red_light";
+        }
+        return getPrimaryColorResIdByName(context, colorName);
+    }
+    
+    public int getTextPrimaryColor(Context context) {
+        return context.getResources().getColor(getTextPrimaryColorResId(context), null);
+    }
+    
+    public int getTextSecondaryColorResId(Context context) {
+        Theme current = getCurrentTheme();
+        String colorName;
+        switch (current) {
+            case KITT_RED:
+                colorName = "kitt_red_light";
+                break;
+            case AMBER:
+                colorName = "amber_primary_light";
+                break;
+            case MATRIX:
+                colorName = "matrix_text_secondary";
+                break;
+            default:
+                colorName = "kitt_red_light";
+        }
+        return getPrimaryColorResIdByName(context, colorName);
+    }
+    
+    public int getTextSecondaryColor(Context context) {
+        return context.getResources().getColor(getTextSecondaryColorResId(context), null);
+    }
 }
 

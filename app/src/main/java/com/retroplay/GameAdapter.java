@@ -114,10 +114,52 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
             });
         }
         
+        // Apply theme to item
+        applyTheme(holder);
+        
         // Add entrance animation
         Animation slideIn = AnimationUtils.loadAnimation(holder.itemView.getContext(), android.R.anim.slide_in_left);
         slideIn.setStartOffset(position * 100); // Stagger animation
         holder.itemView.startAnimation(slideIn);
+    }
+    
+    private void applyTheme(ViewHolder holder) {
+        android.content.Context context = holder.itemView.getContext();
+        ThemeManager themeManager = ThemeManager.getInstance(context);
+        int primaryColor = themeManager.getPrimaryColor(context);
+        int mediumColor = themeManager.getMediumColor(context);
+        int textPrimaryColor = themeManager.getTextPrimaryColor(context);
+        int textSecondaryColor = themeManager.getTextSecondaryColor(context);
+        
+        // Card stroke and background
+        if (holder.itemView instanceof com.google.android.material.card.MaterialCardView) {
+            com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) holder.itemView;
+            card.setStrokeColor(primaryColor);
+            card.setCardBackgroundColor(mediumColor);
+        }
+        
+        // Title
+        holder.title.setTextColor(primaryColor);
+        
+        // Info texts (players, year, genre)
+        holder.playersInfo.setTextColor(textSecondaryColor);
+        holder.releaseYear.setTextColor(textSecondaryColor);
+        holder.genreChip.setTextColor(textSecondaryColor);
+        
+        // Description
+        holder.description.setTextColor(textSecondaryColor);
+        
+        // Play button
+        holder.playButton.setBackgroundTint(android.content.res.ColorStateList.valueOf(primaryColor));
+        holder.playButton.setIconTint(android.content.res.ColorStateList.valueOf(context.getResources().getColor(R.color.kitt_black)));
+        
+        // Favorite button
+        holder.favoriteButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+        holder.favoriteButton.setBackgroundTint(android.content.res.ColorStateList.valueOf(mediumColor));
+        holder.favoriteButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+        
+        // Loading progress
+        holder.loadingProgress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(primaryColor));
     }
     
     private String extractYear(String releaseDate) {

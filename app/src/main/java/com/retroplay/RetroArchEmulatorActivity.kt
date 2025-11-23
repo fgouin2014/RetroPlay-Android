@@ -609,12 +609,30 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         Log.d(TAG, "[ZAPPER] Multi-touch action $actionId sent: keyCode=$keyCode on port ${port+1}")
     }
     
+    // P3: Quick tap detection - Compatible RetroArch android_check_quick_tap()
+    // Stocke le timestamp du dernier tap pour détecter les taps rapides (< 200ms)
+    private var lastZapperTapTime: Long = 0
+    private var quickTapResetHandler: android.os.Handler? = null
+    private val quickTapResetRunnable = android.os.Runnable {
+        // Reset après 200ms si aucun nouveau tap (compatible RetroArch ligne 809-811)
+        if (lastZapperTapTime > 0) {
+            val timeSinceLastTap = android.os.SystemClock.elapsedRealtime() - lastZapperTapTime
+            if (timeSinceLastTap >= 200) {
+                lastZapperTapTime = 0
+                Log.d(TAG, "[ZAPPER] Quick tap timer reset (>200ms)")
+            }
+        }
+    }
+    
     /**
      * Gestion des touches Zapper - Envoie position POINTER + trigger au port 2
      * Port 1 (index 0) = Manette standard (Start/Select pour menus)
      * Port 2 (index 1) = Zapper (RETRO_DEVICE_POINTER configuré)
      * 
      * Utilise RETRO_DEVICE_POINTER (6) pour envoyer coordonnées exactes au core FCEUmm
+     * 
+     * P3: Quick tap detection - Détecte les taps rapides (< 200ms) pour améliorer réactivité
+     * Compatible RetroArch android_check_quick_tap() (lignes 805-815)
      * 
      * @param event Touch event
      * @param gameViewBounds Bounds exacts du GLRetroView (zone de jeu)
@@ -776,6 +794,21 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 )
                 
                 if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                    // P3: Quick tap detection - Compatible RetroArch android_check_quick_tap() (lignes 805-815)
+                    val currentTime = android.os.SystemClock.elapsedRealtime()
+                    val timeSinceLastTap = if (lastZapperTapTime > 0) currentTime - lastZapperTapTime else Long.MAX_VALUE
+                    val isQuickTap = timeSinceLastTap < 200
+                    lastZapperTapTime = currentTime
+                    
+                    // Reset le handler précédent et programmer un nouveau reset après 200ms
+                    quickTapResetHandler?.removeCallbacks(quickTapResetRunnable)
+                    quickTapResetHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                    quickTapResetHandler?.postDelayed(quickTapResetRunnable, 200)
+                    
+                    if (isQuickTap && timeSinceLastTap != Long.MAX_VALUE) {
+                        Log.d(TAG, "[ZAPPER] Quick tap detected (${timeSinceLastTap}ms < 200ms)")
+                    }
+                    
                     // Déclencher le trigger selon l'option triggerOnTouch
                     if (triggerOnTouch) {
                         // NOUVEAU: Envoyer MOUSE BUTTON LEFT (trigger)
@@ -785,9 +818,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                             true,  // Pressed
                             lightgunPort
                         )
-                        Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $lightgunPort (triggerOnTouch=true)")
+                        Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $lightgunPort (triggerOnTouch=true${if (isQuickTap) ", quick tap" else ""})")
                     } else {
-                        Log.i(TAG, "[ZAPPER] Touch DOWN registered, waiting for UP to trigger (triggerOnTouch=false)")
+                        Log.i(TAG, "[ZAPPER] Touch DOWN registered, waiting for UP to trigger (triggerOnTouch=false${if (isQuickTap) ", quick tap" else ""})")
                     }
                     
                     Log.d(TAG, "[ZAPPER CONVERSIONS]")

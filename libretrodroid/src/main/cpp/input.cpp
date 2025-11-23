@@ -199,6 +199,16 @@ int16_t Input::getInputState(unsigned port, unsigned device, unsigned index, uns
                     LOGD("[NATIVE MOUSE] port=%d GET MIDDLE=%d", port, pads[port].mouseButtonMiddle ? 1 : 0);
                     return pads[port].mouseButtonMiddle ? 1 : 0;
                 
+                case RETRO_DEVICE_ID_MOUSE_BUTTON_4:
+                    // P3: Gestion boutons souris multiples - Compatible RetroArch
+                    LOGD("[NATIVE MOUSE] port=%d GET BUTTON_4=%d", port, pads[port].mouseButton4 ? 1 : 0);
+                    return pads[port].mouseButton4 ? 1 : 0;
+                
+                case RETRO_DEVICE_ID_MOUSE_BUTTON_5:
+                    // P3: Gestion boutons souris multiples - Compatible RetroArch
+                    LOGD("[NATIVE MOUSE] port=%d GET BUTTON_5=%d", port, pads[port].mouseButton5 ? 1 : 0);
+                    return pads[port].mouseButton5 ? 1 : 0;
+                
                 case RETRO_DEVICE_ID_MOUSE_X:
                     // Use POINTER coordinates for mouse X
                     return (int16_t) (2.0 * (pads[port].pointerScreenXAxis - 0.5f) * MAX_RANGE_MOTION);
@@ -860,6 +870,14 @@ void Input::onMouseButton(int port, int button, int pressed) {
         case 3: // Middle button
             pads[port].mouseButtonMiddle = isPressed;
             LOGD("[NATIVE MOUSE] port=%d BUTTON_MIDDLE=%d", port, isPressed ? 1 : 0);
+            break;
+        case 4: // Button 4 (P3: Gestion boutons souris multiples)
+            pads[port].mouseButton4 = isPressed;
+            LOGD("[NATIVE MOUSE] port=%d BUTTON_4=%d", port, isPressed ? 1 : 0);
+            break;
+        case 5: // Button 5 (P3: Gestion boutons souris multiples)
+            pads[port].mouseButton5 = isPressed;
+            LOGD("[NATIVE MOUSE] port=%d BUTTON_5=%d", port, isPressed ? 1 : 0);
             break;
         default:
             LOGD("[NATIVE MOUSE] Unknown mouse button: %d", button);

@@ -524,6 +524,12 @@ object OverlayPreferenceManager {
     
     /**
      * Load advanced settings for a console
+     * 
+     * TODO P3: Configuration per-orientation - Les settings avancés (dpadDiagonalSensitivity, opacity, etc.)
+     * devraient être séparés par orientation (landscape/portrait) pour permettre des configurations différentes.
+     * Actuellement, les layouts sont déjà séparés (landscapeLayout/portraitLayout), mais les settings avancés
+     * sont globaux. Pour implémenter: ajouter paramètre `orientation: String?` et utiliser clés comme
+     * `overlay_${console}_dpad_diagonal_sensitivity_${orientation}`.
      */
     fun loadAdvancedSettings(
         prefs: android.content.SharedPreferences,

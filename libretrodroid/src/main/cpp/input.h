@@ -85,9 +85,12 @@ private:
         float pointerScreenYAxis = -1;
         
         // Mouse button states (for Zapper/Lightgun)
-        bool mouseButtonLeft = false;
-        bool mouseButtonRight = false;
-        bool mouseButtonMiddle = false;
+        // P3: Gestion boutons souris multiples - Compatible RetroArch RETRO_DEVICE_ID_MOUSE_*
+        bool mouseButtonLeft = false;      // RETRO_DEVICE_ID_MOUSE_LEFT (2)
+        bool mouseButtonRight = false;    // RETRO_DEVICE_ID_MOUSE_RIGHT (3)
+        bool mouseButtonMiddle = false;   // RETRO_DEVICE_ID_MOUSE_MIDDLE (6)
+        bool mouseButton4 = false;        // RETRO_DEVICE_ID_MOUSE_BUTTON_4 (9)
+        bool mouseButton5 = false;        // RETRO_DEVICE_ID_MOUSE_BUTTON_5 (10)
         
         // Keyboard support (P1 #9) - compatible RetroArch RETRO_DEVICE_KEYBOARD
         // Store pressed keyboard keys as RetroK IDs (RETROK_*)

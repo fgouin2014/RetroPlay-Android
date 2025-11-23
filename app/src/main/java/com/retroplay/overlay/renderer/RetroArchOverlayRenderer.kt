@@ -112,6 +112,26 @@ fun RetroArchOverlayScreen(
     // Map<buttonIndex, Pair<deltaX, deltaY>> - delta en coordonnées normalisées
     val movableButtonDeltas = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
     
+    // P3: Charger positions sauvegardées pour boutons déplaçables au démarrage
+    LaunchedEffect(layout.name) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val prefs = context.getSharedPreferences("overlay_prefs", android.content.Context.MODE_PRIVATE)
+        
+        scaledLayout.buttons.forEachIndexed { index, button ->
+            if (button.movable && button.type != OverlayButtonType.ANALOG_LEFT && button.type != OverlayButtonType.ANALOG_RIGHT) {
+                val keyX = "overlay_movable_${layout.name}_${button.action}_delta_x"
+                val keyY = "overlay_movable_${layout.name}_${button.action}_delta_y"
+                val savedDeltaX = prefs.getFloat(keyX, 0f)
+                val savedDeltaY = prefs.getFloat(keyY, 0f)
+                
+                if (savedDeltaX != 0f || savedDeltaY != 0f) {
+                    movableButtonDeltas[index] = Pair(savedDeltaX, savedDeltaY)
+                    Log.d(TAG, "[MOVABLE] Loaded saved position for '${button.action}' in layout '${layout.name}': ($savedDeltaX, $savedDeltaY)")
+                }
+            }
+        }
+    }
+    
     // État des analog sticks
     val analogLeftState = remember { mutableStateOf(AnalogStickState()) }
     val analogRightState = remember { mutableStateOf(AnalogStickState()) }
@@ -801,12 +821,27 @@ private fun handleOverlayTouch(
                     onButtonRelease(button.action)
                 }
                 
-                // Réinitialiser le delta pour boutons déplaçables (movable, non-analog)
+                // P3: Sauvegarde persistante positions boutons déplaçables
                 if (button.movable && button.type != OverlayButtonType.ANALOG_LEFT && button.type != OverlayButtonType.ANALOG_RIGHT) {
                     val buttonIndex = layout.buttons.indexOf(button)
                     if (buttonIndex >= 0) {
-                        movableButtonDeltas.remove(buttonIndex)
-                        Log.d(TAG, "[MOVABLE] Button '${button.action}' (index=$buttonIndex) delta reset")
+                        val delta = movableButtonDeltas[buttonIndex]
+                        if (delta != null) {
+                            // Sauvegarder la position finale dans SharedPreferences
+                            val prefs = android.content.Context.MODE_PRIVATE
+                            val sharedPrefs = androidx.compose.ui.platform.LocalContext.current.getSharedPreferences(
+                                "overlay_prefs", prefs
+                            )
+                            val keyX = "overlay_movable_${layout.name}_${button.action}_delta_x"
+                            val keyY = "overlay_movable_${layout.name}_${button.action}_delta_y"
+                            sharedPrefs.edit()
+                                .putFloat(keyX, delta.first)
+                                .putFloat(keyY, delta.second)
+                                .apply()
+                            Log.d(TAG, "[MOVABLE] Saved position for '${button.action}' in layout '${layout.name}': (${delta.first}, ${delta.second})")
+                        }
+                        // Ne pas réinitialiser le delta - le garder pour la prochaine session
+                        // movableButtonDeltas.remove(buttonIndex)  // Commenté pour persistance
                     }
                 }
             }

@@ -13,9 +13,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,6 +60,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.asImageBitmap
 import com.retroplay.ScreenshotManager
 import com.retroplay.GameInfoDialog
 import com.retroplay.config.RetroPlayConfigManager
@@ -362,8 +369,41 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
 
     private fun endRewind() {
         rewindManager?.stopRewind()
-        // Capture a screenshot at the end of rewind for Gallery
-        takeScreenshot()
+        // No screenshot needed at end of rewind
+    }
+    
+    /**
+     * Capture a screenshot and save it as a thumbnail for the save slot
+     */
+    private fun captureSlotThumbnail(slot: Int) {
+        if (retroView == null) return
+        
+        retroView.queueEvent {
+            try {
+                val width = retroView.width
+                val height = retroView.height
+                if (width <= 0 || height <= 0) return@queueEvent
+                
+                val screenshotBitmap = ScreenshotManager.captureScreenshotGL(width, height)
+                if (screenshotBitmap != null) {
+                    // Save thumbnail in the slot directory
+                    val slotDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot")
+                    if (!slotDir.exists()) {
+                        slotDir.mkdirs()
+                    }
+                    
+                    val thumbnailFile = File(slotDir, "thumbnail.png")
+                    FileOutputStream(thumbnailFile).use { out ->
+                        screenshotBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
+                    }
+                    
+                    Log.i(TAG, "[$console] Slot $slot thumbnail saved: ${thumbnailFile.absolutePath}")
+                    screenshotBitmap.recycle()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to capture slot thumbnail", e)
+            }
+        }
     }
 
     private fun notifyRewindUnavailable() {
@@ -1362,6 +1402,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     "mame2003" -> "mame2003_libretro_android.so"
                     "fbneo" -> "fbneo_libretro_android.so"
                     "fceumm" -> "fceumm_libretro_android.so"
+                    "mesen" -> "mesen_libretro_android.so"
                     "snes9x" -> "snes9x_libretro_android.so"
                     "parallel_n64" -> "parallel_n64_libretro_android.so"
                     "mupen64plus_next" -> "mupen64plus_next_libretro_android.so"
@@ -1373,6 +1414,14 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     "ppsspp" -> "ppsspp_libretro_android.so"
                     "genesis_plus_gx" -> "genesis_plus_gx_libretro_android.so"
                     "picodrive" -> "picodrive_libretro_android.so"
+                    "mednafen_wswan" -> "mednafen_wswan_libretro_android.so"
+                    "wonderswancolor" -> "mednafen_wswan_libretro_android.so"
+                    "wonderswan" -> "mednafen_wswan_libretro_android.so"
+                    "ws" -> "mednafen_wswan_libretro_android.so"
+                    "wsc" -> "mednafen_wswan_libretro_android.so"
+                    "mednafen_ngp" -> "mednafen_ngp_libretro_android.so"
+                    "mednafen_pce" -> "mednafen_pce_libretro_android.so"
+                    "mednafen_lynx" -> "mednafen_lynx_libretro_android.so"
                     else -> null
                 }
             }
@@ -1414,7 +1463,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             
             // Other
             "ngp", "ngc", "neogeopocket" -> "mednafen_ngp_libretro_android.so"
-            "ws", "wsc", "wonderswan" -> "mednafen_wswan_libretro_android.so"
+            "ws", "wsc", "wonderswan", "wonderswancolor" -> "mednafen_wswan_libretro_android.so"
             "pce", "turbografx", "pcengine" -> "mednafen_pce_libretro_android.so"
             "arcade" -> "mame2003_plus_libretro_android.so"
             "mame" -> "mame2010_libretro_android.so"
@@ -1550,8 +1599,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             Log.i(TAG, "[$console] Game state saved to slot $slot: ${saveFile.absolutePath}")
             runOnUiThread {
                 Toast.makeText(this, "[$console] Saved to Slot $slot", Toast.LENGTH_SHORT).show()
-                // Auto-capture screenshot for Gallery
-                takeScreenshot()
+                // Capture screenshot for slot thumbnail
+                captureSlotThumbnail(slot)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error saving game state to slot $slot", e)
@@ -2140,6 +2189,8 @@ private fun ComposeEmulatorScreen(
                                             Log.d("AnalogInput", "sendMotionEvent: source=$source, x=$x, y=$y")
                                             retroView.sendMotionEvent(source, x, y)
                                         },
+                                        availableLayouts = overlayConfig.layouts.keys.toList().sorted(),
+                                        currentLayoutName = layoutName,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
@@ -3074,53 +3125,92 @@ private fun SlotSelectionDialog(
                     // 5 slots avec infos détaillées
                     for (slot in 1..5) {
                         val saveFile = java.io.File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/${gameName}.state")
+                        val thumbnailFile = java.io.File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/thumbnail.png")
                         val isOccupied = saveFile.exists()
+                        val hasThumbnail = thumbnailFile.exists()
                         
                         TextButton(
                             onClick = { onSlotSelected(slot) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // Ligne 1 : Slot + Status
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        "Slot $slot",
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    
-                                    if (isOccupied) {
-                                        Text(
-                                            "[Occupied]",
-                                            color = Color(0xFF4CAF50),
-                                            style = MaterialTheme.typography.bodySmall
+                                // Thumbnail (si disponible)
+                                if (hasThumbnail) {
+                                    val thumbnailBitmap = remember(thumbnailFile.absolutePath) {
+                                        android.graphics.BitmapFactory.decodeFile(thumbnailFile.absolutePath)
+                                    }
+                                    thumbnailBitmap?.let { bitmap ->
+                                        androidx.compose.foundation.Image(
+                                            bitmap = bitmap.asImageBitmap(),
+                                            contentDescription = "Slot $slot thumbnail",
+                                            modifier = Modifier
+                                                .size(80.dp)
+                                                .clip(MaterialTheme.shapes.small),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                         )
-                                    } else {
+                                    } ?: Spacer(modifier = Modifier.size(80.dp))
+                                } else {
+                                    // Placeholder si pas de thumbnail
+                                    Box(
+                                        modifier = Modifier
+                                            .size(80.dp)
+                                            .background(Color(0xFF333333), MaterialTheme.shapes.small),
+                                        contentAlignment = Alignment.Center
+                                    ) {
                                         Text(
-                                            "[Empty]",
+                                            "Slot $slot",
                                             color = Color.Gray,
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                     }
                                 }
                                 
-                                // Ligne 2 : Infos détaillées (si occupé)
-                                if (isOccupied) {
-                                    val lastModified = saveFile.lastModified()
-                                    val sizeKB = saveFile.length() / 1024
-                                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-                                    val dateStr = dateFormat.format(java.util.Date(lastModified))
+                                // Infos du slot
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    // Ligne 1 : Slot + Status
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            "Slot $slot",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        
+                                        if (isOccupied) {
+                                            Text(
+                                                "[Occupied]",
+                                                color = Color(0xFF4CAF50),
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        } else {
+                                            Text(
+                                                "[Empty]",
+                                                color = Color.Gray,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                    }
                                     
-                                    Text(
-                                        "$dateStr - ${sizeKB}KB",
-                                        color = Color(0xFFAAAAAA),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
+                                    // Ligne 2 : Infos détaillées (si occupé)
+                                    if (isOccupied) {
+                                        val lastModified = saveFile.lastModified()
+                                        val sizeKB = saveFile.length() / 1024
+                                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                                        val dateStr = dateFormat.format(java.util.Date(lastModified))
+                                        
+                                        Text(
+                                            "$dateStr - ${sizeKB}KB",
+                                            color = Color(0xFFAAAAAA),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                             }
                         }

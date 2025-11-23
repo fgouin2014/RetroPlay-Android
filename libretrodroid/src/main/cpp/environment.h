@@ -49,6 +49,10 @@ public:
         enum retro_rumble_effect effect,
         uint16_t strength
     );
+    
+    // P1 #8: Sensors Support - callbacks for RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE
+    static bool callback_set_sensor_state(unsigned port, enum retro_sensor_action action, unsigned rate);
+    static float callback_get_sensor_input(unsigned port, unsigned id);
 
     static bool callback_environment(unsigned cmd, void *data);
 

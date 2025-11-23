@@ -109,29 +109,45 @@ int16_t Input::getInputState(unsigned port, unsigned device, unsigned index, uns
         }
 
         case RETRO_DEVICE_POINTER: {
-            // TODO... Here we should hanlde multitouch...
-            if (index > 0) {
+            // Multi-touch support: index (0-15) corresponds to pointer number
+            if (index >= GamePadState::MAX_POINTERS) {
                 return 0;
             }
-
+            
+            const PointerState& pointer = pads[port].pointers[index];
+            
             switch (id) {
                 case RETRO_DEVICE_ID_POINTER_PRESSED: {
-                    bool isXActive = pads[port].pointerScreenXAxis >= 0;
-                    bool isYActive = pads[port].pointerScreenYAxis >= 0;
-                    int16_t result = (int16_t) (isXActive && isYActive ? 1 : 0);
-                    LOGI("[NATIVE POINTER] port=%d PRESSED=%d (X=%.3f Y=%.3f)", port, result, pads[port].pointerScreenXAxis, pads[port].pointerScreenYAxis);
+                    bool isPressed = pointer.active && pointer.screenX >= 0.0f && pointer.screenY >= 0.0f;
+                    int16_t result = (int16_t) (isPressed ? 1 : 0);
+                    LOGI("[NATIVE POINTER] port=%d index=%d PRESSED=%d (X=%.3f Y=%.3f)", port, index, result, pointer.screenX, pointer.screenY);
                     return result;
                 }
 
                 case RETRO_DEVICE_ID_POINTER_X: {
-                    int16_t result = (int16_t) (2.0 * (pads[port].pointerScreenXAxis - 0.5f) * MAX_RANGE_MOTION);
-                    LOGI("[NATIVE POINTER] port=%d X=%d (raw=%.3f)", port, result, pads[port].pointerScreenXAxis);
+                    if (!pointer.active || pointer.screenX < 0.0f) {
+                        return 0;
+                    }
+                    // Use viewport-converted coordinates (always calculated in onMotionEventMulti)
+                    int16_t result = pointer.x;
+                    LOGI("[NATIVE POINTER] port=%d index=%d X=%d (raw=%.3f, viewport=%d)", port, index, result, pointer.screenX, pointer.x);
                     return result;
                 }
 
                 case RETRO_DEVICE_ID_POINTER_Y: {
-                    int16_t result = (int16_t) (2.0 * (pads[port].pointerScreenYAxis - 0.5f) * MAX_RANGE_MOTION);
-                    LOGI("[NATIVE POINTER] port=%d Y=%d (raw=%.3f)", port, result, pads[port].pointerScreenYAxis);
+                    if (!pointer.active || pointer.screenY < 0.0f) {
+                        return 0;
+                    }
+                    // Use viewport-converted coordinates (always calculated in onMotionEventMulti)
+                    int16_t result = pointer.y;
+                    LOGI("[NATIVE POINTER] port=%d index=%d Y=%d (raw=%.3f, viewport=%d)", port, index, result, pointer.screenY, pointer.y);
+                    return result;
+                }
+                
+                case RETRO_DEVICE_ID_POINTER_COUNT: {
+                    // Return number of active pointers (RetroArch compatible)
+                    int16_t result = (int16_t) pads[port].pointerCount;
+                    LOGI("[NATIVE POINTER] port=%d COUNT=%d", port, result);
                     return result;
                 }
 
@@ -166,13 +182,66 @@ int16_t Input::getInputState(unsigned port, unsigned device, unsigned index, uns
                     return 0;
             }
         }
-
-        default:
+        
+        // P1 #9: Keyboard Support - compatible RetroArch RETRO_DEVICE_KEYBOARD
+        case RETRO_DEVICE_KEYBOARD: {
+            // id is the RetroK keycode (RETROK_*)
+            // Return 1 if key is pressed, 0 otherwise
+            // Compatible with RetroArch input_driver.c:input_state_keyboard()
+            unsigned retroK = id;
+            bool isPressed = pads[port].pressedKeyboardKeys.find(retroK) != pads[port].pressedKeyboardKeys.end();
+            return isPressed ? 1 : 0;
+        }
+        
+        // P1 #8: Sensors Support - compatible RetroArch android_input_get_sensor_input()
+        // Note: In RetroArch, sensors are exposed via get_sensor_input() callback (float return)
+        // In LibretroDroid, we use RETRO_DEVICE_ANALOG with special IDs for sensors
+        // Sensors are global (port 0 only) in RetroArch
+        // We use device value 0x100 (256) to indicate sensor device (not standard RETRO_DEVICE_*)
+        // This is a workaround since LibretroDroid doesn't expose get_sensor_input() callback
+        default: {
+            // Check if this is a sensor request (device >= 0x100 indicates sensor)
+            // This is a custom extension for LibretroDroid compatibility
+            if (device >= 0x100 && port == 0) {
+                unsigned sensorDevice = device - 0x100;
+                const SensorState* sensorState = nullptr;
+                bool sensorEnabled = false;
+                
+                // sensorDevice: 0 = accelerometer, 1 = gyroscope
+                if (sensorDevice == 0) {
+                    sensorState = &accelerometerState;
+                    sensorEnabled = accelerometerEnabled;
+                } else if (sensorDevice == 1) {
+                    sensorState = &gyroscopeState;
+                    sensorEnabled = gyroscopeEnabled;
+                }
+                
+                if (!sensorEnabled || !sensorState) {
+                    return 0;
+                }
+                
+                // Return sensor value based on id (X, Y, or Z)
+                // Compatible with RetroArch android_input_get_sensor_input() (lignes 2026-2051)
+                // id: 0=X, 1=Y, 2=Z (matching RETRO_SENSOR_ACCELEROMETER_X/Y/Z)
+                switch (id) {
+                    case 0: // X
+                        return (int16_t)(sensorState->x * MAX_RANGE_MOTION);
+                    case 1: // Y
+                        return (int16_t)(sensorState->y * MAX_RANGE_MOTION);
+                    case 2: // Z
+                        return (int16_t)(sensorState->z * MAX_RANGE_MOTION);
+                    default:
+                        return 0;
+                }
+            }
+            
             return 0;
+        }
     }
 }
 
 int Input::convertAndroidToLibretroKey(int keyCode) const {
+    // Convert Android gamepad buttons → RetroPad IDs (RETRO_DEVICE_ID_JOYPAD_*)
     switch (keyCode) {
         case AKEYCODE_BUTTON_START:
             return RETRO_DEVICE_ID_JOYPAD_START;
@@ -219,17 +288,318 @@ int Input::convertAndroidToLibretroKey(int keyCode) const {
     }
 }
 
+// P1 #9: Keyboard Support - convert Android keycode → RetroK
+// Compatible with RetroArch input_keymaps.c:rarch_key_map_android[] (lignes 1395-1502)
+// Maps Android AKEYCODE_* to RetroArch RETROK_* (for RETRO_DEVICE_KEYBOARD)
+unsigned Input::convertAndroidToRetroK(int keyCode) const {
+    // Mapping complet Android → RetroK (compatible RetroArch)
+    // Source: RetroArch input_keymaps.c:rarch_key_map_android[] lignes 1395-1502
+    switch (keyCode) {
+        // Special keys
+        case AKEYCODE_BACK: return RETROK_BACKSPACE;
+        case AKEYCODE_TAB: return RETROK_TAB;
+        case AKEYCODE_CLEAR: return RETROK_CLEAR;
+        case AKEYCODE_ENTER: return RETROK_RETURN;
+        case AKEYCODE_DPAD_CENTER: return RETROK_RETURN;
+        case AKEYCODE_BREAK: return RETROK_PAUSE;
+        case AKEYCODE_ESCAPE: return RETROK_ESCAPE;
+        case AKEYCODE_SPACE: return RETROK_SPACE;
+        case AKEYCODE_DEL: return RETROK_DELETE;
+        case AKEYCODE_FORWARD_DEL: return RETROK_DELETE;
+        
+        // Symbols
+        case AKEYCODE_APOSTROPHE: return RETROK_QUOTE;
+        case AKEYCODE_COMMA: return RETROK_COMMA;
+        case AKEYCODE_MINUS: return RETROK_MINUS;
+        case AKEYCODE_PERIOD: return RETROK_PERIOD;
+        case AKEYCODE_SLASH: return RETROK_SLASH;
+        case AKEYCODE_SEMICOLON: return RETROK_SEMICOLON;
+        case AKEYCODE_EQUALS: return RETROK_EQUALS;
+        case AKEYCODE_LEFT_BRACKET: return RETROK_LEFTBRACKET;
+        case AKEYCODE_BACKSLASH: return RETROK_BACKSLASH;
+        case AKEYCODE_RIGHT_BRACKET: return RETROK_RIGHTBRACKET;
+        case AKEYCODE_GRAVE: return RETROK_BACKQUOTE;
+        
+        // Numbers
+        case AKEYCODE_0: return RETROK_0;
+        case AKEYCODE_1: return RETROK_1;
+        case AKEYCODE_2: return RETROK_2;
+        case AKEYCODE_3: return RETROK_3;
+        case AKEYCODE_4: return RETROK_4;
+        case AKEYCODE_5: return RETROK_5;
+        case AKEYCODE_6: return RETROK_6;
+        case AKEYCODE_7: return RETROK_7;
+        case AKEYCODE_8: return RETROK_8;
+        case AKEYCODE_9: return RETROK_9;
+        
+        // Letters
+        case AKEYCODE_A: return RETROK_a;
+        case AKEYCODE_B: return RETROK_b;
+        case AKEYCODE_C: return RETROK_c;
+        case AKEYCODE_D: return RETROK_d;
+        case AKEYCODE_E: return RETROK_e;
+        case AKEYCODE_F: return RETROK_f;
+        case AKEYCODE_G: return RETROK_g;
+        case AKEYCODE_H: return RETROK_h;
+        case AKEYCODE_I: return RETROK_i;
+        case AKEYCODE_J: return RETROK_j;
+        case AKEYCODE_K: return RETROK_k;
+        case AKEYCODE_L: return RETROK_l;
+        case AKEYCODE_M: return RETROK_m;
+        case AKEYCODE_N: return RETROK_n;
+        case AKEYCODE_O: return RETROK_o;
+        case AKEYCODE_P: return RETROK_p;
+        case AKEYCODE_Q: return RETROK_q;
+        case AKEYCODE_R: return RETROK_r;
+        case AKEYCODE_S: return RETROK_s;
+        case AKEYCODE_T: return RETROK_t;
+        case AKEYCODE_U: return RETROK_u;
+        case AKEYCODE_V: return RETROK_v;
+        case AKEYCODE_W: return RETROK_w;
+        case AKEYCODE_X: return RETROK_x;
+        case AKEYCODE_Y: return RETROK_y;
+        case AKEYCODE_Z: return RETROK_z;
+        
+        // Keypad
+        case AKEYCODE_NUMPAD_0: return RETROK_KP0;
+        case AKEYCODE_NUMPAD_1: return RETROK_KP1;
+        case AKEYCODE_NUMPAD_2: return RETROK_KP2;
+        case AKEYCODE_NUMPAD_3: return RETROK_KP3;
+        case AKEYCODE_NUMPAD_4: return RETROK_KP4;
+        case AKEYCODE_NUMPAD_5: return RETROK_KP5;
+        case AKEYCODE_NUMPAD_6: return RETROK_KP6;
+        case AKEYCODE_NUMPAD_7: return RETROK_KP7;
+        case AKEYCODE_NUMPAD_8: return RETROK_KP8;
+        case AKEYCODE_NUMPAD_9: return RETROK_KP9;
+        case AKEYCODE_NUMPAD_DOT: return RETROK_KP_PERIOD;
+        case AKEYCODE_NUMPAD_DIVIDE: return RETROK_KP_DIVIDE;
+        case AKEYCODE_NUMPAD_MULTIPLY: return RETROK_KP_MULTIPLY;
+        case AKEYCODE_NUMPAD_SUBTRACT: return RETROK_KP_MINUS;
+        case AKEYCODE_NUMPAD_ADD: return RETROK_KP_PLUS;
+        case AKEYCODE_NUMPAD_ENTER: return RETROK_KP_ENTER;
+        case AKEYCODE_NUMPAD_EQUALS: return RETROK_KP_EQUALS;
+        
+        // Arrow keys (mapped from D-pad for keyboard)
+        case AKEYCODE_DPAD_UP: return RETROK_UP;
+        case AKEYCODE_DPAD_DOWN: return RETROK_DOWN;
+        case AKEYCODE_DPAD_RIGHT: return RETROK_RIGHT;
+        case AKEYCODE_DPAD_LEFT: return RETROK_LEFT;
+        
+        // Navigation keys
+        case AKEYCODE_INSERT: return RETROK_INSERT;
+        case AKEYCODE_MOVE_HOME: return RETROK_HOME;
+        case AKEYCODE_MOVE_END: return RETROK_END;
+        case AKEYCODE_PAGE_UP: return RETROK_PAGEUP;
+        case AKEYCODE_PAGE_DOWN: return RETROK_PAGEDOWN;
+        
+        // Function keys
+        case AKEYCODE_F1: return RETROK_F1;
+        case AKEYCODE_F2: return RETROK_F2;
+        case AKEYCODE_F3: return RETROK_F3;
+        case AKEYCODE_F4: return RETROK_F4;
+        case AKEYCODE_F5: return RETROK_F5;
+        case AKEYCODE_F6: return RETROK_F6;
+        case AKEYCODE_F7: return RETROK_F7;
+        case AKEYCODE_F8: return RETROK_F8;
+        case AKEYCODE_F9: return RETROK_F9;
+        case AKEYCODE_F10: return RETROK_F10;
+        case AKEYCODE_F11: return RETROK_F11;
+        case AKEYCODE_F12: return RETROK_F12;
+        
+        // Lock keys
+        case AKEYCODE_NUM_LOCK: return RETROK_NUMLOCK;
+        case AKEYCODE_CAPS_LOCK: return RETROK_CAPSLOCK;
+        case AKEYCODE_SCROLL_LOCK: return RETROK_SCROLLOCK;
+        
+        // Modifier keys
+        case AKEYCODE_SHIFT_LEFT: return RETROK_LSHIFT;
+        case AKEYCODE_SHIFT_RIGHT: return RETROK_RSHIFT;
+        case AKEYCODE_CTRL_LEFT: return RETROK_LCTRL;
+        case AKEYCODE_CTRL_RIGHT: return RETROK_RCTRL;
+        case AKEYCODE_ALT_LEFT: return RETROK_LALT;
+        case AKEYCODE_ALT_RIGHT: return RETROK_RALT;
+        
+        default:
+            return RETROK_UNKNOWN;
+    }
+}
+
+// P1 #8: Sensors Support - compatible RetroArch android_input_set_sensor_state()
+// Enable/disable sensors (accelerometer, gyroscope) for port 0
+// Compatible with RetroArch android_input.c lignes 1933-2024
+bool Input::setSensorState(unsigned port, unsigned action, unsigned eventRate) {
+    // RetroArch only supports sensors on port 0
+    if (port > 0) {
+        return false;
+    }
+    
+    // Default event rate: 60 Hz (compatible RetroArch DEFAULT_ASENSOR_EVENT_RATE = 60)
+    if (eventRate == 0) {
+        eventRate = 60;
+    }
+    
+    switch (action) {
+        case RETRO_SENSOR_ACCELEROMETER_ENABLE:
+            accelerometerEnabled = true;
+            // Reset values when enabling (compatible RetroArch behavior)
+            accelerometerState.x = 0.0f;
+            accelerometerState.y = 0.0f;
+            accelerometerState.z = 0.0f;
+            LOGD("[NATIVE SENSOR] Accelerometer ENABLED (event_rate=%u)", eventRate);
+            return true;
+            
+        case RETRO_SENSOR_ACCELEROMETER_DISABLE:
+            accelerometerEnabled = false;
+            // Reset values when disabling (compatible RetroArch behavior)
+            accelerometerState.x = 0.0f;
+            accelerometerState.y = 0.0f;
+            accelerometerState.z = 0.0f;
+            LOGD("[NATIVE SENSOR] Accelerometer DISABLED");
+            return true;
+            
+        case RETRO_SENSOR_GYROSCOPE_ENABLE:
+            gyroscopeEnabled = true;
+            // Reset values when enabling (compatible RetroArch behavior)
+            gyroscopeState.x = 0.0f;
+            gyroscopeState.y = 0.0f;
+            gyroscopeState.z = 0.0f;
+            LOGD("[NATIVE SENSOR] Gyroscope ENABLED (event_rate=%u)", eventRate);
+            return true;
+            
+        case RETRO_SENSOR_GYROSCOPE_DISABLE:
+            gyroscopeEnabled = false;
+            // Reset values when disabling (compatible RetroArch behavior)
+            gyroscopeState.x = 0.0f;
+            gyroscopeState.y = 0.0f;
+            gyroscopeState.z = 0.0f;
+            LOGD("[NATIVE SENSOR] Gyroscope DISABLED");
+            return true;
+            
+        default:
+            return false;
+    }
+}
+
+// P1 #8: Sensors Support - get sensor input (float return, compatible RetroArch android_input_get_sensor_input)
+// Returns sensor value (X, Y, or Z) for accelerometer or gyroscope
+// Compatible with RetroArch android_input.c lignes 2026-2051
+float Input::getSensorInput(unsigned port, unsigned id) const {
+    // RetroArch only supports sensors on port 0
+    if (port > 0) {
+        return 0.0f;
+    }
+    
+    switch (id) {
+        case RETRO_SENSOR_ACCELEROMETER_X:
+            return accelerometerState.x;
+        case RETRO_SENSOR_ACCELEROMETER_Y:
+            return accelerometerState.y;
+        case RETRO_SENSOR_ACCELEROMETER_Z:
+            return accelerometerState.z;
+        case RETRO_SENSOR_GYROSCOPE_X:
+            return gyroscopeState.x;
+        case RETRO_SENSOR_GYROSCOPE_Y:
+            return gyroscopeState.y;
+        case RETRO_SENSOR_GYROSCOPE_Z:
+            return gyroscopeState.z;
+        default:
+            return 0.0f;
+    }
+}
+
+// P1 #8: Sensors Support - update sensor values from Android
+// Called from JNI when sensor events are received (ASensorEvent)
+// Compatible with RetroArch android_input_poll_user() lignes 1580-1623
+void Input::onSensorEvent(int sensorType, float x, float y, float z) {
+    // sensorType: ASENSOR_TYPE_ACCELEROMETER (1) or ASENSOR_TYPE_GYROSCOPE (4)
+    // Compatible with RetroArch ASensorEvent.type values
+    
+    switch (sensorType) {
+        case 1: // ASENSOR_TYPE_ACCELEROMETER
+            if (accelerometerEnabled) {
+                accelerometerState.x = x;
+                accelerometerState.y = y;
+                accelerometerState.z = z;
+                LOGD("[NATIVE SENSOR] Accelerometer: X=%.3f Y=%.3f Z=%.3f", x, y, z);
+            }
+            break;
+            
+        case 4: // ASENSOR_TYPE_GYROSCOPE
+            if (gyroscopeEnabled) {
+                // Note: RetroArch reads gyroscope from event.data[0/1/2] instead of event.acceleration
+                // This is because ASensorEvent struct is "mysterious" according to RetroArch comments
+                gyroscopeState.x = x;
+                gyroscopeState.y = y;
+                gyroscopeState.z = z;
+                LOGD("[NATIVE SENSOR] Gyroscope: X=%.3f Y=%.3f Z=%.3f", x, y, z);
+            }
+            break;
+            
+        default:
+            // Unknown sensor type, ignore
+            break;
+    }
+}
+
 void Input::onKeyEvent(unsigned int port, int action, int keyCode) {
+    // P1 #9: Keyboard Support
+    // Try to convert as RetroPad first (gamepad buttons), then as keyboard (RetroK)
+    // This allows both gamepad buttons AND keyboard keys to work
     int retroKeyCode = convertAndroidToLibretroKey(keyCode);
-    if (retroKeyCode == UNKNOWN_KEY) {
+    
+    if (retroKeyCode != UNKNOWN_KEY) {
+        // Gamepad button (RetroPad)
+        if (action == AKEY_EVENT_ACTION_DOWN) {
+            pads[port].pressedKeys.insert(retroKeyCode);
+        } else if (action == AKEY_EVENT_ACTION_UP) {
+            pads[port].pressedKeys.erase(retroKeyCode);
+        }
+    } else {
+        // Not a gamepad button, try as keyboard (RetroK)
+        // Note: We can't get metaState here, so modifiers won't be available
+        // For full keyboard support with modifiers, use onKeyboardEvent() instead
+        unsigned retroK = convertAndroidToRetroK(keyCode);
+        if (retroK != RETROK_UNKNOWN) {
+            if (action == AKEY_EVENT_ACTION_DOWN) {
+                pads[port].pressedKeyboardKeys.insert(retroK);
+            } else if (action == AKEY_EVENT_ACTION_UP) {
+                pads[port].pressedKeyboardKeys.erase(retroK);
+            }
+        }
+    }
+}
+
+// P1 #9: Keyboard Support - compatible RetroArch android_input_poll_event_type_keyboard()
+// Full keyboard support with modifiers (ALT, CTRL, SHIFT, etc.)
+// Compatible with RetroArch android_input.c lignes 879-909
+void Input::onKeyboardEvent(unsigned int port, int action, int keyCode, int metaState) {
+    int keydown = (action == AKEY_EVENT_ACTION_DOWN);
+    unsigned keyboardcode = convertAndroidToRetroK(keyCode);
+    
+    if (keyboardcode == RETROK_UNKNOWN) {
+        // Not a keyboard key, try as gamepad button (fallback)
+        int retroKeyCode = convertAndroidToLibretroKey(keyCode);
+        if (retroKeyCode != UNKNOWN_KEY) {
+            if (keydown) {
+                pads[port].pressedKeys.insert(retroKeyCode);
+            } else {
+                pads[port].pressedKeys.erase(retroKeyCode);
+            }
+        }
         return;
     }
-
-    if (action == AKEY_EVENT_ACTION_DOWN) {
-        pads[port].pressedKeys.insert(retroKeyCode);
-    } else if (action == AKEY_EVENT_ACTION_UP) {
-        pads[port].pressedKeys.erase(retroKeyCode);
+    
+    // Update keyboard state
+    if (keydown) {
+        pads[port].pressedKeyboardKeys.insert(keyboardcode);
+    } else {
+        pads[port].pressedKeyboardKeys.erase(keyboardcode);
     }
+    
+    // Note: Modifiers (ALT, CTRL, SHIFT) are extracted from metaState
+    // but not stored separately in LibretroDroid architecture
+    // If core needs modifiers, it should use RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK
+    // which is handled by environment.cpp (outside Input class)
 }
 
 void Input::onMotionEvent(int port, int motionSource, float xAxis, float yAxis) {
@@ -250,11 +620,170 @@ void Input::onMotionEvent(int port, int motionSource, float xAxis, float yAxis) 
             break;
 
         case Input::MOTION_SOURCE_POINTER:
-            LOGD("[NATIVE MOTION] port=%d POINTER stored: X=%.3f Y=%.3f", port, xAxis, yAxis);
-            pads[port].pointerScreenXAxis = xAxis;
-            pads[port].pointerScreenYAxis = yAxis;
+            // Legacy: update pointer[0] for backward compatibility
+            LOGD("[NATIVE MOTION] port=%d POINTER[0] stored: X=%.3f Y=%.3f", port, xAxis, yAxis);
+            onMotionEventMulti(port, motionSource, xAxis, yAxis, 0);
             break;
     }
+}
+
+void Input::onMotionEventMulti(int port, int motionSource, float xAxis, float yAxis, int pointerIndex) {
+    if (port < 0 || port >= 4) return;
+    if (pointerIndex < 0 || pointerIndex >= GamePadState::MAX_POINTERS) return;
+    
+    if (motionSource == Input::MOTION_SOURCE_POINTER) {
+        PointerState& pointer = pads[port].pointers[pointerIndex];
+        
+        // Update pointer state
+        pointer.screenX = xAxis;
+        pointer.screenY = yAxis;
+        pointer.active = (xAxis >= 0.0f && yAxis >= 0.0f);
+        
+        // Viewport conversion: Convert normalized [0.0, 1.0] to RetroArch format [-0x7fff, +0x7fff]
+        // This follows the same logic as RetroArch's video_driver_translate_coord_viewport()
+        if (pointer.active) {
+            // Simple conversion for now (normalized coordinates already account for viewport)
+            // Future enhancement: Use actual viewport info if available
+            pointer.x = convertNormalizedToRetroArch(xAxis, true);   // reportOob = true
+            pointer.y = convertNormalizedToRetroArch(yAxis, true);   // reportOob = true
+            pointer.confined_x = convertNormalizedToRetroArch(xAxis, false); // reportOob = false (clamped)
+            pointer.confined_y = convertNormalizedToRetroArch(yAxis, false); // reportOob = false (clamped)
+            pointer.screen_x = pointer.x;  // For now, same as pointer.x
+            pointer.screen_y = pointer.y;  // For now, same as pointer.y
+        } else {
+            // Reset coordinates when inactive
+            pointer.x = 0;
+            pointer.y = 0;
+            pointer.confined_x = 0;
+            pointer.confined_y = 0;
+            pointer.screen_x = 0;
+            pointer.screen_y = 0;
+        }
+        
+        // Update legacy fields for backward compatibility (pointer[0] only)
+        if (pointerIndex == 0) {
+            pads[port].pointerScreenXAxis = xAxis;
+            pads[port].pointerScreenYAxis = yAxis;
+        }
+        
+        // Update pointer count
+        int maxActiveIndex = -1;
+        for (int i = 0; i < GamePadState::MAX_POINTERS; i++) {
+            if (pads[port].pointers[i].active) {
+                maxActiveIndex = i;
+            }
+        }
+        pads[port].pointerCount = (maxActiveIndex >= 0) ? (maxActiveIndex + 1) : 0;
+        
+        LOGD("[NATIVE MOTION] port=%d POINTER[%d] stored: X=%.3f Y=%.3f (active=%d, count=%d, converted=%d,%d)", 
+             port, pointerIndex, xAxis, yAxis, pointer.active ? 1 : 0, pads[port].pointerCount, pointer.x, pointer.y);
+    }
+}
+
+// Viewport conversion: Convert normalized [0.0, 1.0] to RetroArch format [-0x7fff, +0x7fff]
+// This follows the same edge case logic as RetroArch's video_driver_translate_coord_viewport()
+int16_t Input::convertNormalizedToRetroArch(float normalized, bool reportOob) const {
+    if (normalized < 0.0f || normalized > 1.0f) {
+        // Out of bounds
+        if (!reportOob) {
+            // Clamp to bounds
+            if (normalized < 0.0f) {
+                return -0x7fff;
+            } else {
+                return 0x7fff;
+            }
+        }
+        // Report out of bounds
+        return -0x8000;
+    }
+    
+    // Convert [0.0, 1.0] to [-0x7fff, +0x7fff]
+    // RetroArch logic: 0 maps to -0x7fff, 1 maps to +0x7fff
+    // Edge cases: 0 → -0x7fff, 1 → +0x7fff
+    if (normalized == 0.0f) {
+        return -0x7fff;
+    } else if (normalized == 1.0f) {
+        return 0x7fff;
+    } else {
+        // Linear conversion: (normalized - 0.5) * 2.0 * 0x7fff
+        // This is equivalent to: normalized * 0xffff - 0x8000 (RetroArch formula)
+        int16_t result = (int16_t) ((normalized * 0xffff) - 0x8000);
+        return result;
+    }
+}
+
+// Full viewport conversion (for future use with actual viewport info)
+bool Input::translateCoordViewport(
+    const Viewport& vp,
+    int mouseX, int mouseY,
+    int16_t* resX, int16_t* resY,
+    int16_t* resScreenX, int16_t* resScreenY,
+    bool reportOob) const {
+    
+    if (!resX || !resY || !resScreenX || !resScreenY) {
+        return false;
+    }
+    
+    // Validate viewport
+    if (vp.width <= 0 || vp.height <= 0 || vp.full_width <= 0 || vp.full_height <= 0) {
+        return false;
+    }
+    
+    // RetroArch-compatible conversion
+    int scaled_screen_x = -0x8000; /* OOB */
+    int scaled_screen_y = -0x8000; /* OOB */
+    int scaled_x = -0x8000; /* OOB */
+    int scaled_y = -0x8000; /* OOB */
+    
+    // Convert screen coordinates
+    if (mouseX > 0 && mouseX < (int)vp.full_width) {
+        scaled_screen_x = ((mouseX * 0xffff) / ((int)vp.full_width - 1)) - 0x8000;
+    } else if (mouseX == 0) {
+        scaled_screen_x = -0x7fff;
+    }
+    
+    if (mouseY > 0 && mouseY < (int)vp.full_height) {
+        scaled_screen_y = ((mouseY * 0xffff) / ((int)vp.full_height - 1)) - 0x8000;
+    } else if (mouseY == 0) {
+        scaled_screen_y = -0x7fff;
+    }
+    
+    // Convert viewport coordinates (subtract viewport offset)
+    mouseX -= vp.x;
+    mouseY -= vp.y;
+    
+    if (mouseX > 0 && mouseX < (int)vp.width) {
+        scaled_x = ((mouseX * 0xffff) / ((int)vp.width - 1)) - 0x8000;
+    } else if (mouseX == 0) {
+        scaled_x = -0x7fff;
+    } else if (!reportOob) {
+        // Clamp to bounds if not reporting out-of-bounds
+        if (mouseX < 0) {
+            scaled_x = -0x7fff;
+        } else {
+            scaled_x = 0x7fff;
+        }
+    }
+    
+    if (mouseY > 0 && mouseY < (int)vp.height) {
+        scaled_y = ((mouseY * 0xffff) / ((int)vp.height - 1)) - 0x8000;
+    } else if (mouseY == 0) {
+        scaled_y = -0x7fff;
+    } else if (!reportOob) {
+        // Clamp to bounds if not reporting out-of-bounds
+        if (mouseY < 0) {
+            scaled_y = -0x7fff;
+        } else {
+            scaled_y = 0x7fff;
+        }
+    }
+    
+    *resX = (int16_t)scaled_x;
+    *resY = (int16_t)scaled_y;
+    *resScreenX = (int16_t)scaled_screen_x;
+    *resScreenY = (int16_t)scaled_screen_y;
+    
+    return true;
 }
 
 template<typename... T>

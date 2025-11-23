@@ -7,6 +7,7 @@ import android.util.Log
 import com.retroplay.overlay.models.OverlayPackageInfo
 import com.retroplay.overlay.models.RetroArchOverlayConfig
 import com.retroplay.overlay.parser.RetroArchOverlayParser
+import com.retroplay.overlay.parser.ImageDimensionsCallback
 import java.io.File
 
 /**
@@ -159,7 +160,31 @@ class OverlayAssetManager(private val context: Context) {
         }
         
         Log.i(TAG, "Loading config: ${cfgFile.absolutePath}")
-        val config = parser.parseConfig(cfgFile)
+        
+        // Item P1 #12: Conversion Normalized vs Pixel
+        // Callback pour obtenir les dimensions de l'image de fond (pour conversion pixel → normalized)
+        val imageDimensionsCallback: ImageDimensionsCallback = { imagePath, overlayNameParam ->
+            val imageFile = File(OVERLAY_DIR, "${overlayNameParam ?: overlayName}/$imagePath")
+            if (imageFile.exists()) {
+                try {
+                    // Charger l'image pour obtenir ses dimensions sans décoder complètement (optimisé)
+                    val options = BitmapFactory.Options().apply {
+                        inJustDecodeBounds = true  // Ne décoder que les métadonnées (dimensions)
+                    }
+                    BitmapFactory.decodeFile(imageFile.absolutePath, options)
+                    if (options.outWidth > 0 && options.outHeight > 0) {
+                        Pair(options.outWidth, options.outHeight)
+                    } else null
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error getting dimensions for image: ${imageFile.absolutePath}", e)
+                    null
+                }
+            } else {
+                null
+            }
+        }
+        
+        val config = parser.parseConfig(cfgFile, overlayName, imageDimensionsCallback)
         
         if (config != null && parser.validateConfig(config)) {
             Log.i(TAG, "Successfully loaded overlay config: $overlayName (cfg: ${cfgFile.name})")

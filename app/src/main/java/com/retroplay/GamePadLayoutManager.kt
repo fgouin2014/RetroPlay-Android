@@ -175,10 +175,11 @@ object GamePadLayoutManager {
         onButtonRelease: (List<Int>) -> Unit,
         onLayoutSwitch: (String) -> Unit,
         onMenuToggle: () -> Unit,
-        onHotkeyChange: (String, Boolean) -> Unit = { _, _ -> }
+        onHotkeyChange: (String, Boolean) -> Unit = { _, _ -> },
+        onLightgunAction: (String) -> Unit = {}
     ): LayoutPair {
         if (variant == LayoutVariant.RETROARCH) {
-            return createRetroArchLayout(console, context, prefs, onButtonPress, onButtonRelease, onLayoutSwitch, onMenuToggle, onHotkeyChange)
+            return createRetroArchLayout(console, context, prefs, onButtonPress, onButtonRelease, onLayoutSwitch, onMenuToggle, onHotkeyChange, onLightgunAction)
         }
         
         // Pour les autres variantes, utiliser la méthode normale
@@ -196,7 +197,8 @@ object GamePadLayoutManager {
         onButtonRelease: (List<Int>) -> Unit,
         onLayoutSwitch: (String) -> Unit,
         onMenuToggle: () -> Unit,
-        onHotkeyChange: (String, Boolean) -> Unit
+        onHotkeyChange: (String, Boolean) -> Unit,
+        onLightgunAction: (String) -> Unit
     ): LayoutPair {
         return LayoutPair(
             left = { mod, set -> 
@@ -214,7 +216,8 @@ object GamePadLayoutManager {
                     onButtonRelease = onButtonRelease,
                     onLayoutSwitch = onLayoutSwitch,
                     onMenuToggle = onMenuToggle,
-                    onHotkeyChange = onHotkeyChange
+                    onHotkeyChange = onHotkeyChange,
+                    onLightgunAction = onLightgunAction
                 )
             }
         )
@@ -234,7 +237,8 @@ object GamePadLayoutManager {
         onButtonRelease: (List<Int>) -> Unit,
         onLayoutSwitch: (String) -> Unit,
         onMenuToggle: () -> Unit,
-        onHotkeyChange: (String, Boolean) -> Unit
+        onHotkeyChange: (String, Boolean) -> Unit,
+        onLightgunAction: (String) -> Unit
     ) {
         // Charger les préférences d'overlay
         val overlayPreference = remember(console) {
@@ -242,11 +246,20 @@ object GamePadLayoutManager {
         }
         
         if (overlayPreference == null) {
-            // Pas d'overlay configuré - afficher message ou fallback
-            Box(modifier = modifier) {
-                // TODO: Afficher un message pour configurer l'overlay
-                Log.w(TAG, "No RetroArch overlay configured for $console")
+            // Pas d'overlay configuré - afficher message informatif
+            Box(
+                modifier = modifier,
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                androidx.compose.material3.Text(
+                    text = "No RetroArch overlay configured for $console\n\nPlease configure an overlay in GamePad Settings",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = androidx.compose.ui.graphics.Color.Gray,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = androidx.compose.ui.Modifier.padding(16.dp)
+                )
             }
+            Log.w(TAG, "No RetroArch overlay configured for $console")
             return
         }
         
@@ -304,6 +317,9 @@ object GamePadLayoutManager {
             onLayoutSwitch = onLayoutSwitch,
             onMenuToggle = onMenuToggle,
             onHotkeyChange = onHotkeyChange,
+            onLightgunAction = onLightgunAction,
+            availableLayouts = overlayConfig.layouts.keys.toList().sorted(),
+            currentLayoutName = layoutName,
             swapAnalogSticks = overlayPreference.swapAnalogSticks,
             invertAnalogLeftY = overlayPreference.invertAnalogLeftY,
             invertAnalogRightY = overlayPreference.invertAnalogRightY,

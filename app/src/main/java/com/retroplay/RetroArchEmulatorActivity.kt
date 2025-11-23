@@ -14,8 +14,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -54,6 +57,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay
 import java.io.File
+import java.io.FileOutputStream
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.asImageBitmap
 import com.retroplay.ScreenshotManager
 import com.retroplay.gallery.ScreenshotRepository
 import com.retroplay.rewind.RewindManager
@@ -118,6 +125,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private var rewindManager: RewindManager? = null
     private var retroPlayConfig: RetroPlayConfigManager.RetroPlayConfig = RetroPlayConfigManager.loadConfig()
     
+    // Autoconfig system (RetroArch gamepad autoconfiguration)
+    private lateinit var autoconfigManager: com.retroplay.input.AutoconfigManager
+    
     // Zapper support (NES light gun)
     private var isZapperGame: Boolean = false
     
@@ -137,6 +147,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private val showDipSwitchDialog = mutableStateOf(false)
     private val showCoreOptionsDialog = mutableStateOf(false)
     private val showGameInfoDialog = mutableStateOf(false)
+    
+    // État pour le dialog des extensions N64
+    private val showN64ExtensionsDialog = mutableStateOf(false)
+    private val n64ExtensionsInfo = mutableStateOf<List<Pair<Int, String>>>(emptyList())
     private val showCheatsDialog = mutableStateOf(false)
     private val showSmartConfigDialog = mutableStateOf(false)
     private val showPerGameConfigDialog = mutableStateOf(false)
@@ -547,15 +561,17 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      */
     private fun sendLightgunAction(actionId: Int, port: Int) {
         val keyCode = when (actionId) {
-            1 -> android.view.KeyEvent.KEYCODE_BUTTON_START   // LIGHTGUN_START
-            2 -> android.view.KeyEvent.KEYCODE_BUTTON_SELECT  // LIGHTGUN_SELECT
+            1 -> android.view.KeyEvent.KEYCODE_BUTTON_A       // LIGHTGUN_TRIGGER (utilise BUTTON_A comme trigger)
+            2 -> android.view.KeyEvent.KEYCODE_BUTTON_SELECT  // LIGHTGUN_RELOAD (offscreen shot)
             3 -> android.view.KeyEvent.KEYCODE_BUTTON_A       // LIGHTGUN_AUX_A
             4 -> android.view.KeyEvent.KEYCODE_BUTTON_B       // LIGHTGUN_AUX_B
             5 -> android.view.KeyEvent.KEYCODE_BUTTON_X       // LIGHTGUN_AUX_C
-            6 -> android.view.KeyEvent.KEYCODE_DPAD_UP        // LIGHTGUN_DPAD_UP
-            7 -> android.view.KeyEvent.KEYCODE_DPAD_DOWN      // LIGHTGUN_DPAD_DOWN
-            8 -> android.view.KeyEvent.KEYCODE_DPAD_LEFT      // LIGHTGUN_DPAD_LEFT
-            9 -> android.view.KeyEvent.KEYCODE_DPAD_RIGHT     // LIGHTGUN_DPAD_RIGHT
+            6 -> android.view.KeyEvent.KEYCODE_BUTTON_START   // LIGHTGUN_START
+            7 -> android.view.KeyEvent.KEYCODE_BUTTON_SELECT  // LIGHTGUN_SELECT
+            8 -> android.view.KeyEvent.KEYCODE_DPAD_UP        // LIGHTGUN_DPAD_UP
+            9 -> android.view.KeyEvent.KEYCODE_DPAD_DOWN      // LIGHTGUN_DPAD_DOWN
+            10 -> android.view.KeyEvent.KEYCODE_DPAD_LEFT     // LIGHTGUN_DPAD_LEFT
+            11 -> android.view.KeyEvent.KEYCODE_DPAD_RIGHT    // LIGHTGUN_DPAD_RIGHT
             else -> return  // 0 = none
         }
         
@@ -992,6 +1008,27 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         // Charger les SharedPreferences
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
         
+        // Initialiser le système d'autoconfig RetroArch (P0 - Priorité Critique)
+        autoconfigManager = com.retroplay.input.AutoconfigManager(this)
+        
+        // Détecter automatiquement les gamepads connectés et appliquer leurs configurations
+        lifecycleScope.launch {
+            try {
+                val gamepads = autoconfigManager.detectConnectedGamepads()
+                for (gamepad in gamepads) {
+                    val config = autoconfigManager.findConfigForDevice(gamepad)
+                    if (config != null) {
+                        Log.i(TAG, "✅ Autoconfig found for gamepad: ${gamepad.name} → ${config.deviceName}")
+                        autoconfigManager.applyConfig(gamepad, config)
+                    } else {
+                        Log.w(TAG, "⚠️ No autoconfig found for gamepad: ${gamepad.name} (vid=${gamepad.vendorId}, pid=${gamepad.productId})")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error detecting/autoconfiguring gamepads", e)
+            }
+        }
+        
         // Quick Wins: Charger états Fast Forward et Audio Mute
         fastForwardRatio = prefs.getInt("emulation_fast_forward_ratio", 2).coerceIn(1, 4)
         audioMuted.value = prefs.getBoolean("emulation_audio_muted", false)
@@ -1407,34 +1444,85 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     val prefix = "n64_"
 
                     // Mapping des positions spinner vers les valeurs Libretro :
-                    // 0 = Controller Pak (1), 1 = Rumble Pak (2), 2 = Transfer Pak (5)
-                    val pakValues = intArrayOf(1, 2, 5)
+                    // Pour N64, les extensions sont configurées via retro_set_controller_port_device()
+                    // Les IDs peuvent varier selon le core (Mupen64Plus, ParaLLEl N64)
+                    // Valeurs standard Libretro N64 (basées sur retro_controller_info):
+                    // 0 = None (pas d'extension)
+                    // 1 = Controller Pak (mémoire de sauvegarde)
+                    // 2 = Rumble Pak (vibration)
+                    // 5 = Transfer Pak (transfert Game Boy)
+                    val pakValues = intArrayOf(0, 1, 2, 5)  // 0 = None, 1 = Controller Pak, 2 = Rumble Pak, 5 = Transfer Pak
+                    // Note: Les valeurs peuvent être différentes selon le core, mais ces IDs sont standards
 
-                    // TODO: Configurer les extensions contrôleur N64
-                    // Les valeurs sont sauvegardées dans les préférences mais l'application dans LibretroDroid
-                    // nécessite une investigation supplémentaire pour la méthode correcte
+                    // D'abord, essayer de voir quels types de contrôleurs sont disponibles
+                    try {
+                        val controllers = retroView.getControllers()
+                        Log.i(TAG, "[N64] Available controllers for each port:")
+                        controllers.forEachIndexed { portIndex, portControllers ->
+                            Log.i(TAG, "[N64] Port $portIndex: ${portControllers.map { "id=${it.id} desc='${it.description}'" }}")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[N64] Could not query available controllers: ${e.message}")
+                    }
+
+                    // Collecter les extensions configurées pour affichage dans un dialog
+                    val configuredExtensions = mutableListOf<Pair<Int, String>>()
+                    
+                    // Configurer les extensions pour chaque port (0-3)
                     for (port in 0..3) {  // 4 ports maximum pour N64
                         try {
-                            val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: Controller Pak
-                            val pakValue = pakValues.getOrElse(pakPosition) { 1 } // Fallback to Controller Pak
+                            val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: 0 = None
+                            // pakPosition: 0 = None, 1 = Controller Pak, 2 = Rumble Pak, 3 = Transfer Pak
+                            val pakValue = pakValues.getOrElse(pakPosition) { 0 } // Fallback to None
 
                             val pakName = when (pakPosition) {
-                                0 -> "Controller Pak"
-                                1 -> "Rumble Pak"
-                                2 -> "Transfer Pak"
+                                0 -> "None"
+                                1 -> "Controller Pak"
+                                2 -> "Rumble Pak"
+                                3 -> "Transfer Pak"
                                 else -> "Unknown"
                             }
-                            Log.i(TAG, "[N64] Extension configured for port ${port + 1}: $pakName (value=$pakValue)")
+
+                            // Ne configurer que si une extension est sélectionnée (pakValue > 0)
+                            if (pakValue > 0) {
+                                try {
+                                    // Utiliser setControllerType() pour configurer l'extension
+                                    // Pour N64, les extensions sont des types de contrôleurs spécifiques
+                                    // Le port doit avoir d'abord un contrôleur N64 de base configuré
+                                    // Puis l'extension est configurée via retro_set_controller_port_device()
+                                    retroView.setControllerType(port, pakValue)
+                                    Log.i(TAG, "[N64] Extension configured for port ${port + 1}: $pakName (id=$pakValue) via setControllerType()")
+                                    
+                                    // Ajouter à la liste pour affichage dans le dialog
+                                    configuredExtensions.add(Pair(port + 1, pakName))
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "[N64] Failed to set extension for port ${port + 1} via setControllerType(): ${e.message}")
+                                    Log.w(TAG, "[N64] Port ${port + 1}: $pakName (id=$pakValue) - configuration failed")
+                                }
+                            } else {
+                                Log.d(TAG, "[N64] Port ${port + 1}: No extension (None)")
+                            }
                         } catch (e: Exception) {
                             Log.w(TAG, "[N64] Could not configure extension for port ${port + 1}: ${e.message}")
                         }
                     }
-
+                    
+                    // Afficher le dialog avec les extensions configurées (si au moins une extension est configurée)
+                    if (configuredExtensions.isNotEmpty()) {
+                        Log.i(TAG, "[N64] Showing dialog with ${configuredExtensions.size} extensions")
+                        runOnUiThread {
+                            n64ExtensionsInfo.value = configuredExtensions
+                            showN64ExtensionsDialog.value = true
+                            Log.i(TAG, "[N64] Dialog state set to true, extensions: ${n64ExtensionsInfo.value}")
+                        }
+                    } else {
+                        Log.i(TAG, "[N64] No extensions configured, dialog not shown")
+                    }
 
                 } catch (e: Exception) {
                     Log.e(TAG, "[N64] Error configuring controller extensions", e)
                 }
-            }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
+            }, 1500)  // Attendre 1.5 secondes pour que le core soit complètement initialisé et que SET_CONTROLLER_INFO soit appelé
         }
 
         // Initialiser le CheatApplier
@@ -1536,6 +1624,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 onHotkeyChange = { action, pressed ->
                     handleHotkeyChange(action, pressed)
                 },
+                onLightgunAction = { action ->
+                    handleLightgunAction(action)
+                },
                 // Quick Wins callbacks
                 onRewindPress = {
                     beginRewind()
@@ -1571,6 +1662,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 dipSwitches = dipSwitches,
                 coreOptions = coreOptions,
                 showDiskSwapperDialog = showDiskSwapperDialog,
+                showN64ExtensionsDialog = showN64ExtensionsDialog,
+                n64ExtensionsInfo = n64ExtensionsInfo,
                 availableDisks = availableDisks,
                 currentDisk = currentDisk,
                 onTakeScreenshot = {
@@ -1921,6 +2014,14 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     onDismiss = { showDiskSwapperDialog.value = false }
                 )
             }
+            
+            // === N64 EXTENSIONS DIALOG ===
+            if (showN64ExtensionsDialog.value) {
+                N64ExtensionsDialog(
+                    extensions = n64ExtensionsInfo.value,
+                    onDismiss = { showN64ExtensionsDialog.value = false }
+                )
+            }
         }
     }
     
@@ -1965,6 +2066,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     "mame2003" -> "mame2003_libretro_android.so"
                     "fbneo" -> "fbneo_libretro_android.so"
                     "fceumm" -> "fceumm_libretro_android.so"
+                    "mesen" -> "mesen_libretro_android.so"
                     "snes9x" -> "snes9x_libretro_android.so"
                     "parallel_n64" -> "parallel_n64_libretro_android.so"
                     "mupen64plus_next" -> "mupen64plus_next_libretro_android.so"
@@ -1976,6 +2078,14 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     "ppsspp" -> "ppsspp_libretro_android.so"
                     "genesis_plus_gx" -> "genesis_plus_gx_libretro_android.so"
                     "picodrive" -> "picodrive_libretro_android.so"
+                    "mednafen_wswan" -> "mednafen_wswan_libretro_android.so"
+                    "wonderswancolor" -> "mednafen_wswan_libretro_android.so"
+                    "wonderswan" -> "mednafen_wswan_libretro_android.so"
+                    "ws" -> "mednafen_wswan_libretro_android.so"
+                    "wsc" -> "mednafen_wswan_libretro_android.so"
+                    "mednafen_ngp" -> "mednafen_ngp_libretro_android.so"
+                    "mednafen_pce" -> "mednafen_pce_libretro_android.so"
+                    "mednafen_lynx" -> "mednafen_lynx_libretro_android.so"
                     else -> null
                 }
             }
@@ -2017,7 +2127,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 
                 // Other
                 "ngp", "ngc", "neogeopocket" -> "mednafen_ngp_libretro_android.so"
-                "ws", "wsc", "wonderswan" -> "mednafen_wswan_libretro_android.so"
+                "ws", "wsc", "wonderswan", "wonderswancolor" -> "mednafen_wswan_libretro_android.so"
                 "pce", "turbografx", "pcengine" -> "mednafen_pce_libretro_android.so"
                 "arcade" -> "mame2003_plus_libretro_android.so"
                 "mame" -> "mame2010_libretro_android.so"
@@ -2135,8 +2245,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             Log.i(TAG, "[$console] Game state saved to slot $slot: ${saveFile.absolutePath}")
             runOnUiThread {
                 Toast.makeText(this, "[$console] Saved to Slot $slot", Toast.LENGTH_SHORT).show()
-                // Auto-capture screenshot for Gallery
-                takeScreenshot()
+                // Capture screenshot for slot thumbnail
+                captureSlotThumbnail(slot)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error saving game state to slot $slot", e)
@@ -2175,7 +2285,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private val isFastForwardActive = mutableStateOf(false)
     private var fastForwardRatio = 2  // 2x par défaut (2x, 3x, 4x disponibles)
     private var isPaused = false
-    private val currentSaveSlot = 0  // Slot par défaut (0-9)
+    private val currentSaveSlot = mutableStateOf(0)  // Slot par défaut (0-9), MutableState pour reactivity
     
     // État pour audio mute (MutableState pour reactivity Compose)
     private val audioMuted = mutableStateOf(false)
@@ -2195,23 +2305,25 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         when (action) {
             // Save/Load states
             "save_state" -> {
-                saveGameState(currentSaveSlot)
+                saveGameState(currentSaveSlot.value)
             }
             "load_state" -> {
-                loadGameState(currentSaveSlot)
+                loadGameState(currentSaveSlot.value)
             }
             "state_slot_increase" -> {
-                // TODO: Implémenter changement de slot (nécessite UI feedback)
-                Log.i(TAG, "State slot increase (not implemented yet)")
+                // Augmenter le slot (0-9, cycle à 0 après 9)
+                currentSaveSlot.value = (currentSaveSlot.value + 1) % 10
+                Log.i(TAG, "State slot increased to: ${currentSaveSlot.value}")
                 runOnUiThread {
-                    Toast.makeText(this, "Slot+ (not implemented)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Slot ${currentSaveSlot.value}", Toast.LENGTH_SHORT).show()
                 }
             }
             "state_slot_decrease" -> {
-                // TODO: Implémenter changement de slot (nécessite UI feedback)
-                Log.i(TAG, "State slot decrease (not implemented yet)")
+                // Diminuer le slot (9-0, cycle à 9 après 0)
+                currentSaveSlot.value = if (currentSaveSlot.value == 0) 9 else currentSaveSlot.value - 1
+                Log.i(TAG, "State slot decreased to: ${currentSaveSlot.value}")
                 runOnUiThread {
-                    Toast.makeText(this, "Slot- (not implemented)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Slot ${currentSaveSlot.value}", Toast.LENGTH_SHORT).show()
                 }
             }
             
@@ -2234,6 +2346,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             // Shader cycle
             "shader_next" -> {
                 cycleShader()
+            }
+            
+            "shader_prev" -> {
+                cycleShaderBackward()
             }
             
             // Rewind (nécessite support du core)
@@ -2281,13 +2397,6 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 }
             }
             
-            // Shaders
-            "shader_next", "shader_prev" -> {
-                Log.i(TAG, "Shader cycling (not implemented yet)")
-                runOnUiThread {
-                    Toast.makeText(this, "Shader cycling not implemented", Toast.LENGTH_SHORT).show()
-                }
-            }
             
             // Slow motion
             "toggle_slowmotion" -> {
@@ -2345,8 +2454,63 @@ class RetroArchEmulatorActivity : ComponentActivity() {
 
     private fun endRewind() {
         rewindManager?.stopRewind()
-        // Capture a screenshot at the end of rewind for Gallery
-        takeScreenshot()
+        // No screenshot needed at end of rewind
+    }
+    
+    /**
+     * Gère les actions lightgun depuis les overlays (gun_trigger, gun_reload, etc.)
+     * Convertit le nom de l'action en ID numérique et envoie l'action au port lightgun configuré
+     */
+    private fun handleLightgunAction(action: String) {
+        // Charger les settings lightgun pour obtenir le port
+        val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+        val port = lightgunSettings.lightgunPort
+        
+        // Convertir le nom de l'action en ID numérique RetroArch
+        val actionId = com.retroplay.overlay.models.RetroArchButtonMapping.lightgunActionToId(action)
+        
+        if (actionId == 0) {
+            Log.w(TAG, "[LIGHTGUN] Unknown lightgun action: $action")
+            return
+        }
+        
+        // Envoyer l'action au port lightgun
+        sendLightgunAction(actionId, port)
+        Log.i(TAG, "[LIGHTGUN] Action '$action' (id=$actionId) sent to port ${port + 1}")
+    }
+    
+    /**
+     * Capture a screenshot and save it as a thumbnail for the save slot
+     */
+    private fun captureSlotThumbnail(slot: Int) {
+        if (retroView == null) return
+        
+        retroView.queueEvent {
+            try {
+                val width = retroView.width
+                val height = retroView.height
+                if (width <= 0 || height <= 0) return@queueEvent
+                
+                val screenshotBitmap = ScreenshotManager.captureScreenshotGL(width, height)
+                if (screenshotBitmap != null) {
+                    // Save thumbnail in the slot directory
+                    val slotDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot")
+                    if (!slotDir.exists()) {
+                        slotDir.mkdirs()
+                    }
+                    
+                    val thumbnailFile = File(slotDir, "thumbnail.png")
+                    FileOutputStream(thumbnailFile).use { out ->
+                        screenshotBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
+                    }
+                    
+                    Log.i(TAG, "[$console] Slot $slot thumbnail saved: ${thumbnailFile.absolutePath}")
+                    screenshotBitmap.recycle()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to capture slot thumbnail", e)
+            }
+        }
     }
     
     // Quick Win #1: Fast Forward Toggle
@@ -2410,6 +2574,29 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         retroView.shader = shaderConfig
         
         Log.i(TAG, "[SHADER] Switched to: ${currentShader.value.displayName}")
+        Log.i(TAG, "[SHADER] ShaderConfig type: ${shaderConfig.javaClass.simpleName}")
+        
+        // Sauvegarder dans SharedPreferences
+        prefs.edit().putString("emulation_shader_preset", currentShader.value.name).apply()
+        
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                "Shader: ${currentShader.value.displayName}",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    
+    /**
+     * Cycle vers le shader précédent
+     */
+    private fun cycleShaderBackward() {
+        currentShader.value = com.retroplay.shader.ShaderManager.getPreviousShader(currentShader.value)
+        val shaderConfig = com.retroplay.shader.ShaderManager.getShaderConfig(currentShader.value)
+        retroView.shader = shaderConfig
+        
+        Log.i(TAG, "[SHADER] Switched to (prev): ${currentShader.value.displayName}")
         Log.i(TAG, "[SHADER] ShaderConfig type: ${shaderConfig.javaClass.simpleName}")
         
         // Sauvegarder dans SharedPreferences
@@ -2556,6 +2743,110 @@ private fun handlePadKitEvent(
 }
 
 @Composable
+private fun N64ExtensionsDialog(
+    extensions: List<Pair<Int, String>>,
+    onDismiss: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+    
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .fillMaxHeight(0.6f)
+                    .verticalScroll(scrollState),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Titre
+                    Text(
+                        text = "Extensions N64 Configurees",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    
+                    // Description
+                    Text(
+                        text = "Les extensions suivantes ont ete configurees pour les ports N64:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Divider()
+                    
+                    // Liste des extensions
+                    if (extensions.isEmpty()) {
+                        Text(
+                            text = "Aucune extension configuree",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        extensions.forEach { (port, extensionName) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Port $port:",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = extensionName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Divider()
+                    
+                    // Bouton de fermeture
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            text = "Fermer",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ComposeEmulatorScreen(
     retroView: GLRetroView,
     console: String,
@@ -2607,6 +2898,9 @@ private fun ComposeEmulatorScreen(
     currentDisk: Int = 0,
     onTakeScreenshot: () -> Unit = {},
     onOpenGallery: () -> Unit = {},
+    // N64 Extensions Dialog
+    showN64ExtensionsDialog: MutableState<Boolean> = mutableStateOf(false),
+    n64ExtensionsInfo: MutableState<List<Pair<Int, String>>> = mutableStateOf(emptyList()),
     onRewindPress: () -> Unit = {},
     onRewindRelease: () -> Unit = {},
     rewindManager: RewindManager? = null
@@ -2736,7 +3030,10 @@ private fun ComposeEmulatorScreen(
                 Log.i("ComposeEmulator", "Menu toggle from RetroArch overlay")
                 showMainMenu.value = true
             },
-            onHotkeyChange = onHotkeyChange
+            onHotkeyChange = onHotkeyChange,
+            onLightgunAction = { action ->
+                handleLightgunAction(action)
+            }
         )
     } else {
         // Utiliser getLayout normal pour Lemuroid
@@ -3027,6 +3324,11 @@ private fun ComposeEmulatorScreen(
                                             retroView.sendMotionEvent(source, x, y)
                                         },
                                         onHotkey = onHotkey,
+                                        onLightgunAction = { action ->
+                                            handleLightgunAction(action)
+                                        },
+                                        availableLayouts = overlayConfig.layouts.keys.toList().sorted(),
+                                        currentLayoutName = layoutName,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
@@ -3804,53 +4106,92 @@ private fun SlotSelectionDialog(
                     // 5 slots avec infos détaillées
                     for (slot in 1..5) {
                         val saveFile = java.io.File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/${gameName}.state")
+                        val thumbnailFile = java.io.File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/thumbnail.png")
                         val isOccupied = saveFile.exists()
+                        val hasThumbnail = thumbnailFile.exists()
                         
                         TextButton(
                             onClick = { onSlotSelected(slot) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // Ligne 1 : Slot + Status
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        "Slot $slot",
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    
-                                    if (isOccupied) {
-                                        Text(
-                                            "[Occupied]",
-                                            color = Color(0xFF4CAF50),
-                                            style = MaterialTheme.typography.bodySmall
+                                // Thumbnail (si disponible)
+                                if (hasThumbnail) {
+                                    val thumbnailBitmap = remember(thumbnailFile.absolutePath) {
+                                        android.graphics.BitmapFactory.decodeFile(thumbnailFile.absolutePath)
+                                    }
+                                    thumbnailBitmap?.let { bitmap ->
+                                        androidx.compose.foundation.Image(
+                                            bitmap = bitmap.asImageBitmap(),
+                                            contentDescription = "Slot $slot thumbnail",
+                                            modifier = Modifier
+                                                .size(80.dp)
+                                                .clip(MaterialTheme.shapes.small),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                         )
-                                    } else {
+                                    } ?: Spacer(modifier = Modifier.size(80.dp))
+                                } else {
+                                    // Placeholder si pas de thumbnail
+                                    Box(
+                                        modifier = Modifier
+                                            .size(80.dp)
+                                            .background(Color(0xFF333333), MaterialTheme.shapes.small),
+                                        contentAlignment = Alignment.Center
+                                    ) {
                                         Text(
-                                            "[Empty]",
+                                            "Slot $slot",
                                             color = Color.Gray,
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                     }
                                 }
                                 
-                                // Ligne 2 : Infos détaillées (si occupé)
-                                if (isOccupied) {
-                                    val lastModified = saveFile.lastModified()
-                                    val sizeKB = saveFile.length() / 1024
-                                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-                                    val dateStr = dateFormat.format(java.util.Date(lastModified))
+                                // Infos du slot
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    // Ligne 1 : Slot + Status
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            "Slot $slot",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        
+                                        if (isOccupied) {
+                                            Text(
+                                                "[Occupied]",
+                                                color = Color(0xFF4CAF50),
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        } else {
+                                            Text(
+                                                "[Empty]",
+                                                color = Color.Gray,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                    }
                                     
-                                    Text(
-                                        "$dateStr - ${sizeKB}KB",
-                                        color = Color(0xFFAAAAAA),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
+                                    // Ligne 2 : Infos détaillées (si occupé)
+                                    if (isOccupied) {
+                                        val lastModified = saveFile.lastModified()
+                                        val sizeKB = saveFile.length() / 1024
+                                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                                        val dateStr = dateFormat.format(java.util.Date(lastModified))
+                                        
+                                        Text(
+                                            "$dateStr - ${sizeKB}KB",
+                                            color = Color(0xFFAAAAAA),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                             }
                         }

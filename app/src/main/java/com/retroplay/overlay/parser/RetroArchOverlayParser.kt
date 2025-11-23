@@ -1,8 +1,16 @@
 package com.retroplay.overlay.parser
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
 import com.retroplay.overlay.models.*
 import java.io.File
+
+/**
+ * Callback pour obtenir les dimensions d'une image de fond
+ * Utilisé pour la conversion pixel → normalized si !normalized
+ */
+typealias ImageDimensionsCallback = (imagePath: String, overlayName: String?) -> Pair<Int, Int>?
 
 /**
  * Parser pour les fichiers .cfg d'overlay RetroArch
@@ -23,9 +31,15 @@ class RetroArchOverlayParser {
     /**
      * Parse un fichier .cfg RetroArch complet
      * @param cfgFile Le fichier .cfg à parser
+     * @param overlayName Nom de l'overlay (pour charger les images, ex: "flat-nes")
+     * @param imageDimensionsCallback Callback pour obtenir les dimensions d'une image (pour conversion pixel → normalized)
      * @return Configuration complète de l'overlay, ou null en cas d'erreur
      */
-    fun parseConfig(cfgFile: File): RetroArchOverlayConfig? {
+    fun parseConfig(
+        cfgFile: File,
+        overlayName: String? = null,
+        imageDimensionsCallback: ImageDimensionsCallback? = null
+    ): RetroArchOverlayConfig? {
         if (!cfgFile.exists()) {
             Log.e(TAG, "Config file not found: ${cfgFile.absolutePath}")
             return null
@@ -49,12 +63,16 @@ class RetroArchOverlayParser {
             // Parser chaque overlay
             val layouts = mutableMapOf<String, OverlayLayout>()
             for (i in 0 until totalOverlays) {
-                val layout = parseOverlay(lines, i)
+                val layout = parseOverlay(lines, i, overlayName, imageDimensionsCallback)
                 if (layout != null) {
                     layouts[layout.name] = layout
                     Log.d(TAG, "Parsed layout: ${layout.name} with ${layout.buttons.size} buttons")
                 }
             }
+            
+            // Résoudre les targets (next_target → next_index) après chargement complet
+            // Compatible avec RetroArch task_overlay_resolve_targets() (ligne 533-561)
+            resolveTargets(layouts, totalOverlays)
             
             return RetroArchOverlayConfig(totalOverlays, layouts)
             
@@ -98,8 +116,18 @@ class RetroArchOverlayParser {
     
     /**
      * Parse un overlay individuel (ex: overlay0, overlay1, etc.)
+     * 
+     * @param lines Lignes du fichier .cfg
+     * @param index Index de l'overlay (0, 1, 2, etc.)
+     * @param overlayName Nom de l'overlay (pour charger les images)
+     * @param imageDimensionsCallback Callback pour obtenir les dimensions d'une image (pour conversion pixel → normalized)
      */
-    private fun parseOverlay(lines: List<String>, index: Int): OverlayLayout? {
+    private fun parseOverlay(
+        lines: List<String>,
+        index: Int,
+        overlayName: String? = null,
+        imageDimensionsCallback: ImageDimensionsCallback? = null
+    ): OverlayLayout? {
         val prefix = "overlay${index}_"
         
         // Lire le nom de l'overlay (si absent, utiliser "overlay<index>")
@@ -143,6 +171,26 @@ class RetroArchOverlayParser {
         val backgroundImage = lines.find { it.trim().startsWith("${prefix}overlay = ") }
             ?.substringAfter("= ")?.trim()?.removePrefix("\"")?.removeSuffix("\"")
         
+        // Item P1 #12: Conversion Normalized vs Pixel
+        // RetroArch task_overlay.c lignes 368-378: Si !normalized, utiliser width_mod/height_mod
+        // width_mod = 1.0f / width, height_mod = 1.0f / height (dimensions image de fond)
+        // Puis multiplier x, y, range_x, range_y par les mods pour convertir pixel → normalized
+        var widthMod = 1.0f
+        var heightMod = 1.0f
+        
+        if (!normalized && backgroundImage != null && imageDimensionsCallback != null) {
+            // Obtenir les dimensions de l'image de fond pour conversion pixel → normalized
+            val dimensions = imageDimensionsCallback(backgroundImage, overlayName)
+            if (dimensions != null && dimensions.first > 0 && dimensions.second > 0) {
+                widthMod = 1.0f / dimensions.first
+                heightMod = 1.0f / dimensions.second
+                Log.d(TAG, "Conversion pixel → normalized for overlay $index: image=${dimensions.first}x${dimensions.second}, mods=($widthMod, $heightMod)")
+            } else {
+                Log.w(TAG, "Cannot get dimensions for background image '$backgroundImage', assuming normalized coordinates")
+                // Si on ne peut pas obtenir les dimensions, on assume que c'est déjà normalized (fallback)
+            }
+        }
+        
         // Parser aspect_ratio
         val aspectRatio = lines.find { it.trim().startsWith("${prefix}aspect_ratio = ") }
             ?.substringAfter("= ")?.trim()?.toFloatOrNull()
@@ -161,10 +209,10 @@ class RetroArchOverlayParser {
         val descCount = lines.find { it.trim().startsWith("${prefix}descs = ") }
             ?.substringAfter("= ")?.trim()?.toIntOrNull() ?: 0
         
-        // Parser chaque bouton
+        // Parser chaque bouton avec width_mod/height_mod pour conversion si !normalized
         val buttons = mutableListOf<OverlayButton>()
         for (descIndex in 0 until descCount) {
-            val button = parseButton(lines, prefix, descIndex)
+            val button = parseButton(lines, prefix, descIndex, normalized, widthMod, heightMod)
             if (button != null) {
                 buttons.add(button)
             }
@@ -193,8 +241,26 @@ class RetroArchOverlayParser {
      * Format: overlay0_desc8 = "a,0.91667,0.85185,radial,0.05000,0.08889"
      * Optionnel: overlay0_desc8_overlay = img/A.png
      * Optionnel: overlay0_desc8_next_target = "portrait-A"
+     * 
+     * @param lines Lignes du fichier .cfg
+     * @param prefix Préfixe de l'overlay (ex: "overlay0_")
+     * @param descIndex Index du descripteur (0, 1, 2, etc.)
+     * @param normalized Flag indiquant si les coordonnées sont normalisées (0.0-1.0) ou en pixels
+     * @param widthMod Multiplicateur pour conversion pixel → normalized en X (1.0f si normalized)
+     * @param heightMod Multiplicateur pour conversion pixel → normalized en Y (1.0f si normalized)
+     * 
+     * Compatible RetroArch task_overlay.c lignes 377-378:
+     *   desc->x = (float)strtod(x, NULL) * width_mod;
+     *   desc->y = (float)strtod(y, NULL) * height_mod;
      */
-    private fun parseButton(lines: List<String>, prefix: String, descIndex: Int): OverlayButton? {
+    private fun parseButton(
+        lines: List<String>,
+        prefix: String,
+        descIndex: Int,
+        normalized: Boolean,
+        widthMod: Float = 1.0f,
+        heightMod: Float = 1.0f
+    ): OverlayButton? {
         val descKey = "${prefix}desc${descIndex}"
         
         // Trouver la ligne de définition du bouton
@@ -222,8 +288,19 @@ class RetroArchOverlayParser {
                 return null
             }
             
-            val x = parts[1].toFloatOrNull() ?: return null
-            val y = parts[2].toFloatOrNull() ?: return null
+            // Parser format "a|b|c" en bitmask (compatible RetroArch)
+            // RetroArch utilise input_bits_t (256 bits) pour button_mask
+            // On stocke comme Set<Int> d'IDs RetroPad (RETRO_DEVICE_ID_JOYPAD_*)
+            val buttonMask = RetroArchButtonMapping.parseButtonMask(action)
+            
+            // Parser coordonnées et appliquer conversion pixel → normalized si nécessaire
+            // Compatible RetroArch task_overlay.c lignes 377-378:
+            //   desc->x = (float)strtod(x, NULL) * width_mod;
+            //   desc->y = (float)strtod(y, NULL) * height_mod;
+            val xRaw = parts[1].toFloatOrNull() ?: return null
+            val yRaw = parts[2].toFloatOrNull() ?: return null
+            val x = xRaw * widthMod
+            val y = yRaw * heightMod
             val shape = when (parts[3].lowercase()) {
                 "radial" -> ButtonShape.RADIAL
                 "rect" -> ButtonShape.RECT
@@ -233,9 +310,14 @@ class RetroArchOverlayParser {
                 }
             }
             
-            // Dimensions (optionnelles)
-            val width = if (parts.size > 4) parts[4].toFloatOrNull() ?: 0.05f else 0.05f
-            val height = if (parts.size > 5) parts[5].toFloatOrNull() ?: 0.05f else 0.05f
+            // Dimensions (optionnelles) - aussi converties pixel → normalized si nécessaire
+            // Compatible RetroArch task_overlay.c lignes 423-424:
+            //   desc->range_x = (float)strtod(elem4, NULL) * width_mod;
+            //   desc->range_y = (float)strtod(elem5, NULL) * height_mod;
+            val widthRaw = if (parts.size > 4) parts[4].toFloatOrNull() ?: 0.05f else 0.05f
+            val heightRaw = if (parts.size > 5) parts[5].toFloatOrNull() ?: 0.05f else 0.05f
+            val width = widthRaw * widthMod
+            val height = heightRaw * heightMod
             
             // Image overlay (optionnel)
             val overlayLine = lines.find { it.trim().startsWith("${descKey}_overlay = ") }
@@ -283,10 +365,12 @@ class RetroArchOverlayParser {
             }
             
             // Parser 8-way custom mappings pour dpad_area et abxy_area
+            // Format peut être "a|b|c" (bitmask) ou simple "a"
             fun readMapping(key: String): String? =
                 lines.find { it.trim().startsWith("${descKey}_${key} = ") }
                     ?.substringAfter("= ")?.trim()
             
+            // Parser les mappings 8-way (peuvent être au format "a|b|c")
             val eightwayUp = readMapping("up")
             val eightwayDown = readMapping("down")
             val eightwayLeft = readMapping("left")
@@ -295,6 +379,16 @@ class RetroArchOverlayParser {
             val eightwayUpRight = readMapping("up_right")
             val eightwayDownLeft = readMapping("down_left")
             val eightwayDownRight = readMapping("down_right")
+            
+            // Parser les bitmasks pour les 8-way mappings (compatible RetroArch)
+            val eightwayUpMask = eightwayUp?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayDownMask = eightwayDown?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayLeftMask = eightwayLeft?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayRightMask = eightwayRight?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayUpLeftMask = eightwayUpLeft?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayUpRightMask = eightwayUpRight?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayDownLeftMask = eightwayDownLeft?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayDownRightMask = eightwayDownRight?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
             
             val button = OverlayButton(
                 action = action,
@@ -307,6 +401,7 @@ class RetroArchOverlayParser {
                 nextTarget = nextTarget,
                 type = buttonType,
                 rangeModifier = rangeModifier,
+                buttonMask = buttonMask,  // Bitmask parsé depuis "a|b|c"
                 alphaModifier = alphaMod,
                 exclusive = exclusive,
                 rangeModExclusive = rangeModExclusive,
@@ -384,6 +479,57 @@ class RetroArchOverlayParser {
             appendLine("Total buttons: $totalButtons")
             appendLine("Avg buttons/layout: $avgButtonsPerLayout")
         }
+    }
+    
+    /**
+     * Résoudre les targets (next_target → next_index) après chargement complet
+     * Compatible avec RetroArch task_overlay_resolve_targets() (ligne 533-561)
+     * 
+     * Algorithme RetroArch:
+     * 1. Pour chaque overlay, parcourir tous les descs
+     * 2. Si desc->next_index_name est non vide, chercher l'overlay correspondant
+     * 3. Mettre à jour desc->next_index avec l'index trouvé (ou (idx + 1) % len si vide)
+     * 
+     * @param layouts Map des layouts parsés (sera modifié pour résoudre les nextIndex)
+     * @param totalOverlays Nombre total d'overlays
+     */
+    private fun resolveTargets(layouts: MutableMap<String, OverlayLayout>, totalOverlays: Int) {
+        // Créer une liste ordonnée des layouts (pour calculer les index)
+        val layoutList = layouts.values.toList()
+        
+        // Créer un mapping nom → index pour recherche rapide
+        val nameToIndex = layoutList.mapIndexed { index, layout -> layout.name to index }.toMap()
+        
+        // Parcourir tous les layouts
+        for ((layoutIndex, layout) in layoutList.withIndex()) {
+            // Parcourir tous les boutons de ce layout
+            val updatedButtons = layout.buttons.map { button ->
+                // Si le bouton a un nextTarget, le résoudre
+                if (button.nextTarget != null && button.nextTarget!!.isNotBlank()) {
+                    // Chercher l'index de l'overlay cible (compatible RetroArch task_overlay_find_index)
+                    val targetIndex = nameToIndex[button.nextTarget]
+                    
+                    if (targetIndex == null) {
+                        // Overlay cible non trouvé (compatible RetroArch ligne 549-554)
+                        Log.e(TAG, "[Overlay] Couldn't find overlay called: \"${button.nextTarget}\"")
+                        // Garder nextIndex = null pour indiquer l'erreur
+                        button.copy(nextIndex = null)
+                    } else {
+                        // Résoudre le target en index
+                        button.copy(nextIndex = targetIndex)
+                    }
+                } else {
+                    // Pas de target spécifié, utiliser (idx + 1) % len comme défaut (compatible RetroArch ligne 543)
+                    val defaultNextIndex = (layoutIndex + 1) % totalOverlays
+                    button.copy(nextIndex = defaultNextIndex)
+                }
+            }
+            
+            // Mettre à jour le layout avec les boutons résolus
+            layouts[layout.name] = layout.copy(buttons = updatedButtons)
+        }
+        
+        Log.d(TAG, "Resolved targets for ${layoutList.size} layouts")
     }
 }
 

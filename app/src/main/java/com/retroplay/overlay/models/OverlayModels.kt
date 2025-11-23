@@ -52,9 +52,13 @@ data class OverlayButton(
     val width: Float,                     // Width (range_x) (0.0-1.0 if normalized)
     val height: Float,                    // Height (range_y) (0.0-1.0 if normalized)
     val imagePath: String? = null,        // "img/A.png"
-    val nextTarget: String? = null,       // Pour overlay_next buttons
+    val nextTarget: String? = null,       // Pour overlay_next buttons (nom de l'overlay cible)
+    val nextIndex: Int? = null,          // Index résolu de l'overlay cible (résolu après parsing)
     val type: OverlayButtonType = OverlayButtonType.BUTTONS,  // Type de bouton
     val rangeModifier: Float = 1.0f,      // Multiplier pour analog sticks (sensibilité)
+    // Bitmask des boutons RetroPad (format "a|b|c" → Set<Int> des IDs)
+    // Compatible RetroArch input_bits_t (256 bits)
+    val buttonMask: Set<Int> = emptySet(), // IDs RetroPad (RETRO_DEVICE_ID_JOYPAD_*)
     // Extensions pour compat 100% RetroArch
     val alphaModifier: Float? = null,     // overlayN_descM_alpha_mod
     val exclusive: Boolean = false,       // overlayN_descM_exclusive
@@ -131,12 +135,75 @@ enum class OverlayButtonType {
 }
 
 /**
+ * IDs RetroPad (RETRO_DEVICE_ID_JOYPAD_*) selon libretro.h
+ * Compatible avec RetroArch input_bits_t bitmask
+ */
+object RetroPadIds {
+    // Face buttons
+    const val JOYPAD_B = 0
+    const val JOYPAD_Y = 1
+    const val JOYPAD_SELECT = 2
+    const val JOYPAD_START = 3
+    const val JOYPAD_UP = 4
+    const val JOYPAD_DOWN = 5
+    const val JOYPAD_LEFT = 6
+    const val JOYPAD_RIGHT = 7
+    const val JOYPAD_A = 8
+    const val JOYPAD_X = 9
+    const val JOYPAD_L = 10
+    const val JOYPAD_R = 11
+    const val JOYPAD_L2 = 12
+    const val JOYPAD_R2 = 13
+    const val JOYPAD_L3 = 14
+    const val JOYPAD_R3 = 15
+    
+    // Special actions (RARCH_*)
+    const val RARCH_OVERLAY_NEXT = 16
+    const val RARCH_OSK = 17
+    // ... autres hotkeys peuvent être ajoutés si nécessaire
+}
+
+/**
  * Mapping des actions RetroArch vers Android KeyEvents
  */
 object RetroArchButtonMapping {
     
     /**
-     * Actions standards → KeyCodes Android
+     * Mapping nom de bouton → ID RetroPad (RETRO_DEVICE_ID_JOYPAD_*)
+     * Compatible avec RetroArch input_config_translate_str_to_bind_id()
+     */
+    val ACTION_TO_RETROPAD_ID = mapOf(
+        // Face buttons
+        "a" to RetroPadIds.JOYPAD_A,
+        "b" to RetroPadIds.JOYPAD_B,
+        "x" to RetroPadIds.JOYPAD_X,
+        "y" to RetroPadIds.JOYPAD_Y,
+        
+        // Shoulder buttons
+        "l" to RetroPadIds.JOYPAD_L,
+        "r" to RetroPadIds.JOYPAD_R,
+        "l2" to RetroPadIds.JOYPAD_L2,
+        "r2" to RetroPadIds.JOYPAD_R2,
+        "l3" to RetroPadIds.JOYPAD_L3,
+        "r3" to RetroPadIds.JOYPAD_R3,
+        
+        // System buttons
+        "start" to RetroPadIds.JOYPAD_START,
+        "select" to RetroPadIds.JOYPAD_SELECT,
+        
+        // D-Pad
+        "left" to RetroPadIds.JOYPAD_LEFT,
+        "right" to RetroPadIds.JOYPAD_RIGHT,
+        "up" to RetroPadIds.JOYPAD_UP,
+        "down" to RetroPadIds.JOYPAD_DOWN,
+        
+        // Special actions
+        "overlay_next" to RetroPadIds.RARCH_OVERLAY_NEXT,
+        "osk" to RetroPadIds.RARCH_OSK
+    )
+    
+    /**
+     * Actions standards → KeyCodes Android (pour backward compatibility)
      */
     val ACTION_TO_KEYCODE = mapOf(
         // Face buttons
@@ -163,6 +230,36 @@ object RetroArchButtonMapping {
         "up" to KeyEvent.KEYCODE_DPAD_UP,
         "down" to KeyEvent.KEYCODE_DPAD_DOWN
     )
+    
+    /**
+     * Parser format "a|b|c" en bitmask (Set<Int> d'IDs RetroPad)
+     * Compatible avec RetroArch task_overlay_redefine_eightway_direction()
+     * et task_overlay.c:344-353 (parsing button_mask)
+     * 
+     * @param actionString Format "a|b|c" ou "a" simple
+     * @return Set d'IDs RetroPad (RETRO_DEVICE_ID_JOYPAD_*)
+     */
+    fun parseButtonMask(actionString: String): Set<Int> {
+        if (actionString.isBlank()) {
+            return emptySet()
+        }
+        
+        // Ignorer "nul" ou "null" (comme RetroArch ligne 351)
+        if (actionString.equals("nul", ignoreCase = true) || 
+            actionString.equals("null", ignoreCase = true)) {
+            return emptySet()
+        }
+        
+        // Split par "|" (comme RetroArch strtok_r avec "|")
+        val parts = actionString.split("|").map { it.trim().lowercase() }
+        
+        // Convertir chaque partie en ID RetroPad
+        val mask = parts.mapNotNull { part ->
+            ACTION_TO_RETROPAD_ID[part]
+        }.toSet()
+        
+        return mask
+    }
     
     /**
      * Parser une action combo (ex: "a|b", "left|up")
@@ -206,6 +303,7 @@ object RetroArchButtonMapping {
      */
     fun isOverlayControlAction(action: String): Boolean {
         return action.startsWith("overlay_next") || 
+               action.startsWith("overlay_prev") ||
                action.startsWith("menu_toggle") ||
                action == "nul" ||
                action == "null"
@@ -216,6 +314,53 @@ object RetroArchButtonMapping {
      */
     fun isHotkeyAction(action: String): Boolean {
         return HOTKEY_ACTIONS.contains(action)
+    }
+    
+    /**
+     * Actions Lightgun RetroArch (gun_*)
+     * Mapping selon RetroArch overlay_lightgun_action enum
+     */
+    val LIGHTGUN_ACTIONS = setOf(
+        "gun_trigger",      // 1 - Trigger principal
+        "gun_reload",       // 2 - Reload (offscreen shot)
+        "gun_aux_a",        // 3 - Bouton auxiliaire A
+        "gun_aux_b",        // 4 - Bouton auxiliaire B
+        "gun_aux_c",        // 5 - Bouton auxiliaire C
+        "gun_start",        // 6 - Start button
+        "gun_select",       // 7 - Select button
+        "gun_dpad_up",      // 8 - D-Pad Up
+        "gun_dpad_down",    // 9 - D-Pad Down
+        "gun_dpad_left",    // 10 - D-Pad Left
+        "gun_dpad_right"    // 11 - D-Pad Right
+    )
+    
+    /**
+     * Convertir une action lightgun (nom) en ID numérique RetroArch
+     * @param action Nom de l'action (ex: "gun_trigger", "gun_reload")
+     * @return ID numérique (1-11) ou 0 si action inconnue
+     */
+    fun lightgunActionToId(action: String): Int {
+        return when (action) {
+            "gun_trigger" -> 1
+            "gun_reload" -> 2
+            "gun_aux_a" -> 3
+            "gun_aux_b" -> 4
+            "gun_aux_c" -> 5
+            "gun_start" -> 6
+            "gun_select" -> 7
+            "gun_dpad_up" -> 8
+            "gun_dpad_down" -> 9
+            "gun_dpad_left" -> 10
+            "gun_dpad_right" -> 11
+            else -> 0
+        }
+    }
+    
+    /**
+     * Vérifier si c'est une action lightgun RetroArch
+     */
+    fun isLightgunAction(action: String): Boolean {
+        return LIGHTGUN_ACTIONS.contains(action)
     }
     
     /**

@@ -58,9 +58,11 @@ fun RetroArchOverlayScreen(
     onButtonRelease: (String) -> Unit,
     onLayoutSwitch: (String) -> Unit,
     onMenuToggle: () -> Unit = {},
+    availableLayouts: List<String> = emptyList(),  // Liste des layouts disponibles pour navigation cyclique
     onAnalogMove: (String, Float, Float) -> Unit = { _, _, _ -> },  // Callback pour analog sticks (action, x, y)
     onHotkey: (String) -> Unit = {},  // Callback pour hotkeys RetroArch
     onHotkeyChange: (String, Boolean) -> Unit = { _, _ -> },
+    onLightgunAction: (String) -> Unit = {},  // Callback pour actions lightgun (gun_*)
     showDebug: Boolean = false,
     swapAnalogSticks: Boolean = false,
     invertAnalogLeftY: Boolean = false,
@@ -106,6 +108,10 @@ fun RetroArchOverlayScreen(
     // État des boutons (tracking multi-touch)
     val pressedButtons = remember { mutableStateMapOf<Int, Set<OverlayButton>>() }
     
+    // État des deltas pour boutons déplaçables (movable)
+    // Map<buttonIndex, Pair<deltaX, deltaY>> - delta en coordonnées normalisées
+    val movableButtonDeltas = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
+    
     // État des analog sticks
     val analogLeftState = remember { mutableStateOf(AnalogStickState()) }
     val analogRightState = remember { mutableStateOf(AnalogStickState()) }
@@ -135,6 +141,7 @@ fun RetroArchOverlayScreen(
                     layout = scaledLayout,
                     screenSize = screenSize,
                     pressedButtons = pressedButtons,
+                    movableButtonDeltas = movableButtonDeltas,
                     analogLeftState = analogLeftState,
                     analogRightState = analogRightState,
                     onButtonPress = onButtonPress,
@@ -144,6 +151,9 @@ fun RetroArchOverlayScreen(
                     onAnalogMove = onAnalogMove,
                     onHotkey = onHotkey,
                     onHotkeyChange = onHotkeyChange,
+                    onLightgunAction = onLightgunAction,
+                    availableLayouts = availableLayouts,
+                    currentLayoutName = layout.name,
                     swapAnalogSticks = swapAnalogSticks,
                     invertAnalogLeftY = invertAnalogLeftY,
                     invertAnalogRightY = invertAnalogRightY,
@@ -203,19 +213,36 @@ fun RetroArchOverlayScreen(
                         var modXPx = button.modX * screenSize.width
                         var modYPx = button.modY * screenSize.height
                         
-                        // MOVABLE: Si le bouton est movable (analog sticks), appliquer visualOffset
-                        // L'image du stick suit le doigt dans la limite du rayon
+                        // MOVABLE: Si le bouton est movable, appliquer visualOffset ou delta
+                        // L'image du bouton suit le doigt dans la limite du range
                         if (button.movable) {
-                            val analogState = when (button.type) {
-                                OverlayButtonType.ANALOG_LEFT -> analogLeftState.value
-                                OverlayButtonType.ANALOG_RIGHT -> analogRightState.value
-                                else -> null
-                            }
-                            
-                            if (analogState != null && analogState.isActivated) {
-                                // Appliquer l'offset visuel calculé dans handleTouchEvent
-                                modXPx += analogState.visualOffsetX
-                                modYPx += analogState.visualOffsetY
+                            when (button.type) {
+                                OverlayButtonType.ANALOG_LEFT, OverlayButtonType.ANALOG_RIGHT -> {
+                                    // Analog sticks: utiliser visualOffset depuis AnalogStickState
+                                    val analogState = when (button.type) {
+                                        OverlayButtonType.ANALOG_LEFT -> analogLeftState.value
+                                        OverlayButtonType.ANALOG_RIGHT -> analogRightState.value
+                                        else -> null
+                                    }
+                                    
+                                    if (analogState != null && analogState.isActivated) {
+                                        // Appliquer l'offset visuel calculé dans handleTouchEvent
+                                        modXPx += analogState.visualOffsetX
+                                        modYPx += analogState.visualOffsetY
+                                    }
+                                }
+                                else -> {
+                                    // Boutons déplaçables non-analog: utiliser delta depuis movableButtonDeltas
+                                    val buttonIndex = scaledLayout.buttons.indexOf(button)
+                                    if (buttonIndex >= 0) {
+                                        val delta = movableButtonDeltas[buttonIndex]
+                                        if (delta != null) {
+                                            // Delta est en pixels, appliquer directement
+                                            modXPx += delta.first
+                                            modYPx += delta.second
+                                        }
+                                    }
+                                }
                             }
                         }
                         
@@ -366,6 +393,7 @@ private fun handleOverlayTouch(
     layout: OverlayLayout,
     screenSize: IntSize,
     pressedButtons: MutableMap<Int, Set<OverlayButton>>,
+    movableButtonDeltas: MutableMap<Int, Pair<Float, Float>>,
     analogLeftState: MutableState<AnalogStickState>,
     analogRightState: MutableState<AnalogStickState>,
     onButtonPress: (String) -> Unit,
@@ -375,6 +403,9 @@ private fun handleOverlayTouch(
     onAnalogMove: (String, Float, Float) -> Unit,
     onHotkey: (String) -> Unit,
     onHotkeyChange: (String, Boolean) -> Unit,
+    onLightgunAction: (String) -> Unit,
+    availableLayouts: List<String> = emptyList(),
+    currentLayoutName: String = "",
     swapAnalogSticks: Boolean = false,
     invertAnalogLeftY: Boolean = false,
     invertAnalogRightY: Boolean = false,
@@ -496,8 +527,11 @@ private fun handleOverlayTouch(
             }
             
             // Si ce n'est pas un analog stick, traiter comme bouton normal
+            // Pour le premier touch (ACTION_DOWN), useRangeMod = false
             val touchedButtons = detectButtonsAtPosition(
-                x, y, layout, screenSize, dpadDiagonalSensitivity, abxyDiagonalSensitivity
+                x, y, layout, screenSize, dpadDiagonalSensitivity, abxyDiagonalSensitivity,
+                useRangeMod = false,  // Premier touch, pas de range_mod actif
+                previousTouchedButtons = emptySet()  // Pas de boutons précédents
             )
             
             // DEBUG: Log si plusieurs boutons détectés (chevauchement potentiel)
@@ -513,14 +547,72 @@ private fun handleOverlayTouch(
             // Enregistrer les boutons pressés pour ce pointeur
             pressedButtons[pointerId] = touchedButtons
             
+            // Gérer les boutons déplaçables (movable, non-analog)
+            touchedButtons.forEachIndexed { index, button ->
+                if (button.movable && button.type != OverlayButtonType.ANALOG_LEFT && button.type != OverlayButtonType.ANALOG_RIGHT) {
+                    // Bouton déplaçable: calculer le delta initial
+                    val buttonIndex = layout.buttons.indexOf(button)
+                    if (buttonIndex >= 0) {
+                        val centerX = button.x * screenSize.width
+                        val centerY = button.y * screenSize.height
+                        val dx = x - centerX
+                        val dy = y - centerY
+                        // Clamper le delta au range du bouton (comme RetroArch)
+                        val baseRangeX = button.width * screenSize.width
+                        val baseRangeY = button.height * screenSize.height
+                        val clampedDx = dx.coerceIn(-baseRangeX, baseRangeX)
+                        val clampedDy = dy.coerceIn(-baseRangeY, baseRangeY)
+                        // Stocker le delta en pixels (sera converti en normalisé lors du rendu)
+                        movableButtonDeltas[buttonIndex] = Pair(clampedDx, clampedDy)
+                        Log.d(TAG, "[MOVABLE] Button '${button.action}' (index=$buttonIndex) delta: ($clampedDx, $clampedDy)")
+                    }
+                }
+            }
+            
             // Déclencher les callbacks
             touchedButtons.forEach { button ->
                 // Actions spéciales (overlay control)
                 if (RetroArchButtonMapping.isOverlayControlAction(button.action)) {
-                    if (button.action.startsWith("overlay_next") && button.nextTarget != null) {
-                        // Tous les boutons overlay_next changent de layout (RetroArch officiel)
-                        Log.i(TAG, "SYSTEM BUTTON: target='${button.nextTarget}' | Img='${button.imagePath}' | Normalized center: (${button.x}, ${button.y}) | Touch px: ($x, $y)")
-                        onLayoutSwitch(button.nextTarget)
+                    if (button.action.startsWith("overlay_next")) {
+                        if (button.nextTarget != null) {
+                            // Utiliser nextTarget si défini (RetroArch officiel)
+                            Log.i(TAG, "SYSTEM BUTTON: overlay_next (target) | target='${button.nextTarget}' | Img='${button.imagePath}' | Normalized center: (${button.x}, ${button.y}) | Touch px: ($x, $y)")
+                            onLayoutSwitch(button.nextTarget)
+                        } else if (availableLayouts.isNotEmpty() && currentLayoutName.isNotEmpty()) {
+                            // Navigation cyclique si nextTarget n'est pas défini
+                            val currentIndex = availableLayouts.indexOf(currentLayoutName)
+                            val nextIndex = if (currentIndex < availableLayouts.size - 1) {
+                                currentIndex + 1
+                            } else {
+                                // Cyclique: revenir au premier layout
+                                0
+                            }
+                            val nextLayout = availableLayouts[nextIndex]
+                            Log.i(TAG, "SYSTEM BUTTON: overlay_next (cyclic) | Current='$currentLayoutName' (index=$currentIndex) -> Next='$nextLayout' (index=$nextIndex) | Img='${button.imagePath}' | Touch px: ($x, $y)")
+                            onLayoutSwitch(nextLayout)
+                        } else {
+                            Log.w(TAG, "SYSTEM BUTTON: overlay_next | No nextTarget, available layouts, or current layout name, cannot navigate")
+                        }
+                    } else if (button.action.startsWith("overlay_prev")) {
+                        // Navigation vers le layout précédent (cyclique)
+                        if (availableLayouts.isNotEmpty() && currentLayoutName.isNotEmpty()) {
+                            val currentIndex = availableLayouts.indexOf(currentLayoutName)
+                            val prevIndex = if (currentIndex > 0) {
+                                currentIndex - 1
+                            } else {
+                                // Cyclique: revenir au dernier layout
+                                availableLayouts.size - 1
+                            }
+                            val prevLayout = availableLayouts[prevIndex]
+                            Log.i(TAG, "SYSTEM BUTTON: overlay_prev | Current='$currentLayoutName' (index=$currentIndex) -> Prev='$prevLayout' (index=$prevIndex) | Img='${button.imagePath}' | Touch px: ($x, $y)")
+                            onLayoutSwitch(prevLayout)
+                        } else if (button.nextTarget != null) {
+                            // Fallback: utiliser nextTarget si disponible (compatibilité)
+                            Log.i(TAG, "SYSTEM BUTTON: overlay_prev (fallback to nextTarget) | target='${button.nextTarget}' | Img='${button.imagePath}' | Touch px: ($x, $y)")
+                            onLayoutSwitch(button.nextTarget)
+                        } else {
+                            Log.w(TAG, "SYSTEM BUTTON: overlay_prev | No available layouts or current layout name, cannot navigate")
+                        }
                     } else if (button.action == "menu_toggle") {
                         Log.i(TAG, "SYSTEM BUTTON: MENU | Img='${button.imagePath}' | Normalized center: (${button.x}, ${button.y}) | Touch px: ($x, $y)")
                         onMenuToggle()
@@ -532,6 +624,10 @@ private fun handleOverlayTouch(
                     if (button.action != "rewind") {
                         onHotkey(button.action)
                     }
+                } else if (RetroArchButtonMapping.isLightgunAction(button.action)) {
+                    // Actions lightgun RetroArch (gun_trigger, gun_reload, gun_aux_a/b, etc.)
+                    Log.i(TAG, "LIGHTGUN ACTION: ${button.action} | Img='${button.imagePath}' | Touch px: ($x, $y)")
+                    onLightgunAction(button.action)
                 } else {
                     // Actions normales (boutons gamepad)
                     Log.d(TAG, "Button pressed: ${button.action}")
@@ -617,8 +713,15 @@ private fun handleOverlayTouch(
                 
                 // Si pas géré par analog, traiter comme bouton normal
                 if (!handledByAnalog) {
-                    val currentButtons = detectButtonsAtPosition(x, y, layout, screenSize, dpadDiagonalSensitivity, abxyDiagonalSensitivity)
+                    // Pour ACTION_MOVE, vérifier si ce touch a déjà contribué au touch_mask précédemment
+                    // (pour range_mod_exclusive)
                     val previousButtons = pressedButtons[pointerId] ?: emptySet()
+                    val useRangeMod = previousButtons.isNotEmpty()  // Si déjà touché, range_mod peut être actif
+                    val currentButtons = detectButtonsAtPosition(
+                        x, y, layout, screenSize, dpadDiagonalSensitivity, abxyDiagonalSensitivity,
+                        useRangeMod = useRangeMod,  // Utiliser range_mod si touch précédent
+                        previousTouchedButtons = previousButtons  // Boutons précédents pour range_mod_exclusive
+                    )
                     
                     // Boutons nouvellement pressés
                     val newButtons = currentButtons - previousButtons
@@ -645,6 +748,26 @@ private fun handleOverlayTouch(
                     }
                     
                     pressedButtons[pointerId] = currentButtons
+                    
+                    // Mettre à jour les deltas pour boutons déplaçables (movable, non-analog)
+                    currentButtons.forEach { button ->
+                        if (button.movable && button.type != OverlayButtonType.ANALOG_LEFT && button.type != OverlayButtonType.ANALOG_RIGHT) {
+                            val buttonIndex = layout.buttons.indexOf(button)
+                            if (buttonIndex >= 0) {
+                                val centerX = button.x * screenSize.width
+                                val centerY = button.y * screenSize.height
+                                val dx = x - centerX
+                                val dy = y - centerY
+                                // Clamper le delta au range du bouton (comme RetroArch)
+                                val baseRangeX = button.width * screenSize.width
+                                val baseRangeY = button.height * screenSize.height
+                                val clampedDx = dx.coerceIn(-baseRangeX, baseRangeX)
+                                val clampedDy = dy.coerceIn(-baseRangeY, baseRangeY)
+                                // Mettre à jour le delta en pixels
+                                movableButtonDeltas[buttonIndex] = Pair(clampedDx, clampedDy)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -677,6 +800,15 @@ private fun handleOverlayTouch(
                     Log.d(TAG, "Button released: ${button.action}")
                     onButtonRelease(button.action)
                 }
+                
+                // Réinitialiser le delta pour boutons déplaçables (movable, non-analog)
+                if (button.movable && button.type != OverlayButtonType.ANALOG_LEFT && button.type != OverlayButtonType.ANALOG_RIGHT) {
+                    val buttonIndex = layout.buttons.indexOf(button)
+                    if (buttonIndex >= 0) {
+                        movableButtonDeltas.remove(buttonIndex)
+                        Log.d(TAG, "[MOVABLE] Button '${button.action}' (index=$buttonIndex) delta reset")
+                    }
+                }
             }
             
             pressedButtons.remove(pointerId)
@@ -702,6 +834,14 @@ private fun handleOverlayTouch(
                 } else if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
                     Log.d(TAG, "Button released (cancel): ${button.action}")
                     onButtonRelease(button.action)
+                }
+                
+                // Réinitialiser le delta pour boutons déplaçables (movable, non-analog)
+                if (button.movable && button.type != OverlayButtonType.ANALOG_LEFT && button.type != OverlayButtonType.ANALOG_RIGHT) {
+                    val buttonIndex = layout.buttons.indexOf(button)
+                    if (buttonIndex >= 0) {
+                        movableButtonDeltas.remove(buttonIndex)
+                    }
                 }
             }
             pressedButtons.clear()
@@ -789,6 +929,13 @@ private fun calculateAnalogValues(
 /**
  * Détecter quels boutons sont touchés à une position donnée
  * Exclut les analog sticks (gérés séparément)
+ * 
+ * Implémente la logique exclusive hitboxes compatible RetroArch:
+ * - range_mod_exclusive (priorité 2) : bloque les autres si touché avec range_mod actif
+ * - exclusive (priorité 1) : bloque les autres boutons
+ * - Les boutons avec priorité plus élevée bloquent ceux avec priorité plus basse
+ * 
+ * Compatible avec RetroArch input_driver.c lignes 2516-2532
  */
 private fun detectButtonsAtPosition(
     x: Float,
@@ -796,9 +943,12 @@ private fun detectButtonsAtPosition(
     layout: OverlayLayout,
     screenSize: IntSize,
     dpadDiagonalSensitivity: Int = 50,
-    abxyDiagonalSensitivity: Int = 50
+    abxyDiagonalSensitivity: Int = 50,
+    useRangeMod: Boolean = false,  // true si ce touch a déjà contribué au touch_mask précédemment
+    previousTouchedButtons: Set<OverlayButton> = emptySet()  // Boutons touchés précédemment (pour range_mod_exclusive)
 ): Set<OverlayButton> {
-    val touched = mutableSetOf<OverlayButton>()
+    val touched = mutableListOf<Pair<OverlayButton, Int>>()  // (button, priority)
+    var highestPriority = -1
     
     layout.buttons.forEach { button ->
         // Skip analog sticks (gérés séparément)
@@ -806,10 +956,39 @@ private fun detectButtonsAtPosition(
             return@forEach
         }
         
+        // Item P1 #11: Skip boutons avec hitbox désactivée (reach_* == 0.0f)
+        // Compatible RetroArch task_overlay.c lignes 492-494
+        // Si reach_left + reach_right == 0.0f OU reach_up + reach_down == 0.0f, hitbox désactivée
+        if ((button.reachLeft + button.reachRight == 0.0f) || 
+            (button.reachUp + button.reachDown == 0.0f)) {
+            return@forEach  // Skip ce bouton (hitbox désactivée)
+        }
+        
         // Traiter les zones 8-way (dpad_area, abxy_area)
+        // IMPORTANT: Les zones 8-way sont traitées comme les autres boutons pour la logique exclusive
+        // Elles ont priorité 0 (pas exclusive) mais peuvent être bloquées par des boutons exclusive
         if (button.type == OverlayButtonType.DPAD_AREA || button.type == OverlayButtonType.ABXY_AREA) {
             // Vérifier si le touch est dans la zone
             if (isTouchInsideButton(x, y, button, layout.rangeModifier, screenSize)) {
+                // Calculer la priorité (zones 8-way peuvent avoir exclusive aussi)
+                var priority = 0
+                if (useRangeMod && button.rangeModExclusive && previousTouchedButtons.contains(button)) {
+                    priority = 2
+                } else if (button.exclusive) {
+                    priority = 1
+                }
+                
+                // Si ce bouton a priorité plus basse que la plus haute trouvée, le skip
+                if (highestPriority > priority) {
+                    return@forEach
+                }
+                
+                // Si ce bouton a priorité plus élevée, effacer tous les précédents
+                if (priority > highestPriority) {
+                    highestPriority = priority
+                    touched.clear()
+                }
+                
                 // Calculer l'offset depuis le centre
                 val centerX = button.x * screenSize.width
                 val centerY = button.y * screenSize.height
@@ -837,10 +1016,10 @@ private fun detectButtonsAtPosition(
                         else -> null
                     }
                     
-                    // Créer un bouton virtuel pour cette direction
+                    // Créer un bouton virtuel pour cette direction avec la même priorité
                     if (mappedAction != null) {
                         val virtualButton = button.copy(action = mappedAction)
-                        touched.add(virtualButton)
+                        touched.add(Pair(virtualButton, priority))
                     }
                 }
             }
@@ -855,18 +1034,61 @@ private fun detectButtonsAtPosition(
         // Utiliser rangeXHitbox/rangeYHitbox (avec reach_*) ET layout.rangeModifier pour les boutons normaux
         // Identique à RetroArch: range_x_mod = range_x_hitbox * range_mod
         if (isTouchInsideButton(x, y, button, layout.rangeModifier, screenSize)) {
-            touched.add(button)
+            // Calculer la priorité (compatible RetroArch lignes 2518-2521)
+            var priority = 0
+            if (useRangeMod && button.rangeModExclusive && previousTouchedButtons.contains(button)) {
+                // range_mod_exclusive a priorité 2 (plus haute)
+                priority = 2
+            } else if (button.exclusive) {
+                // exclusive a priorité 1
+                priority = 1
+            }
+            
+            // Si ce bouton a priorité plus basse que la plus haute trouvée, le skip (compatible RetroArch ligne 2523-2524)
+            if (highestPriority > priority) {
+                // DEBUG: Log quand un bouton est bloqué par un exclusive de priorité plus élevée
+                if (priority > 0 || highestPriority > 0) {
+                    val buttonX = button.x * screenSize.width
+                    val buttonY = button.y * screenSize.height
+                    Log.d("TouchHandler", "BLOCKED (priority=$priority < highest=$highestPriority): ${button.action} | Touch: ($x,$y) | Center: ($buttonX,$buttonY)")
+                }
+                return@forEach
+            }
+            
+            // Si ce bouton a priorité plus élevée, effacer tous les précédents (compatible RetroArch lignes 2526-2532)
+            if (priority > highestPriority) {
+                val blockedCount = touched.size
+                if (blockedCount > 0 && priority > 0) {
+                    val blockedActions = touched.map { it.first.action }.joinToString(", ")
+                    Log.d("TouchHandler", "EXCLUSIVE BLOCK: ${button.action} (priority=$priority) blocks $blockedCount button(s): $blockedActions")
+                }
+                highestPriority = priority
+                touched.clear()  // Effacer tous les boutons précédents
+            }
+            
+            // Ajouter ce bouton (compatible RetroArch ligne 2534)
+            touched.add(Pair(button, priority))
             
             // DEBUG: Log détaillé de la détection
             val buttonX = button.x * screenSize.width
             val buttonY = button.y * screenSize.height
             val buttonWidth = button.rangeXHitbox * screenSize.width * layout.rangeModifier
             val buttonHeight = button.rangeYHitbox * screenSize.height * layout.rangeModifier
-            Log.d("TouchHandler", "HIT: ${button.action} | Touch: ($x,$y) | Center: ($buttonX,$buttonY) | Size: ${buttonWidth.toInt()}x${buttonHeight.toInt()} | Shape: ${button.shape}")
+            if (priority > 0) {
+                val exclusiveType = when {
+                    priority == 2 -> "range_mod_exclusive"
+                    priority == 1 -> "exclusive"
+                    else -> "normal"
+                }
+                Log.d("TouchHandler", "EXCLUSIVE HIT (priority=$priority, type=$exclusiveType): ${button.action} | Touch: ($x,$y) | Center: ($buttonX,$buttonY) | Size: ${buttonWidth.toInt()}x${buttonHeight.toInt()} | useRangeMod=$useRangeMod")
+            } else {
+                Log.d("TouchHandler", "HIT: ${button.action} | Touch: ($x,$y) | Center: ($buttonX,$buttonY) | Size: ${buttonWidth.toInt()}x${buttonHeight.toInt()} | Shape: ${button.shape}")
+            }
         }
     }
     
-    return touched
+    // Retourner seulement les boutons non bloqués (extraire les boutons de la liste de paires)
+    return touched.map { it.first }.toSet()
 }
 
 /**
@@ -879,6 +1101,14 @@ private fun isTouchInsideButton(
     rangeModifier: Float,
     screenSize: IntSize
 ): Boolean {
+    // Item P1 #11: Skip boutons avec hitbox désactivée (reach_* == 0.0f)
+    // Compatible RetroArch task_overlay.c lignes 492-494
+    // Si reach_left + reach_right == 0.0f OU reach_up + reach_down == 0.0f, hitbox désactivée
+    if ((button.reachLeft + button.reachRight == 0.0f) || 
+        (button.reachUp + button.reachDown == 0.0f)) {
+        return false  // Hitbox désactivée, toujours retourner false
+    }
+    
     // CRITIQUE: Utiliser x_hitbox et y_hitbox (PAS x et y!) pour la position de la hitbox
     // La hitbox peut être décalée si reach_left != reach_right ou reach_up != reach_down
     // Identique à RetroArch input_overlay_desc_init_hitbox() lignes 2641-2655

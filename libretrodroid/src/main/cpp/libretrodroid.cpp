@@ -82,6 +82,21 @@ int16_t LibretroDroid::callback_set_input_state(
     return LibretroDroid::getInstance().handleSetInputState(port, device, index, id);
 }
 
+// P1 #8: Sensors Support - delegate to Input
+bool LibretroDroid::handleSetSensorState(unsigned port, unsigned action, unsigned eventRate) {
+    if (!input) {
+        return false;
+    }
+    return input->setSensorState(port, action, eventRate);
+}
+
+float LibretroDroid::handleGetSensorInput(unsigned port, unsigned id) {
+    if (!input) {
+        return 0.0f;
+    }
+    return input->getSensorInput(port, id);
+}
+
 void LibretroDroid::updateAudioSampleRateMultiplier() {
     if (audio) {
         audio->setPlaybackSpeed(frameSpeed);

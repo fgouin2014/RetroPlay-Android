@@ -30,6 +30,7 @@
 #include "environment.h"
 #include "vfs/vfs.h"
 #include "microphone/microphoneinterface.h"
+#include "libretrodroid.h"
 
 void Environment::initialize(
     const std::string &requiredSystemDirectory,
@@ -207,6 +208,18 @@ bool Environment::callback_set_rumble_state(unsigned port, enum retro_rumble_eff
     return Environment::getInstance().handle_callback_set_rumble_state(port, effect, strength);
 }
 
+// P1 #8: Sensors Support - callback for RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE
+// Compatible with RetroArch android_input_set_sensor_state() (lignes 1933-2024)
+bool Environment::callback_set_sensor_state(unsigned port, enum retro_sensor_action action, unsigned rate) {
+    return libretrodroid::LibretroDroid::getInstance().handleSetSensorState(port, action, rate);
+}
+
+// P1 #8: Sensors Support - callback for RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE
+// Compatible with RetroArch android_input_get_sensor_input() (lignes 2026-2051)
+float Environment::callback_get_sensor_input(unsigned port, unsigned id) {
+    return libretrodroid::LibretroDroid::getInstance().handleGetSensorInput(port, id);
+}
+
 bool Environment::handle_callback_set_rumble_state(unsigned port, enum retro_rumble_effect effect, uint16_t strength) {
     LOGV("Setting rumble strength for port %i to %i", port, strength);
     if (port < 0 || port > 3) return false;
@@ -268,6 +281,13 @@ bool Environment::handle_callback_environment(unsigned cmd, void *data) {
         case RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE:
             LOGD("Called RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE");
             ((struct retro_rumble_interface*) data)->set_rumble_state = &callback_set_rumble_state;
+            return true;
+
+        // P1 #8: Sensors Support - compatible RetroArch RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE
+        case RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE:
+            LOGD("Called RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE");
+            ((struct retro_sensor_interface*) data)->set_sensor_state = &callback_set_sensor_state;
+            ((struct retro_sensor_interface*) data)->get_sensor_input = &callback_get_sensor_input;
             return true;
 
         case RETRO_ENVIRONMENT_GET_LOG_INTERFACE:

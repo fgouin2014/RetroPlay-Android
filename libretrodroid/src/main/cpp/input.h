@@ -70,6 +70,11 @@ private:
         float joypadRightXAxis = 0;
         float joypadRightYAxis = 0;
         
+        // P2: Triggers séparés (L2/R2 axes) - Compatible RetroArch analog_state[port][6/7]
+        // Values in range [0.0, 1.0] where 0.0 = unpressed, 1.0 = fully pressed
+        float triggerL2 = 0.0f;  // Left trigger analog value
+        float triggerR2 = 0.0f;  // Right trigger analog value
+        
         // Multi-touch support (up to 16 pointers like RetroArch)
         static constexpr int MAX_POINTERS = 16;
         PointerState pointers[MAX_POINTERS];
@@ -125,6 +130,11 @@ public:
     // P1 #8: Sensors Support - update sensor values from Android
     // Called from JNI when sensor events are received
     void onSensorEvent(int sensorType, float x, float y, float z);
+    
+    // P2: Triggers séparés (L2/R2 axes) - Update trigger analog values
+    // Values should be in range [0.0, 1.0] where 0.0 = unpressed, 1.0 = fully pressed
+    // Compatible RetroArch analog_state[port][6] (L2) and [7] (R2)
+    void setTriggerValue(unsigned port, int trigger, float value);
 
 private:
     const int UNKNOWN_KEY = -1;

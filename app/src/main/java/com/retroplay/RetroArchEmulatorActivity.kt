@@ -530,14 +530,22 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     
     /**
      * Gère les actions multi-touch configurables (2/3/4 doigts)
+     * Compatible RetroArch configuration.c lignes 2652-2654
      * 
      * @param event Touch event contenant le nombre de doigts
      */
     private fun handleMultiTouchActions(event: android.view.MotionEvent) {
+        // Ne traiter que les événements DOWN (pas MOVE/UP) pour éviter déclenchements multiples
+        if (event.actionMasked != android.view.MotionEvent.ACTION_DOWN && 
+            event.actionMasked != android.view.MotionEvent.ACTION_POINTER_DOWN) {
+            return
+        }
+        
         val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
         val fingerCount = event.pointerCount
         
-        if (fingerCount > 1) {
+        // Support multi-touch (2/3/4 doigts) - Compatible RetroArch overlay_lightgun_action enum
+        if (fingerCount > 1 && fingerCount <= 4) {
             val actionId = when (fingerCount) {
                 2 -> lightgunSettings.lightgunTwoTouchInput
                 3 -> lightgunSettings.lightgunThreeTouchInput
@@ -547,7 +555,24 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             
             if (actionId > 0) {
                 sendLightgunAction(actionId, lightgunSettings.lightgunPort)
-                Log.d(TAG, "[ZAPPER] Multi-touch: $fingerCount fingers → action $actionId")
+                // Convertir actionId en nom d'action pour le log
+                val actionName = when (actionId) {
+                    1 -> "gun_trigger"
+                    2 -> "gun_reload"
+                    3 -> "gun_aux_a"
+                    4 -> "gun_aux_b"
+                    5 -> "gun_aux_c"
+                    6 -> "gun_start"
+                    7 -> "gun_select"
+                    8 -> "gun_dpad_up"
+                    9 -> "gun_dpad_down"
+                    10 -> "gun_dpad_left"
+                    11 -> "gun_dpad_right"
+                    else -> "unknown($actionId)"
+                }
+                Log.i(TAG, "[ZAPPER] Multi-touch: $fingerCount fingers → action $actionId ($actionName)")
+            } else {
+                Log.d(TAG, "[ZAPPER] Multi-touch: $fingerCount fingers detected but no action configured (actionId=0)")
             }
         }
     }

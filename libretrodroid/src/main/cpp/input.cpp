@@ -103,6 +103,20 @@ int16_t Input::getInputState(unsigned port, unsigned device, unsigned index, uns
                         default:
                             return 0;
                     }
+                case RETRO_DEVICE_INDEX_ANALOG_BUTTON:
+                    // P2: Triggers séparés (L2/R2 axes) - Compatible RetroArch
+                    // Analog buttons are reported in range [0, 0x7fff] where 0 = unpressed, 0x7fff = fully pressed
+                    // id is the RetroPad button ID (RETRO_DEVICE_ID_JOYPAD_L2 or RETRO_DEVICE_ID_JOYPAD_R2)
+                    switch (id) {
+                        case RETRO_DEVICE_ID_JOYPAD_L2:
+                            // Return L2 trigger value in range [0, 0x7fff]
+                            return (int16_t) (pads[port].triggerL2 * 0x7fff);
+                        case RETRO_DEVICE_ID_JOYPAD_R2:
+                            // Return R2 trigger value in range [0, 0x7fff]
+                            return (int16_t) (pads[port].triggerR2 * 0x7fff);
+                        default:
+                            return 0;
+                    }
                 default:
                     return 0;
             }
@@ -148,6 +162,21 @@ int16_t Input::getInputState(unsigned port, unsigned device, unsigned index, uns
                     // Return number of active pointers (RetroArch compatible)
                     int16_t result = (int16_t) pads[port].pointerCount;
                     LOGI("[NATIVE POINTER] port=%d COUNT=%d", port, result);
+                    return result;
+                }
+                
+                case RETRO_DEVICE_ID_POINTER_IS_OFFSCREEN: {
+                    // Return 1 if pointer is off-screen or near edge (RetroArch compatible)
+                    // RetroArch: Returns 1 if pointer is outside screen or near edge
+                    // We check if coordinates are outside viewport bounds or negative
+                    bool isOffscreen = !pointer.active || 
+                                       pointer.screenX < 0.0f || pointer.screenY < 0.0f ||
+                                       pointer.screenX > 1.0f || pointer.screenY > 1.0f ||
+                                       pointer.x < -0x7fff || pointer.y < -0x7fff ||
+                                       pointer.x > 0x7fff || pointer.y > 0x7fff;
+                    int16_t result = (int16_t) (isOffscreen ? 1 : 0);
+                    LOGI("[NATIVE POINTER] port=%d index=%d IS_OFFSCREEN=%d (screenX=%.3f screenY=%.3f)", 
+                         port, index, result, pointer.screenX, pointer.screenY);
                     return result;
                 }
 
@@ -510,6 +539,25 @@ float Input::getSensorInput(unsigned port, unsigned id) const {
 // P1 #8: Sensors Support - update sensor values from Android
 // Called from JNI when sensor events are received (ASensorEvent)
 // Compatible with RetroArch android_input_poll_user() lignes 1580-1623
+// P2: Triggers séparés (L2/R2 axes) - Update trigger analog values
+void Input::setTriggerValue(unsigned port, int trigger, float value) {
+    if (port >= MAX_PORTS) {
+        return;
+    }
+    
+    // Clamp value to [0.0, 1.0]
+    float clampedValue = std::max(0.0f, std::min(1.0f, value));
+    
+    // trigger: 0 = L2, 1 = R2 (matching RetroArch analog_state[port][6/7])
+    if (trigger == 0) {
+        pads[port].triggerL2 = clampedValue;
+        LOGD("[NATIVE TRIGGER] port=%d L2=%.3f", port, clampedValue);
+    } else if (trigger == 1) {
+        pads[port].triggerR2 = clampedValue;
+        LOGD("[NATIVE TRIGGER] port=%d R2=%.3f", port, clampedValue);
+    }
+}
+
 void Input::onSensorEvent(int sensorType, float x, float y, float z) {
     // sensorType: ASENSOR_TYPE_ACCELEROMETER (1) or ASENSOR_TYPE_GYROSCOPE (4)
     // Compatible with RetroArch ASensorEvent.type values

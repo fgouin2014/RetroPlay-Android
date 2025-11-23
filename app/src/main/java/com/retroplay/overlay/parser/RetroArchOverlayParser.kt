@@ -192,8 +192,19 @@ class RetroArchOverlayParser {
         }
         
         // Parser aspect_ratio
-        val aspectRatio = lines.find { it.trim().startsWith("${prefix}aspect_ratio = ") }
+        var aspectRatio = lines.find { it.trim().startsWith("${prefix}aspect_ratio = ") }
             ?.substringAfter("= ")?.trim()?.toFloatOrNull()
+        
+        // Auto-détection aspect ratio depuis name (compatible RetroArch task_overlay.c lignes 1995-2000)
+        // Si aspect_ratio <= 0.0f ou null, auto-détecter depuis name
+        if (aspectRatio == null || aspectRatio <= 0.0f) {
+            aspectRatio = if (name.contains("portrait", ignoreCase = true)) {
+                0.5625f  // 1 / 16:9 (portrait)
+            } else {
+                1.7777778f  // 16:9 (landscape par défaut)
+            }
+            Log.d(TAG, "Auto-detected aspect ratio for overlay '$name': $aspectRatio (${if (aspectRatio == 0.5625f) "portrait" else "landscape"})")
+        }
         
         // Parser separation flags
         val blockXSeparation = lines.find { it.trim().startsWith("${prefix}block_x_separation = ") }
@@ -275,8 +286,27 @@ class RetroArchOverlayParser {
             val descValue = descLine.substringAfter("\"").substringBefore("\"")
             val parts = descValue.split(",").map { it.trim() }
             
-            if (parts.size < 4) {
-                Log.w(TAG, "Invalid button definition: $descValue")
+            // Validation stricte (compatible RetroArch task_overlay.c lignes 368-379)
+            // Format requis: "action,x,y,shape,range_x,range_y" (6 tokens minimum)
+            if (parts.size < 6) {
+                Log.e(TAG, "Invalid button definition (expected 6+ tokens, got ${parts.size}): $descValue")
+                return null
+            }
+            
+            // Validation des valeurs numériques
+            val xRaw = parts[1].toFloatOrNull()
+            val yRaw = parts[2].toFloatOrNull()
+            val rangeX = parts[4].toFloatOrNull()
+            val rangeY = parts[5].toFloatOrNull()
+            
+            if (xRaw == null || yRaw == null || rangeX == null || rangeY == null) {
+                Log.e(TAG, "Invalid numeric values in button definition: x=$xRaw, y=$yRaw, range_x=$rangeX, range_y=$rangeY")
+                return null
+            }
+            
+            // Validation des valeurs (doivent être positives pour range_x/range_y)
+            if (rangeX <= 0f || rangeY <= 0f) {
+                Log.e(TAG, "Invalid range values (must be > 0): range_x=$rangeX, range_y=$rangeY")
                 return null
             }
             
@@ -297,8 +327,7 @@ class RetroArchOverlayParser {
             // Compatible RetroArch task_overlay.c lignes 377-378:
             //   desc->x = (float)strtod(x, NULL) * width_mod;
             //   desc->y = (float)strtod(y, NULL) * height_mod;
-            val xRaw = parts[1].toFloatOrNull() ?: return null
-            val yRaw = parts[2].toFloatOrNull() ?: return null
+            // Note: xRaw, yRaw, rangeX, rangeY déjà validés ci-dessus
             val x = xRaw * widthMod
             val y = yRaw * heightMod
             val shape = when (parts[3].lowercase()) {
@@ -310,14 +339,13 @@ class RetroArchOverlayParser {
                 }
             }
             
-            // Dimensions (optionnelles) - aussi converties pixel → normalized si nécessaire
+            // Dimensions - aussi converties pixel → normalized si nécessaire
             // Compatible RetroArch task_overlay.c lignes 423-424:
             //   desc->range_x = (float)strtod(elem4, NULL) * width_mod;
             //   desc->range_y = (float)strtod(elem5, NULL) * height_mod;
-            val widthRaw = if (parts.size > 4) parts[4].toFloatOrNull() ?: 0.05f else 0.05f
-            val heightRaw = if (parts.size > 5) parts[5].toFloatOrNull() ?: 0.05f else 0.05f
-            val width = widthRaw * widthMod
-            val height = heightRaw * heightMod
+            // Note: rangeX et rangeY déjà validés ci-dessus (doivent être > 0)
+            val width = rangeX * widthMod
+            val height = rangeY * heightMod
             
             // Image overlay (optionnel)
             val overlayLine = lines.find { it.trim().startsWith("${descKey}_overlay = ") }

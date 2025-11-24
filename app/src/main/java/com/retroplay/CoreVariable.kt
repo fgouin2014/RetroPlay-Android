@@ -12,23 +12,33 @@ data class CoreVariable(
     val isDipSwitch: Boolean            // true = DIP switch, false = Core Option
 ) {
     /**
-     * Vérifie si c'est une variable booléenne (enabled/disabled ou on/off)
+     * Vérifie si c'est une variable booléenne (enabled/disabled, on/off, true/false, ou 0/1)
      */
     fun isBoolean(): Boolean {
-        val values = possibleValues.map { it.lowercase() }.toSet()
+        val values = possibleValues.map { it.lowercase().trim() }.toSet()
         return values == setOf("enabled", "disabled") || 
                values == setOf("on", "off") ||
-               values == setOf("true", "false")
+               values == setOf("true", "false") ||
+               values == setOf("0", "1") ||
+               // Cas où possibleValues est vide mais currentValue est 0 ou 1
+               (possibleValues.isEmpty() && currentValue.trim() in listOf("0", "1"))
     }
     
     /**
      * Retourne la valeur booléenne actuelle (si applicable)
      */
     fun getBooleanValue(): Boolean {
-        return when (currentValue.lowercase()) {
-            "enabled", "on", "true" -> true
+        return when (currentValue.lowercase().trim()) {
+            "enabled", "on", "true", "1" -> true
             else -> false
         }
+    }
+    
+    /**
+     * Retourne la valeur booléenne formatée pour l'affichage
+     */
+    fun getBooleanDisplayValue(): String {
+        return if (getBooleanValue()) "Enabled" else "Disabled"
     }
 }
 

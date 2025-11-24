@@ -74,7 +74,12 @@ public class ThemeManager {
     }
     
     public int getPrimaryColor(Context context) {
-        return context.getResources().getColor(getPrimaryColorResId(context), null);
+        int resId = getPrimaryColorResId(context);
+        if (resId == 0) {
+            Log.w(TAG, "Primary color resource not found, using fallback");
+            return 0xFFFF3333; // Fallback red color
+        }
+        return context.getResources().getColor(resId, null);
     }
     
     public int getPrimaryColorResIdByName(Context context, String colorName) {
@@ -101,7 +106,12 @@ public class ThemeManager {
     }
     
     public int getMediumColor(Context context) {
-        return context.getResources().getColor(getMediumColorResId(context), null);
+        int resId = getMediumColorResId(context);
+        if (resId == 0) {
+            Log.w(TAG, "Medium color resource not found, using fallback");
+            return 0xFFFF6666; // Fallback red color
+        }
+        return context.getResources().getColor(resId, null);
     }
     
     public int getLightColorResId(Context context) {
@@ -124,7 +134,12 @@ public class ThemeManager {
     }
     
     public int getLightColor(Context context) {
-        return context.getResources().getColor(getLightColorResId(context), null);
+        int resId = getLightColorResId(context);
+        if (resId == 0) {
+            Log.w(TAG, "Light color resource not found, using fallback");
+            return 0xFFFF9999; // Fallback red color
+        }
+        return context.getResources().getColor(resId, null);
     }
     
     public int getTextPrimaryColorResId(Context context) {
@@ -147,7 +162,12 @@ public class ThemeManager {
     }
     
     public int getTextPrimaryColor(Context context) {
-        return context.getResources().getColor(getTextPrimaryColorResId(context), null);
+        int resId = getTextPrimaryColorResId(context);
+        if (resId == 0) {
+            Log.w(TAG, "Text primary color resource not found, using fallback");
+            return 0xFFFF9999; // Fallback red color
+        }
+        return context.getResources().getColor(resId, null);
     }
     
     public int getTextSecondaryColorResId(Context context) {
@@ -170,7 +190,40 @@ public class ThemeManager {
     }
     
     public int getTextSecondaryColor(Context context) {
-        return context.getResources().getColor(getTextSecondaryColorResId(context), null);
+        int resId = getTextSecondaryColorResId(context);
+        if (resId == 0) {
+            Log.w(TAG, "Text secondary color resource not found, using fallback");
+            return 0xFFFF9999; // Fallback red color
+        }
+        return context.getResources().getColor(resId, null);
+    }
+    
+    public int getHeaderBackgroundColorResId(Context context) {
+        Theme current = getCurrentTheme();
+        String colorName;
+        switch (current) {
+            case KITT_RED:
+                colorName = "kitt_black";
+                break;
+            case AMBER:
+                colorName = "amber_surface";
+                break;
+            case MATRIX:
+                colorName = "matrix_surface";
+                break;
+            default:
+                colorName = "kitt_black";
+        }
+        return getPrimaryColorResIdByName(context, colorName);
+    }
+    
+    public int getHeaderBackgroundColor(Context context) {
+        int resId = getHeaderBackgroundColorResId(context);
+        if (resId == 0) {
+            Log.w(TAG, "Header background color resource not found, using fallback");
+            return 0xFF000000; // Fallback black color
+        }
+        return context.getResources().getColor(resId, null);
     }
 }
 

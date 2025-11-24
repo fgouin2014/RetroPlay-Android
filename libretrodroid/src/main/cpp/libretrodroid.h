@@ -142,7 +142,7 @@ public:
     size_t handleAudioCallback(const int16_t* data, size_t frames);
     int16_t handleSetInputState(unsigned port, unsigned device, unsigned index, unsigned id);
     uintptr_t handleGetCurrentFrameBuffer();
-    
+
     // P1 #8: Sensors Support - delegate to Input
     bool handleSetSensorState(unsigned port, unsigned action, unsigned eventRate);
     float handleGetSensorInput(unsigned port, unsigned id);

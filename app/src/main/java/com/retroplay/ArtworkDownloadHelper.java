@@ -24,7 +24,10 @@ public final class ArtworkDownloadHelper {
 
     public static final String GAME_LIBRARY_BASE_DIR = "/storage/emulated/0/GameLibrary-Data";
     public static final String DOWNLOAD_BASE_DIR = GAME_LIBRARY_BASE_DIR + "/media_download";
+    // URL principale pour les thumbnails Libretro
     private static final String LIBRETRO_THUMB_BASE_URL = "https://thumbnail.libretro.com/";
+    // URL alternative si la principale ne fonctionne pas
+    private static final String LIBRETRO_THUMB_ALT_URL = "https://buildbot.libretro.com/assets/thumbnails/";
 
     private static final String[] SCREENSHOT_DIRS = {
             "media/screenshots/",
@@ -98,6 +101,7 @@ public final class ArtworkDownloadHelper {
         public boolean screenshotDownloaded;
         public boolean skipped;
         public String error;
+        public boolean networkError; // Indique si c'est une erreur réseau (DNS, timeout, etc.)
 
         public boolean hasAnyDownload() {
             return boxartDownloaded || screenshotDownloaded;
@@ -123,15 +127,24 @@ public final class ArtworkDownloadHelper {
         String fileName = sanitizedBaseName + ".png";
 
         // Boxart handling
-        handleArtworkDownload(result,
-                playlist,
-                consoleDir,
-                sanitizedBaseName,
-                "Named_Boxarts",
-                new File(GAME_LIBRARY_BASE_DIR + "/" + consoleDir + "/media/box2d/" + fileName),
-                new File(DOWNLOAD_BASE_DIR + "/" + consoleDir + "/media/box2d/" + fileName),
-                forceReplace,
-                skipIfExists);
+        try {
+            handleArtworkDownload(result,
+                    playlist,
+                    consoleDir,
+                    sanitizedBaseName,
+                    "Named_Boxarts",
+                    new File(GAME_LIBRARY_BASE_DIR + "/" + consoleDir + "/media/box2d/" + fileName),
+                    new File(DOWNLOAD_BASE_DIR + "/" + consoleDir + "/media/box2d/" + fileName),
+                    forceReplace,
+                    skipIfExists);
+        } catch (java.net.UnknownHostException e) {
+            result.networkError = true;
+            result.error = "Cannot connect to thumbnail server. Please check your internet connection.";
+        } catch (java.io.IOException e) {
+            if (result.error == null) {
+                result.error = "Network error: " + e.getMessage();
+            }
+        }
 
         // Screenshot handling
         boolean screenshotExistsInMedia = screenshotExistsInMedia(consoleDir, sanitizedBaseName);
@@ -139,13 +152,22 @@ public final class ArtworkDownloadHelper {
         boolean shouldSkipScreenshot = skipIfExists && (screenshotExistsInMedia || screenshotExistsInDownload);
 
         if (!shouldSkipScreenshot || forceReplace) {
-            File downloadScreenshot = new File(DOWNLOAD_BASE_DIR + "/" + consoleDir + "/media/screenshots/" + fileName);
-            File mediaScreenshot = determineScreenshotTarget(consoleDir, fileName);
+            try {
+                File downloadScreenshot = new File(DOWNLOAD_BASE_DIR + "/" + consoleDir + "/media/screenshots/" + fileName);
+                File mediaScreenshot = determineScreenshotTarget(consoleDir, fileName);
 
-            boolean downloaded = fetchArtwork(playlist, sanitizedBaseName, "Named_Snaps", downloadScreenshot, forceReplace);
-            if (downloaded) {
-                result.screenshotDownloaded = true;
-                copyToMedia(downloadScreenshot, mediaScreenshot, forceReplace);
+                boolean downloaded = fetchArtwork(playlist, sanitizedBaseName, "Named_Snaps", downloadScreenshot, forceReplace);
+                if (downloaded) {
+                    result.screenshotDownloaded = true;
+                    copyToMedia(downloadScreenshot, mediaScreenshot, forceReplace);
+                }
+            } catch (java.net.UnknownHostException e) {
+                result.networkError = true;
+                result.error = "Cannot connect to thumbnail server. Please check your internet connection.";
+            } catch (java.io.IOException e) {
+                if (result.error == null) {
+                    result.error = "Network error: " + e.getMessage();
+                }
             }
         } else {
             result.skipped = true;
@@ -194,8 +216,22 @@ public final class ArtworkDownloadHelper {
                                         boolean forceReplace) throws IOException {
         String fileName = baseName + ".png";
         String encodedName = encodeFileName(fileName);
+        
+        // Essayer d'abord avec l'URL principale
         String url = LIBRETRO_THUMB_BASE_URL + playlist + "/" + remoteFolder + "/" + encodedName;
-
+        boolean success = tryDownloadArtwork(url, destination, forceReplace);
+        
+        // Si échec, essayer l'URL alternative
+        if (!success) {
+            Log.d(TAG, "Primary URL failed, trying alternative: " + LIBRETRO_THUMB_ALT_URL);
+            String altUrl = LIBRETRO_THUMB_ALT_URL + playlist + "/" + remoteFolder + "/" + encodedName;
+            success = tryDownloadArtwork(altUrl, destination, forceReplace);
+        }
+        
+        return success;
+    }
+    
+    private static boolean tryDownloadArtwork(String url, File destination, boolean forceReplace) throws IOException {
         if (destination.exists()) {
             if (!forceReplace) {
                 return false;
@@ -232,6 +268,15 @@ public final class ArtworkDownloadHelper {
 
             Log.i(TAG, "Downloaded artwork: " + destination.getAbsolutePath());
             return true;
+        } catch (java.net.UnknownHostException e) {
+            Log.w(TAG, "Cannot resolve host for: " + url + " - " + e.getMessage());
+            throw new IOException("Unable to resolve host: " + e.getMessage(), e);
+        } catch (java.net.SocketTimeoutException e) {
+            Log.w(TAG, "Timeout connecting to: " + url + " - " + e.getMessage());
+            throw new IOException("Connection timeout: " + e.getMessage(), e);
+        } catch (java.io.IOException e) {
+            Log.w(TAG, "IO error downloading from: " + url + " - " + e.getMessage());
+            throw e;
         } finally {
             if (connection != null) {
                 connection.disconnect();

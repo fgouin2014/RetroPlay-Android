@@ -41,11 +41,22 @@ public class ConsoleManagerActivity extends AppCompatActivity {
     private ConsoleAdapter adapter;
     private List<ConsoleConfig> consoles = new ArrayList<>();
     private List<String> availableCores = new ArrayList<>();
+    private String scrollToConsoleId = null; // Console à scroller automatiquement
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_console_manager);
+        
+        // Récupérer la console à scroller depuis l'intent
+        if (getIntent() != null && getIntent().hasExtra("scrollToConsole")) {
+            scrollToConsoleId = getIntent().getStringExtra("scrollToConsole");
+            // Normaliser avec ConsoleNameMapper pour gérer les noms alternatifs
+            if (scrollToConsoleId != null) {
+                scrollToConsoleId = ConsoleNameMapper.normalizeToCanonical(scrollToConsoleId);
+                Log.i(TAG, "Will scroll to console: " + scrollToConsoleId);
+            }
+        }
         
         setupViews();
         loadAvailableCores();
@@ -311,8 +322,8 @@ public class ConsoleManagerActivity extends AppCompatActivity {
     private void importXmlMetadataAll(List<ConsoleConfig> consolesToImport) {
         // Show confirmation
         new androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Import XML Metadata for All?")
-            .setMessage("This will enrich " + consolesToImport.size() + " consoles with metadata from gamelist.xml files.\n\nBackups will be created automatically.")
+            .setTitle("Import XML Metadata for All? (Optional)")
+            .setMessage("This will import custom metadata (rating, favorite, playcount) from gamelist.xml files for " + consolesToImport.size() + " consoles.\n\nNote: Basic metadata (name, genre, etc.) comes from database.\n\nBackups will be created automatically.")
             .setPositiveButton("Import All", (dialog, which) -> {
                 // Progress dialog
                 android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
@@ -390,11 +401,13 @@ public class ConsoleManagerActivity extends AppCompatActivity {
     
     /**
      * Import XML metadata for a single console
+     * Note: XML est maintenant optionnel - seulement pour métadonnées personnalisées (rating, favorite, playcount)
+     * Les métadonnées de base (name, genre, etc.) viennent de la base de données
      */
     private void importXmlMetadataForConsole(ConsoleConfig console) {
         new androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Import XML Metadata")
-            .setMessage("Import metadata for " + console.name + " from gamelist.xml?\n\nA backup will be created automatically.")
+            .setTitle("Import XML Metadata (Optional)")
+            .setMessage("Import custom metadata (rating, favorite, playcount) from gamelist.xml for " + console.name + "?\n\nNote: Basic metadata (name, genre, etc.) comes from database.\n\nA backup will be created automatically.")
             .setPositiveButton("Import", (dialog, which) -> {
                 android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
                 progressDialog.setMessage("Importing metadata for " + console.name + "...");
@@ -440,26 +453,22 @@ public class ConsoleManagerActivity extends AppCompatActivity {
             File xmlFile = new File(consoleDir, "gamelist.xml");
             File jsonFile = new File(consoleDir, "gamelist.json");
             
-            if (!xmlFile.exists()) {
-                result.error = "gamelist.xml not found";
-                return result;
-            }
-            
             if (!jsonFile.exists()) {
                 result.error = "gamelist.json not found";
                 return result;
             }
             
-            Log.i(TAG, "Importing XML metadata for: " + consoleId);
-            
-            // Parse XML
-            java.util.Map<String, XmlGameData> xmlGames = parseXmlGamelist(xmlFile);
-            if (xmlGames.isEmpty()) {
-                result.error = "No games found in XML";
-                return result;
+            // XML est maintenant optionnel (seulement pour métadonnées personnalisées)
+            java.util.Map<String, XmlGameData> xmlGames = new java.util.HashMap<>();
+            if (xmlFile.exists()) {
+                Log.i(TAG, "Importing XML metadata (optional) for: " + consoleId);
+                xmlGames = parseXmlGamelist(xmlFile);
+                if (!xmlGames.isEmpty()) {
+                    Log.i(TAG, "Parsed " + xmlGames.size() + " games from XML (for custom metadata only)");
+                }
+            } else {
+                Log.i(TAG, "No gamelist.xml found (optional), using database enrichment only");
             }
-            
-            Log.i(TAG, "Parsed " + xmlGames.size() + " games from XML");
             
             // Parse JSON
             org.json.JSONObject jsonData = new org.json.JSONObject(readFileToString(jsonFile));
@@ -472,68 +481,105 @@ public class ConsoleManagerActivity extends AppCompatActivity {
             copyFile(jsonFile, backupFile);
             Log.i(TAG, "Backup created: " + backupFile.getName());
             
-            // Enrich JSON games with XML metadata
+            // Enrich JSON games with XML metadata AND database
             // Détecter si c'est une console arcade (set names courts)
             boolean isArcadeConsole = consoleId.contains("arcade") || consoleId.contains("mame") 
                                    || consoleId.contains("fbneo") || consoleId.contains("cps") 
                                    || consoleId.contains("neogeo");
             
+            // Normaliser l'ID de console pour la recherche dans la base de données
+            String normalizedConsoleId = com.retroplay.ConsoleNameMapper.normalizeToCanonical(consoleId);
+            
             for (int i = 0; i < gamesArray.length(); i++) {
                 org.json.JSONObject game = gamesArray.getJSONObject(i);
                 String path = game.getString("path").replace("./", "");
+                boolean wasEnriched = false;
                 
+                // === ENRICHISSEMENT AVEC BASE DE DONNÉES ===
+                String crc32 = game.optString("crc32", null);
+                if (crc32 != null && !crc32.isEmpty()) {
+                    try {
+                        com.retroplay.database.GameInfo gameInfo = com.retroplay.database.DatabaseManager.INSTANCE.lookupGame(crc32, normalizedConsoleId);
+                        if (gameInfo != null) {
+                            // Nom: toujours utiliser pour arcade, sinon seulement si vide
+                            if (gameInfo.getName() != null && !gameInfo.getName().isEmpty()) {
+                                String currentName = game.optString("name", "");
+                                if (isArcadeConsole) {
+                                    // Pour arcade: toujours remplacer (set names courts -> vrais titres)
+                                    game.put("name", gameInfo.getName());
+                                    wasEnriched = true;
+                                } else if (currentName.isEmpty() || currentName.equals(path.substring(path.lastIndexOf("/") + 1).replaceAll("\\.[^.]+$", ""))) {
+                                    // Pour autres consoles: utiliser seulement si le nom actuel est vide ou basique
+                                    game.put("name", gameInfo.getName());
+                                    wasEnriched = true;
+                                }
+                            }
+                            
+                            // Enrichir les métadonnées depuis la base de données (seulement si vide)
+                            if (game.optString("genre", "").isEmpty() && gameInfo.getGenre() != null && !gameInfo.getGenre().isEmpty()) {
+                                game.put("genre", gameInfo.getGenre());
+                                wasEnriched = true;
+                            }
+                            
+                            if (game.optString("desc", "").isEmpty()) {
+                                StringBuilder desc = new StringBuilder();
+                                if (gameInfo.getDeveloper() != null && !gameInfo.getDeveloper().isEmpty()) {
+                                    desc.append("Developer: ").append(gameInfo.getDeveloper());
+                                    if (gameInfo.getPublisher() != null && !gameInfo.getPublisher().isEmpty() && !gameInfo.getPublisher().equals(gameInfo.getDeveloper())) {
+                                        desc.append(" | Publisher: ").append(gameInfo.getPublisher());
+                                    }
+                                    game.put("desc", desc.toString());
+                                    wasEnriched = true;
+                                }
+                            }
+                            
+                            if (game.optString("releasedate", "").isEmpty() && gameInfo.getReleaseYear() != null) {
+                                String releaseDate = String.valueOf(gameInfo.getReleaseYear());
+                                if (gameInfo.getReleaseMonth() != null) {
+                                    releaseDate = String.format("%04d-%02d", gameInfo.getReleaseYear(), gameInfo.getReleaseMonth());
+                                }
+                                game.put("releasedate", releaseDate);
+                                wasEnriched = true;
+                            }
+                            
+                            if (game.optString("players", "").isEmpty() && gameInfo.getMaxPlayers() > 0) {
+                                String players = (gameInfo.getMaxPlayers() > 1) ? "1-" + gameInfo.getMaxPlayers() : "1";
+                                game.put("players", players);
+                                wasEnriched = true;
+                            }
+                        }
+                    } catch (Exception e) {
+                        Log.w(TAG, "Error looking up game in database: " + e.getMessage());
+                    }
+                }
+                
+                // === ENRICHISSEMENT AVEC XML (seulement métadonnées personnalisées) ===
+                // Les XML ne sont utilisés QUE pour rating, favorite, playcount
+                // (métadonnées personnalisées qui ne sont pas dans la base de données)
                 if (xmlGames.containsKey(path)) {
                     XmlGameData xmlGame = xmlGames.get(path);
-                    boolean wasEnriched = false;
                     
-                    // Enrich name field
-                    // Pour arcade: toujours remplacer (set names courts -> vrais titres)
-                    // Pour autres consoles: remplacer seulement si vide
-                    if (!xmlGame.name.isEmpty()) {
-                        if (isArcadeConsole || game.optString("name", "").isEmpty()) {
-                            game.put("name", xmlGame.name);
-                            wasEnriched = true;
-                        }
-                    }
-                    
-                    if (game.optString("desc", "").isEmpty() && !xmlGame.desc.isEmpty()) {
-                        game.put("desc", xmlGame.desc);
-                        wasEnriched = true;
-                    }
-                    
-                    if (game.optString("releasedate", "").isEmpty() && !xmlGame.releasedate.isEmpty()) {
-                        game.put("releasedate", xmlGame.releasedate);
-                        wasEnriched = true;
-                    }
-                    
-                    if (game.optString("developer", "").isEmpty() && !xmlGame.developer.isEmpty()) {
-                        game.put("developer", xmlGame.developer);
-                        wasEnriched = true;
-                    }
-                    
-                    if (game.optString("publisher", "").isEmpty() && !xmlGame.publisher.isEmpty()) {
-                        game.put("publisher", xmlGame.publisher);
-                        wasEnriched = true;
-                    }
-                    
-                    if (game.optString("genre", "").isEmpty() && !xmlGame.genre.isEmpty()) {
-                        game.put("genre", xmlGame.genre);
-                        wasEnriched = true;
-                    }
-                    
-                    if (game.optString("players", "").isEmpty() && !xmlGame.players.isEmpty()) {
-                        game.put("players", xmlGame.players);
-                        wasEnriched = true;
-                    }
-                    
+                    // Rating personnalisé (0.0-1.0)
                     if (!xmlGame.rating.isEmpty()) {
                         game.put("rating", xmlGame.rating);
                         wasEnriched = true;
                     }
                     
-                    if (wasEnriched) {
-                        result.enrichedCount++;
+                    // Favorite (true/false)
+                    if (!xmlGame.favorite.isEmpty()) {
+                        game.put("favorite", xmlGame.favorite);
+                        wasEnriched = true;
                     }
+                    
+                    // Playcount (nombre de parties jouées)
+                    if (!xmlGame.playcount.isEmpty()) {
+                        game.put("playcount", xmlGame.playcount);
+                        wasEnriched = true;
+                    }
+                }
+                
+                if (wasEnriched) {
+                    result.enrichedCount++;
                 }
             }
             
@@ -574,14 +620,10 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                     
                     XmlGameData gameData = new XmlGameData();
                     gameData.path = getXmlElementText(element, "path").replace("./", "");
-                    gameData.name = getXmlElementText(element, "name");
-                    gameData.desc = getXmlElementText(element, "desc");
-                    gameData.releasedate = getXmlElementText(element, "releasedate");
-                    gameData.developer = getXmlElementText(element, "developer");
-                    gameData.publisher = getXmlElementText(element, "publisher");
-                    gameData.genre = getXmlElementText(element, "genre");
-                    gameData.players = getXmlElementText(element, "players");
+                    // Seulement les métadonnées personnalisées (pas dans la base de données)
                     gameData.rating = getXmlElementText(element, "rating");
+                    gameData.favorite = getXmlElementText(element, "favorite");
+                    gameData.playcount = getXmlElementText(element, "playcount");
                     
                     if (!gameData.path.isEmpty()) {
                         games.put(gameData.path, gameData);
@@ -641,16 +683,15 @@ public class ConsoleManagerActivity extends AppCompatActivity {
     /**
      * Helper class to hold XML game data
      */
+    /**
+     * Données XML - Seulement pour métadonnées personnalisées
+     * (rating, favorite, playcount) qui ne sont pas dans la base de données
+     */
     private static class XmlGameData {
         String path = "";
-        String name = "";
-        String desc = "";
-        String releasedate = "";
-        String developer = "";
-        String publisher = "";
-        String genre = "";
-        String players = "";
-        String rating = "";
+        String rating = "";      // Note personnalisée (0.0-1.0)
+        String favorite = "";    // Favori (true/false)
+        String playcount = "";   // Nombre de parties jouées
     }
     
     /**
@@ -1205,10 +1246,15 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                             }
                             
                             // Scanner la console parent (même si elle a des sous-consoles)
-                            ConsoleConfig parentConfig = scanConsoleDirectory(dir, dirName);
+                            // Normaliser le nom du répertoire avec ConsoleNameMapper
+                            String normalizedDirName = ConsoleNameMapper.normalizeToCanonical(dirName);
+                            ConsoleConfig parentConfig = scanConsoleDirectory(dir, normalizedDirName);
                             if (parentConfig != null) {
+                                // Garder le nom original du répertoire dans l'ID pour les chemins
+                                parentConfig.id = dirName; // Nom original du répertoire
                                 tempConsoles.add(parentConfig);
-                                Log.i(TAG, "Console parent ajoutée: " + dirName + (hasSubconsoles ? " (avec sous-consoles)" : ""));
+                                Log.i(TAG, "Console parent ajoutée: " + dirName + " (normalized: " + normalizedDirName + ")" + 
+                                    (hasSubconsoles ? " (avec sous-consoles)" : ""));
                             }
                         }
                     }
@@ -1222,6 +1268,11 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                     adapter = new ConsoleAdapter(consoles);
                     recyclerView.setAdapter(adapter);
                     Log.i(TAG, "Loaded " + consoles.size() + " consoles from GameLibrary-Data");
+                    
+                    // Scroller vers la console spécifiée si demandé
+                    if (scrollToConsoleId != null) {
+                        scrollToConsole(scrollToConsoleId);
+                    }
                 });
                 
             } catch (Exception e) {
@@ -1232,6 +1283,45 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                 });
             }
         }).start();
+    }
+    
+    /**
+     * Scrolle vers une console spécifique dans la liste
+     */
+    private void scrollToConsole(String consoleId) {
+        if (consoles == null || consoles.isEmpty() || consoleId == null) {
+            return;
+        }
+        
+        // Normaliser l'ID de console pour la comparaison
+        String normalizedId = ConsoleNameMapper.normalizeToCanonical(consoleId);
+        
+        // Chercher la position de la console dans la liste
+        int position = -1;
+        for (int i = 0; i < consoles.size(); i++) {
+            ConsoleConfig config = consoles.get(i);
+            // Comparer avec l'ID normalisé
+            String configId = ConsoleNameMapper.normalizeToCanonical(config.id);
+            if (configId.equals(normalizedId)) {
+                position = i;
+                break;
+            }
+        }
+        
+        if (position >= 0) {
+            // Scroller vers la position avec un délai pour s'assurer que le RecyclerView est prêt
+            final int finalPosition = position;
+            final String finalConsoleId = consoleId;
+            recyclerView.post(() -> {
+                LinearLayoutManager layoutManager = (LinearLayoutManager) recyclerView.getLayoutManager();
+                if (layoutManager != null) {
+                    layoutManager.scrollToPositionWithOffset(finalPosition, 0);
+                    Log.i(TAG, "Scrolled to console: " + finalConsoleId + " at position " + finalPosition);
+                }
+            });
+        } else {
+            Log.w(TAG, "Console not found for scrolling: " + consoleId);
+        }
     }
     
     /**
@@ -1829,8 +1919,14 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                         "Gamelist saved successfully!\n" + roms.size() + " ROMs added", 
                         android.widget.Toast.LENGTH_LONG).show();
                     
-                    // Recharger la liste des consoles
+                    // Recharger la liste des consoles pour mettre à jour le statut hasGamelist
                     loadConsoles();
+                    
+                    // Retourner un résultat pour que GameListActivity se rafraîchisse
+                    Intent resultIntent = new Intent();
+                    resultIntent.putExtra("gamelistGenerated", true);
+                    resultIntent.putExtra("consoleId", consoleId);
+                    setResult(RESULT_OK, resultIntent);
                 });
                 
                 Log.i(TAG, "Gamelist saved: " + consoleId + " with " + roms.size() + " ROMs");

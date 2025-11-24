@@ -1,0 +1,113 @@
+Configuration on demand is an incubating feature.
+WARNING: We recommend using a newer Android Gradle plugin to use compileSdk = 35
+
+This Android Gradle plugin (8.4.0) was tested up to compileSdk = 34.
+
+You are strongly encouraged to update your project to use a newer
+Android Gradle plugin that has been tested with compileSdk = 35.
+
+If you are already using the latest version of the Android Gradle plugin,
+you may need to wait until a newer version with support for compileSdk = 35 is available.
+
+To suppress this warning, add/update
+    android.suppressUnsupportedCompileSdk=35
+to this project's gradle.properties.
+WARNING: We recommend using a newer Android Gradle plugin to use compileSdk = 35
+
+This Android Gradle plugin (8.4.0) was tested up to compileSdk = 34.
+
+You are strongly encouraged to update your project to use a newer
+Android Gradle plugin that has been tested with compileSdk = 35.
+
+If you are already using the latest version of the Android Gradle plugin,
+you may need to wait until a newer version with support for compileSdk = 35 is available.
+
+To suppress this warning, add/update
+    android.suppressUnsupportedCompileSdk=35
+to this project's gradle.properties.
+WARNING: The specified Android SDK Build Tools version (29.0.3) is ignored, as it is below the minimum supported version (34.0.0) for Android Gradle Plugin 8.4.0.
+Android SDK Build Tools 34.0.0 will be used.
+To suppress this warning, remove "buildToolsVersion '29.0.3'" from your build.gradle file, as each version of the Android Gradle Plugin now has a default version of the build tools.
+> Task :libretrodroid:preBuild UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :retrograde-util:preBuild UP-TO-DATE
+> Task :lemuroid-touchinput:preBuild UP-TO-DATE
+> Task :libretrodroid:preDebugBuild UP-TO-DATE
+> Task :lemuroid-touchinput:preDebugBuild UP-TO-DATE
+> Task :retrograde-util:preDebugBuild UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :lemuroid-touchinput:writeDebugAarMetadata UP-TO-DATE
+> Task :libretrodroid:writeDebugAarMetadata UP-TO-DATE
+> Task :retrograde-util:writeDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :libretrodroid:generateDebugResValues UP-TO-DATE
+> Task :retrograde-util:generateDebugResValues UP-TO-DATE
+> Task :lemuroid-touchinput:generateDebugResValues UP-TO-DATE
+> Task :lemuroid-touchinput:generateDebugResources UP-TO-DATE
+> Task :libretrodroid:generateDebugResources UP-TO-DATE
+> Task :retrograde-util:generateDebugResources UP-TO-DATE
+> Task :retrograde-util:packageDebugResources UP-TO-DATE
+> Task :libretrodroid:packageDebugResources UP-TO-DATE
+> Task :lemuroid-touchinput:packageDebugResources UP-TO-DATE
+> Task :libretrodroid:extractDeepLinksDebug UP-TO-DATE
+> Task :lemuroid-touchinput:extractDeepLinksDebug UP-TO-DATE
+> Task :retrograde-util:extractDeepLinksDebug UP-TO-DATE
+> Task :libretrodroid:processDebugManifest UP-TO-DATE
+> Task :lemuroid-touchinput:processDebugManifest UP-TO-DATE
+> Task :retrograde-util:processDebugManifest UP-TO-DATE
+> Task :lemuroid-touchinput:compileDebugLibraryResources UP-TO-DATE
+> Task :retrograde-util:compileDebugLibraryResources UP-TO-DATE
+> Task :libretrodroid:compileDebugLibraryResources UP-TO-DATE
+> Task :retrograde-util:parseDebugLocalResources UP-TO-DATE
+> Task :lemuroid-touchinput:parseDebugLocalResources UP-TO-DATE
+> Task :libretrodroid:parseDebugLocalResources UP-TO-DATE
+> Task :retrograde-util:generateDebugRFile UP-TO-DATE
+> Task :lemuroid-touchinput:generateDebugRFile UP-TO-DATE
+> Task :retrograde-util:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lemuroid-touchinput:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :libretrodroid:generateDebugRFile UP-TO-DATE
+> Task :libretrodroid:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lemuroid-touchinput:javaPreCompileDebug UP-TO-DATE
+> Task :libretrodroid:compileDebugKotlin UP-TO-DATE
+> Task :libretrodroid:javaPreCompileDebug UP-TO-DATE
+> Task :libretrodroid:compileDebugJavaWithJavac UP-TO-DATE
+> Task :libretrodroid:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :retrograde-util:compileDebugKotlin UP-TO-DATE
+> Task :retrograde-util:javaPreCompileDebug UP-TO-DATE
+> Task :retrograde-util:compileDebugJavaWithJavac NO-SOURCE
+> Task :retrograde-util:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :lemuroid-touchinput:compileDebugKotlin UP-TO-DATE
+> Task :lemuroid-touchinput:compileDebugJavaWithJavac NO-SOURCE
+> Task :lemuroid-touchinput:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+
+> Task :app:compileDebugKotlin FAILED
+e: file:///C:/androidProject/ChatAI-Android-beta/RetroPlay-Android/app/src/main/java/com/retroplay/overlay/renderer/RetroArchOverlayRenderer.kt:863:37 Argument type mismatch: actual type is 'com.retroplay.overlay.models.OverlayButton', but 'kotlin.Pair<com.retroplay.overlay.models.OverlayButton, kotlin.Int>' was expected.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1s
+51 actionable tasks: 1 executed, 50 up-to-date

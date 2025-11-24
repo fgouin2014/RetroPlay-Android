@@ -5,10 +5,12 @@ import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.util.Log
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
 import com.retroplay.overlay.assets.OverlayAssetManager
 import com.retroplay.overlay.models.OverlayPreferenceManager
 import com.retroplay.overlay.models.RetroArchButtonMapping
@@ -319,7 +321,6 @@ object GamePadLayoutManager {
             onHotkeyChange = onHotkeyChange,
             onLightgunAction = onLightgunAction,
             availableLayouts = overlayConfig.layouts.keys.toList().sorted(),
-            currentLayoutName = layoutName,
             swapAnalogSticks = overlayPreference.swapAnalogSticks,
             invertAnalogLeftY = overlayPreference.invertAnalogLeftY,
             invertAnalogRightY = overlayPreference.invertAnalogRightY,

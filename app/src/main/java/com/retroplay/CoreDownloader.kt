@@ -33,7 +33,13 @@ object CoreDownloader {
     
     /**
      * Liste des cores disponibles avec leurs noms de fichiers buildbot
+     * 
+     * NOTE: Cette méthode est maintenue pour compatibilité.
+     * Pour une détection automatique depuis cores.json, utiliser CoreMetadataManager.
+     * 
+     * @deprecated Utiliser CoreMetadataManager.fetchCoresMetadata() pour détection automatique
      */
+    @Deprecated("Use CoreMetadataManager.fetchCoresMetadata() for automatic detection")
     fun getAvailableCores(): List<CoreInfo> {
         return listOf(
             // Nintendo
@@ -72,8 +78,36 @@ object CoreDownloader {
             CoreInfo("mednafen_pce", "mednafen_pce_libretro_android.so", "NEC - PC Engine / TurboGrafx-16 (Mednafen)"),
             CoreInfo("mednafen_ngp", "mednafen_ngp_libretro_android.so", "SNK - Neo Geo Pocket (Mednafen)"),
             CoreInfo("mednafen_wswan", "mednafen_wswan_libretro_android.so", "Bandai - WonderSwan (Mednafen)"),
-            CoreInfo("flycast", "flycast_libretro_android.so", "Sega - Dreamcast (Flycast)")
+            CoreInfo("flycast", "flycast_libretro_android.so", "Sega - Dreamcast (Flycast)"),
+            
+            // Commodore
+            CoreInfo("vice_x64", "vice_x64_libretro_android.so", "Commodore - 64 (VICE x64)"),
+            CoreInfo("vice_x64sc", "vice_x64sc_libretro_android.so", "Commodore - 64 (VICE x64sc)"),
+            CoreInfo("vice_x128", "vice_x128_libretro_android.so", "Commodore - 128 (VICE x128)"),
+            CoreInfo("puae", "puae_libretro_android.so", "Commodore - Amiga (PUAE)"),
+            CoreInfo("dosbox_pure", "dosbox_pure_libretro_android.so", "DOS (DOSBox Pure)")
         )
+    }
+    
+    /**
+     * Obtient les cores disponibles depuis cores.json (détection automatique)
+     * 
+     * @param context Context Android
+     * @param buildType Type de build (NIGHTLY ou STABLE)
+     * @return Liste des CoreInfo disponibles
+     */
+    suspend fun getAvailableCoresFromMetadata(
+        context: Context,
+        buildType: CoreMetadataManager.BuildType = CoreMetadataManager.BuildType.NIGHTLY
+    ): List<CoreInfo> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val metadata = CoreMetadataManager.fetchCoresMetadata(context, buildType)
+            return@withContext metadata.values.map { CoreMetadataManager.toCoreInfo(it) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching cores from metadata, falling back to hardcoded list: ${e.message}", e)
+            // Fallback sur liste hardcodée en cas d'erreur
+            return@withContext getAvailableCores()
+        }
     }
     
     /**

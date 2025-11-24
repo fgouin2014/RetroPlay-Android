@@ -85,6 +85,9 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     // SharedPreferences pour la persistance
     private android.content.SharedPreferences consolePrefs;
     
+    // Flag pour indiquer si c'est le premier chargement (pour éviter de charger les jeux avant que les consoles soient chargées)
+    private boolean isFirstLoad = true;
+    
     // Console info class
     private static class ConsoleInfo {
         String id;
@@ -125,8 +128,13 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         setupViews();
         setupRecyclerView();
         
-        // Démarrer le WebServerService (port 7777) pour EmulatorJS
-        startWebServerService();
+        // Démarrer le WebServerService seulement si l'option est activée
+        WebServerPreferences webServerPrefs = WebServerPreferences.getInstance(this);
+        if (webServerPrefs.shouldStartServer()) {
+            startWebServerService();
+        } else {
+            Log.i(TAG, "WebServer auto-start disabled (will start when needed for WASM games)");
+        }
         
         // Install RetroArch overlays (first launch only)
         installRetroArchOverlays();
@@ -151,11 +159,14 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         copyEmulatorJSData();
         
         // Charger les consoles depuis l'API en arrière-plan
+        // NOTE: loadGames() sera appelé automatiquement après que les consoles soient chargées
+        // pour éviter une condition de course où availableConsoles serait vide
         loadAvailableConsoles();
         updateConsoleTitle();
         
-        // Charger les jeux
-        loadGames();
+        // Le scan est maintenant fait dans SplashActivity avant l'ouverture de MainActivity
+        // On charge les jeux APRÈS que les consoles soient chargées (voir onConsolesLoaded())
+        // Ne pas appeler loadGames() ici pour éviter la condition de course
         
         // Preload databases in background (for faster game info lookup)
         preloadDatabases();
@@ -215,12 +226,13 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         int primaryColor = themeManager.getPrimaryColor(this);
         int mediumColor = themeManager.getMediumColor(this);
         int lightColor = themeManager.getLightColor(this);
+        int headerBackgroundColor = themeManager.getHeaderBackgroundColor(this);
         
         // Appliquer au header (background)
         View headerView = findViewById(R.id.consoleSelectorButton);
         if (headerView != null && headerView.getParent() instanceof ViewGroup) {
             ViewGroup headerParent = (ViewGroup) headerView.getParent();
-            headerParent.setBackgroundColor(mediumColor);
+            headerParent.setBackgroundColor(headerBackgroundColor);
         }
         
         // Console Selector Button (with dynamic drawable)
@@ -231,7 +243,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             android.graphics.drawable.GradientDrawable selectorDrawable = new android.graphics.drawable.GradientDrawable();
             selectorDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             selectorDrawable.setCornerRadius(6 * getResources().getDisplayMetrics().density); // 6dp
-            selectorDrawable.setColor(mediumColor);
+            selectorDrawable.setColor(headerBackgroundColor);
             selectorDrawable.setStroke((int)(1 * getResources().getDisplayMetrics().density), primaryColor); // 1dp stroke with theme color
             consoleSelectorButton.setBackground(selectorDrawable);
         }
@@ -239,7 +251,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Console Config Button
         if (consoleConfigButton != null) {
             consoleConfigButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
-            consoleConfigButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
+            consoleConfigButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(headerBackgroundColor));
             consoleConfigButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
             consoleConfigButton.setAlpha(1.0f);
         }
@@ -247,7 +259,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Console Manager Button
         if (consoleManagerButton != null) {
             consoleManagerButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
-            consoleManagerButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
+            consoleManagerButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(headerBackgroundColor));
             consoleManagerButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
             consoleManagerButton.setAlpha(1.0f);
         }
@@ -255,7 +267,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Favorites Button
         if (favoritesButton != null) {
             favoritesButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
-            favoritesButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
+            favoritesButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(headerBackgroundColor));
             favoritesButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
             favoritesButton.setAlpha(1.0f);
         }
@@ -263,7 +275,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Search Toggle Button
         if (searchToggleButton != null) {
             searchToggleButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
-            searchToggleButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
+            searchToggleButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(headerBackgroundColor));
             searchToggleButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
             searchToggleButton.setAlpha(1.0f);
         }
@@ -292,7 +304,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             android.graphics.drawable.GradientDrawable chipDrawable = new android.graphics.drawable.GradientDrawable();
             chipDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             chipDrawable.setCornerRadius(6 * getResources().getDisplayMetrics().density); // 6dp
-            chipDrawable.setColor(mediumColor);
+            chipDrawable.setColor(headerBackgroundColor);
             chipDrawable.setStroke((int)(1 * getResources().getDisplayMetrics().density), primaryColor); // 1dp stroke with theme color
             filterChip.setBackground(chipDrawable);
         }
@@ -304,8 +316,13 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColor));
                 favoritesFilterButton.setIconTintResource(R.color.kitt_black);
             } else {
-                favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
-                favoritesFilterButton.setIconTintResource(themeManager.getPrimaryColorResId(this));
+                favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(headerBackgroundColor));
+                int primaryColorResId = themeManager.getPrimaryColorResId(this);
+                if (primaryColorResId != 0) {
+                    favoritesFilterButton.setIconTintResource(primaryColorResId);
+                } else {
+                    favoritesFilterButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+                }
             }
         }
         
@@ -334,7 +351,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         // Pagination Footer (background)
         View paginationFooter = findViewById(R.id.paginationFooter);
         if (paginationFooter != null) {
-            paginationFooter.setBackgroundColor(mediumColor);
+            paginationFooter.setBackgroundColor(headerBackgroundColor);
         }
         
         // Pagination Buttons (with dynamic drawables)
@@ -346,7 +363,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             android.graphics.drawable.GradientDrawable prevDrawable = new android.graphics.drawable.GradientDrawable();
             prevDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             prevDrawable.setCornerRadius(6 * density); // 6dp
-            prevDrawable.setColor(mediumColor);
+            prevDrawable.setColor(headerBackgroundColor);
             prevDrawable.setStroke((int)(1 * density), primaryColor); // 1dp stroke with theme color
             paginationPrev.setBackground(prevDrawable);
         }
@@ -361,7 +378,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             android.graphics.drawable.GradientDrawable nextDrawable = new android.graphics.drawable.GradientDrawable();
             nextDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             nextDrawable.setCornerRadius(6 * density); // 6dp
-            nextDrawable.setColor(mediumColor);
+            nextDrawable.setColor(headerBackgroundColor);
             nextDrawable.setStroke((int)(1 * density), primaryColor); // 1dp stroke with theme color
             paginationNext.setBackground(nextDrawable);
         }
@@ -504,11 +521,20 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
 
     private void showOverflowMenuSheet() {
         BottomSheetDialog sheet = new BottomSheetDialog(this);
+        
+        // Appliquer le thème au BottomSheetDialog
+        ThemeManager themeManager = ThemeManager.getInstance(this);
+        int primaryColor = themeManager.getPrimaryColor(this);
+        int backgroundColor = getResources().getColor(R.color.kitt_black);
+        int textColor = primaryColor;
 
         android.widget.ScrollView scrollView = new android.widget.ScrollView(this);
         scrollView.setFillViewport(true);
+        scrollView.setBackgroundColor(backgroundColor);
+        
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
+        container.setBackgroundColor(backgroundColor);
         int pad = (int) (getResources().getDisplayMetrics().density * 16);
         container.setPadding(pad, pad, pad, pad);
 
@@ -516,6 +542,11 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         java.util.function.BiConsumer<String, Runnable> addItem = (label, action) -> {
             MaterialButton btn = new MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
             btn.setText(label);
+            btn.setTextColor(primaryColor);
+            btn.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
+            btn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT));
+            btn.setRippleColor(android.content.res.ColorStateList.valueOf(primaryColor));
+            
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             );
@@ -538,12 +569,71 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             toggleSearchScope();
         });
         addItem.accept("Theme: " + ThemeManager.getInstance(this).getCurrentTheme().getDisplayName() + " (tap to change)", this::showThemeSelector);
+        
+        // Option pour servir la bibliothèque sur le réseau
+        WebServerPreferences webServerPrefs = WebServerPreferences.getInstance(this);
+        boolean networkMode = webServerPrefs.isNetworkServerEnabled();
+        addItem.accept("Network Server: " + (networkMode ? "ON (tap to disable)" : "OFF (tap to enable)"), () -> {
+            toggleNetworkServerMode();
+        });
 
         scrollView.addView(container, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ));
         sheet.setContentView(scrollView);
+        
+        // Appliquer le thème au fond du BottomSheetDialog
+        android.view.View bottomSheet = sheet.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+        if (bottomSheet != null) {
+            bottomSheet.setBackgroundColor(backgroundColor);
+        }
+        
         sheet.show();
+    }
+    
+    /**
+     * Active/désactive le mode serveur réseau
+     * Quand activé, le serveur reste actif même après fermeture des jeux WASM
+     */
+    private void toggleNetworkServerMode() {
+        WebServerPreferences prefs = WebServerPreferences.getInstance(this);
+        boolean newState = !prefs.isNetworkServerEnabled();
+        prefs.setNetworkServerEnabled(newState);
+        
+        if (newState) {
+            // Démarrer le serveur si activé
+            startWebServerService();
+            Toast.makeText(this, 
+                "Network Server: ON\nAccess: http://" + getLocalIpAddress() + ":7777/", 
+                Toast.LENGTH_LONG).show();
+        } else {
+            // Arrêter le serveur si désactivé (sauf si un jeu WASM est actif)
+            // On laisse WebViewActivity gérer l'arrêt quand elle se ferme
+            Toast.makeText(this, "Network Server: OFF\nServer will stop when WASM games close", 
+                Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+    /**
+     * Obtient l'adresse IP locale pour affichage
+     */
+    private String getLocalIpAddress() {
+        try {
+            java.util.List<java.net.NetworkInterface> interfaces = 
+                java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces());
+            for (java.net.NetworkInterface networkInterface : interfaces) {
+                java.util.List<java.net.InetAddress> addresses = 
+                    java.util.Collections.list(networkInterface.getInetAddresses());
+                for (java.net.InetAddress address : addresses) {
+                    if (!address.isLoopbackAddress() && address.getAddress().length == 4) {
+                        return address.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting IP address", e);
+        }
+        return "localhost";
     }
     
     private void setupRecyclerView() {
@@ -565,66 +655,71 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             try {
                 Log.i(TAG, "Chargement de la liste des jeux pour " + currentConsole.toUpperCase() + "...");
                 
-                // Lire le gamelist.json depuis le stockage interne selon la console sélectionnée
-                // Support des sous-consoles (ex: fbneo/sega)
-                String gamelistPath = "/storage/emulated/0/GameLibrary-Data/" + currentConsole + "/gamelist.json";
-                java.io.File gamelistFile = new java.io.File(gamelistPath);
-                
-                if (!gamelistFile.exists()) {
-                    Log.i(TAG, "Fichier gamelist.json non trouvé: " + gamelistPath);
-                    Log.i(TAG, "Tentative AUTO SCAN via API serveur...");
-                    
-                    // Try to load auto-generated gamelist from server
-                    try {
-                        java.net.URL autoScanUrl = new java.net.URL("http://localhost:7777/gamedata/" + currentConsole + "/gamelist.json");
-                        java.net.HttpURLConnection autoConn = (java.net.HttpURLConnection) autoScanUrl.openConnection();
-                        autoConn.setRequestMethod("GET");
-                        autoConn.setConnectTimeout(5000);
-                        autoConn.setReadTimeout(5000);
-                        
-                        if (autoConn.getResponseCode() == 200) {
-                            Log.i(TAG, "AUTO SCAN successful for " + currentConsole);
-                            // Read the auto-generated gamelist
-                            java.io.BufferedReader autoReader = new java.io.BufferedReader(
-                                new java.io.InputStreamReader(autoConn.getInputStream()));
-                            StringBuilder autoResponse = new StringBuilder();
-                            String autoLine;
-                            while ((autoLine = autoReader.readLine()) != null) {
-                                autoResponse.append(autoLine);
-                            }
-                            autoReader.close();
-                            
-                            // Parse the auto-generated JSON
-                            parseAndDisplayGames(autoResponse.toString());
-                            return;
-                        } else {
-                            Log.w(TAG, "AUTO SCAN failed with code: " + autoConn.getResponseCode());
-                        }
-                    } catch (Exception autoEx) {
-                        Log.e(TAG, "AUTO SCAN error: " + autoEx.getMessage());
+                // Trouver le ConsoleInfo correspondant pour obtenir le nom réel du répertoire
+                String realConsoleDirectory = currentConsole;
+                boolean foundConsoleInfo = false;
+                for (ConsoleInfo console : availableConsoles) {
+                    if (console.id.equals(currentConsole)) {
+                        realConsoleDirectory = console.directory;
+                        foundConsoleInfo = true;
+                        Log.d(TAG, "Using real directory name: " + realConsoleDirectory + " (for ID: " + currentConsole + ")");
+                        break;
                     }
-                    
-                    // If auto-scan also failed, show error
-                    runOnUiThread(() -> {
-                        isLoading = false;
-                        loadingProgress.setVisibility(View.GONE);
-                        emptyState.setVisibility(View.VISIBLE);
-                        android.widget.Toast.makeText(GameListActivity.this, 
-                            "No games found for " + currentConsole.toUpperCase() + " (no gamelist.json and auto-scan failed)", 
-                            android.widget.Toast.LENGTH_LONG).show();
-                    });
+                }
+                
+                if (!foundConsoleInfo && !availableConsoles.isEmpty()) {
+                    Log.w(TAG, "ConsoleInfo not found for " + currentConsole + ", availableConsoles.size=" + availableConsoles.size() + ", using currentConsole as directory");
+                    Log.d(TAG, "Available consoles: " + availableConsoles.stream().map(c -> c.id).collect(java.util.stream.Collectors.joining(", ")));
+                } else if (availableConsoles.isEmpty()) {
+                    Log.w(TAG, "availableConsoles is empty, using currentConsole as directory. This may cause issues if currentConsole is an ID instead of a directory name.");
+                }
+                
+                // OPTIMISATION: Vérifier le cache EN PREMIER (préchargé pendant splashscreen)
+                // Cela évite les lectures de fichiers et les AUTO SCAN inutiles
+                String json = com.retroplay.GamelistCache.INSTANCE.getGamelistJson(realConsoleDirectory);
+                
+                if (json != null && !json.isEmpty()) {
+                    // Cache hit: utiliser directement les données en cache
+                    Log.d(TAG, "✅ Cache hit for " + realConsoleDirectory + ", using cached gamelist.json");
+                    parseAndDisplayGames(json, realConsoleDirectory);
                     return;
                 }
                 
-                // Lire le contenu du fichier
-                java.io.FileInputStream fis = new java.io.FileInputStream(gamelistFile);
-                byte[] buffer = new byte[(int) gamelistFile.length()];
-                fis.read(buffer);
-                fis.close();
-                String json = new String(buffer, StandardCharsets.UTF_8);
-
-                // Parse and display games
-                parseAndDisplayGames(json);
+                // Cache miss: vérifier si le fichier existe
+                String gamelistPath = "/storage/emulated/0/GameLibrary-Data/" + realConsoleDirectory + "/gamelist.json";
+                java.io.File gamelistFile = new java.io.File(gamelistPath);
+                Log.d(TAG, "Cache miss for " + realConsoleDirectory + ", checking file: " + gamelistPath);
+                
+                if (gamelistFile.exists()) {
+                    // Fichier existe: lire depuis le fichier et mettre à jour le cache
+                    Log.d(TAG, "Reading gamelist.json from file for " + realConsoleDirectory);
+                    java.io.FileInputStream fis = new java.io.FileInputStream(gamelistFile);
+                    byte[] buffer = new byte[(int) gamelistFile.length()];
+                    fis.read(buffer);
+                    fis.close();
+                    json = new String(buffer, StandardCharsets.UTF_8);
+                    
+                    // Mettre à jour le cache pour les prochaines fois
+                    com.retroplay.GamelistCache.INSTANCE.updateCache(realConsoleDirectory, json);
+                    Log.d(TAG, "✅ Updated cache for " + realConsoleDirectory);
+                    
+                    // Parse and display games
+                    parseAndDisplayGames(json, realConsoleDirectory);
+                    return;
+                }
+                
+                // Fichier n'existe pas: afficher erreur (AUTO SCAN est fait uniquement par GamelistScanner)
+                Log.w(TAG, "Fichier gamelist.json non trouvé: " + gamelistPath);
+                Log.w(TAG, "AUTO SCAN doit être fait par GamelistScanner, pas depuis GameListActivity");
+                
+                runOnUiThread(() -> {
+                    isLoading = false;
+                    loadingProgress.setVisibility(View.GONE);
+                    emptyState.setVisibility(View.VISIBLE);
+                    android.widget.Toast.makeText(GameListActivity.this, 
+                        "No gamelist.json found for " + currentConsole.toUpperCase() + ". Please run initial scan.", 
+                        android.widget.Toast.LENGTH_LONG).show();
+                });
 
             } catch (Exception e) {
                 Log.e(TAG, "Erreur chargement liste des jeux", e);
@@ -637,27 +732,52 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         }).start();
     }
     
-    private void parseAndDisplayGames(String jsonString) {
+    private void parseAndDisplayGames(String jsonString, String realConsoleDirectory) {
         try {
             // Parse JSON object format: {"games": [...]}
             jsonString = jsonString.trim();
             JSONObject jsonObj = new JSONObject(jsonString);
             JSONArray arr = jsonObj.getJSONArray("games");
             
+            // Utiliser realConsoleDirectory pour les chemins d'images (nom réel du répertoire)
+            // Utiliser currentConsole pour la configuration (ID canonique)
+            String consoleForImages = realConsoleDirectory != null ? realConsoleDirectory : currentConsole;
+            Log.d(TAG, "parseAndDisplayGames: Using consoleForImages=" + consoleForImages + " (realConsoleDirectory=" + realConsoleDirectory + ", currentConsole=" + currentConsole + ")");
+            
             List<Game> tempGames = new ArrayList<>();
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject obj = arr.getJSONObject(i);
+                // Utiliser optString() avec valeurs par défaut pour éviter les erreurs si champs manquants
+                // Support des deux formats : "description"/"releaseDate" (nouveau format standard) et "desc"/"releasedate" (legacy)
+                // PRIORITÉ au nouveau format (description, releaseDate)
+                String desc = obj.optString("description", "");
+                if (desc.isEmpty()) {
+                    desc = obj.optString("desc", "");  // Fallback legacy
+                }
+                String releaseDate = obj.optString("releaseDate", "");
+                if (releaseDate.isEmpty()) {
+                    releaseDate = obj.optString("releasedate", "");  // Fallback legacy
+                }
+                
+                // Lire les métadonnées enrichies depuis BD (générées lors de la création du gamelist.json)
+                String developer = obj.optString("developer", null);
+                String publisher = obj.optString("publisher", null);
+                
                 Game game = new Game(
                         obj.getString("id"),
                         obj.getString("name"),
                         obj.getString("path"),
-                        obj.getString("desc"),
-                        obj.getString("releasedate"),
-                        obj.getString("genre"),
-                        obj.getString("players")
+                        desc,
+                        releaseDate,
+                        obj.optString("genre", ""),
+                        obj.optString("players", ""),
+                        developer,
+                        publisher
                 );
-                // Définir la console pour ce jeu
-                game.setConsole(currentConsole);
+                // Définir la console pour ce jeu - Utiliser realConsoleDirectory pour les chemins d'images
+                // IMPORTANT: Utiliser le nom réel du répertoire (ex: "megadrive") et non l'ID canonique (ex: "genesis")
+                // pour que les chemins d'images pointent vers le bon répertoire
+                game.setConsole(consoleForImages);
                 // Initialiser les chemins vers les images
                 game.initializePaths(null);
                 tempGames.add(game);
@@ -747,8 +867,13 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             Log.i(TAG, "Favorites filter ENABLED");
         } else {
             favoritesFilterButton.setIconResource(R.drawable.ic_favorite_border_24);
-            favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(themeManager.getMediumColor(this)));
-            favoritesFilterButton.setIconTintResource(themeManager.getPrimaryColorResId(this));
+            favoritesFilterButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(themeManager.getHeaderBackgroundColor(this)));
+            int primaryColorResId = themeManager.getPrimaryColorResId(this);
+            if (primaryColorResId != 0) {
+                favoritesFilterButton.setIconTintResource(primaryColorResId);
+            } else {
+                favoritesFilterButton.setIconTint(android.content.res.ColorStateList.valueOf(themeManager.getPrimaryColor(this)));
+            }
             Log.i(TAG, "Favorites filter DISABLED");
         }
         
@@ -825,14 +950,31 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                                 
                                 // Filtrer par requête
                                 if (gameName.toLowerCase().contains(query.toLowerCase())) {
+                                    // Utiliser optString() avec valeurs par défaut pour éviter les erreurs
+                                    // Support des deux formats : "desc"/"releasedate" (legacy) et "description"/"releaseDate" (nouveau)
+                                    String desc = obj.optString("desc", "");
+                                    if (desc.isEmpty()) {
+                                        desc = obj.optString("description", "");
+                                    }
+                                    String releaseDate = obj.optString("releasedate", "");
+                                    if (releaseDate.isEmpty()) {
+                                        releaseDate = obj.optString("releaseDate", "");
+                                    }
+                                    
+                                    // Lire les métadonnées enrichies depuis BD
+                                    String developer = obj.optString("developer", null);
+                                    String publisher = obj.optString("publisher", null);
+                                    
                                     Game game = new Game(
                                         obj.getString("id"),
                                         gameName,
                                         obj.getString("path"),
-                                        obj.getString("desc"),
-                                        obj.getString("releasedate"),
-                                        obj.getString("genre"),
-                                        obj.getString("players")
+                                        desc,
+                                        releaseDate,
+                                        obj.optString("genre", ""),
+                                        obj.optString("players", ""),
+                                        developer,
+                                        publisher
                                     );
                                     game.setConsole(console.id);
                                     game.initializePaths(null);
@@ -936,14 +1078,14 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         if (searchScopeToggle != null) {
             ThemeManager themeManager = ThemeManager.getInstance(this);
             int primaryColor = themeManager.getPrimaryColor(this);
-            int mediumColor = themeManager.getMediumColor(this);
+            int headerBackgroundColor = themeManager.getHeaderBackgroundColor(this);
             float density = getResources().getDisplayMetrics().density;
             
             // Create drawable programmatically with theme colors
             android.graphics.drawable.GradientDrawable scopeDrawable = new android.graphics.drawable.GradientDrawable();
             scopeDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
             scopeDrawable.setCornerRadius(6 * density); // 6dp
-            scopeDrawable.setColor(mediumColor);
+            scopeDrawable.setColor(headerBackgroundColor);
             scopeDrawable.setStroke((int)(1 * density), primaryColor); // 1dp stroke with theme color
             searchScopeToggle.setBackground(scopeDrawable);
             searchScopeToggle.setAlpha(1.0f);
@@ -991,7 +1133,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             ThemeManager themeManager = ThemeManager.getInstance(this);
             ThemeManager.Theme currentTheme = themeManager.getCurrentTheme();
             int primaryColor = themeManager.getPrimaryColor(this);
-            int mediumColor = themeManager.getMediumColor(this);
+            int headerBackgroundColor = themeManager.getHeaderBackgroundColor(this);
             boolean isKittRed = currentTheme == ThemeManager.Theme.KITT_RED;
             
             button.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
@@ -1004,12 +1146,12 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             drawable.setCornerRadius(6 * getResources().getDisplayMetrics().density); // 6dp
             if ("#".equals(letter)) {
                 drawable.setColor(primaryColor);
-                // KITT-Red: texte noir quand sélectionné (#), autres thèmes: texte blanc
-                button.setTextColor(isKittRed ? getResources().getColor(R.color.kitt_black) : getResources().getColor(android.R.color.white));
+                // Texte noir quand sélectionné (#) - tous les thèmes
+                button.setTextColor(getResources().getColor(R.color.kitt_black));
             } else {
-                drawable.setColor(mediumColor);
-                // KITT-Red: texte rouge par défaut, autres thèmes: texte noir
-                button.setTextColor(isKittRed ? primaryColor : getResources().getColor(R.color.kitt_black));
+                drawable.setColor(headerBackgroundColor);
+                // Texte de la couleur primaire du thème par défaut (rouge pour KITT-Red, ambre pour Amber, vert pour Matrix)
+                button.setTextColor(primaryColor);
             }
             drawable.setStroke((int)(1 * getResources().getDisplayMetrics().density), primaryColor); // 1dp stroke
             button.setBackground(drawable);
@@ -1067,7 +1209,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         ThemeManager themeManager = ThemeManager.getInstance(this);
         ThemeManager.Theme currentTheme = themeManager.getCurrentTheme();
         int primaryColor = themeManager.getPrimaryColor(this);
-        int mediumColor = themeManager.getMediumColor(this);
+        int headerBackgroundColor = themeManager.getHeaderBackgroundColor(this);
         int blackColor = getResources().getColor(R.color.kitt_black);
         int whiteColor = getResources().getColor(android.R.color.white);
         float density = getResources().getDisplayMetrics().density;
@@ -1096,13 +1238,13 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 if (letter.equals(currentLetter)) {
                     drawable.setColor(primaryColor);
                     button.setBackground(drawable);
-                    // KITT-Red: texte noir quand sélectionné, autres thèmes: texte blanc
-                    button.setTextColor(isKittRed ? blackColor : whiteColor);
+                    // Texte noir quand sélectionné (tous les thèmes)
+                    button.setTextColor(blackColor);
                 } else {
-                    drawable.setColor(mediumColor);
+                    drawable.setColor(headerBackgroundColor);
                     button.setBackground(drawable);
-                    // KITT-Red: texte rouge par défaut, autres thèmes: texte noir
-                    button.setTextColor(isKittRed ? primaryColor : blackColor);
+                    // Texte de la couleur primaire du thème par défaut (rouge pour KITT-Red, ambre pour Amber, vert pour Matrix)
+                    button.setTextColor(primaryColor);
                 }
             } else {
                 // Lettre sans jeux - désactivée et transparente (garde les mêmes couleurs)
@@ -1110,7 +1252,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 button.setAlpha(0.25f);
                 
                 // Garder les couleurs normales (non sélectionnées)
-                drawable.setColor(mediumColor);
+                drawable.setColor(headerBackgroundColor);
                 button.setBackground(drawable);
                 button.setTextColor(primaryColor);
             }
@@ -1273,6 +1415,8 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
     
     private void openConsoleManager() {
         Intent intent = new Intent(this, ConsoleManagerActivity.class);
+        // Passer la console actuelle pour scroller automatiquement vers elle
+        intent.putExtra("scrollToConsole", currentConsole);
         startActivityForResult(intent, 100); // Request code 100 pour Console Manager
     }
     
@@ -1290,14 +1434,31 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         if (requestCode == 100) {
             Log.i(TAG, "Retour du Console Manager - Rafraîchissement de la liste");
             
+            // Vérifier si un gamelist a été généré
+            if (data != null && data.getBooleanExtra("gamelistGenerated", false)) {
+                String consoleId = data.getStringExtra("consoleId");
+                Log.i(TAG, "Gamelist généré pour: " + consoleId);
+                
+                // Si c'est la console actuelle, recharger les jeux
+                if (consoleId != null && consoleId.equals(currentConsole)) {
+                    Log.i(TAG, "Rafraîchissement des jeux pour la console actuelle: " + currentConsole);
+                    games.clear();
+                    filteredGames.clear();
+                    currentPageGames.clear();
+                    loadGames();
+                }
+            }
+            
             // Recharger les consoles disponibles
             loadAvailableConsoles();
             
-            // Recharger les jeux de la console actuelle
-            games.clear();
-            filteredGames.clear();
-            currentPageGames.clear();
-            loadGames();
+            // Recharger les jeux de la console actuelle si pas déjà fait
+            if (data == null || !data.getBooleanExtra("gamelistGenerated", false)) {
+                games.clear();
+                filteredGames.clear();
+                currentPageGames.clear();
+                loadGames();
+            }
         }
     }
     
@@ -1337,8 +1498,14 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                 itemsList.add("  └─ " + console.fullName);
             } else {
                 lastParent = "";
-                // Afficher seulement le fullName pour éviter la redondance
-                itemsList.add(console.fullName);
+                // Afficher le fullName avec le nom du répertoire si différent pour éviter les doublons
+                String displayName = console.fullName;
+                // Si le répertoire diffère du nom normalisé, ajouter le répertoire pour distinguer
+                String normalizedId = com.retroplay.ConsoleNameMapper.normalizeToCanonical(console.directory);
+                if (!console.directory.equalsIgnoreCase(normalizedId) && !console.directory.equalsIgnoreCase(console.id)) {
+                    displayName = console.fullName + " (" + console.directory.toUpperCase() + ")";
+                }
+                itemsList.add(displayName);
             }
             
             selectableIndices.add(i);
@@ -1433,70 +1600,109 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         filteredGames.clear();
         currentPageGames.clear();
         
+        // Marquer que ce n'est plus le premier chargement (pour éviter de charger deux fois)
+        isFirstLoad = false;
+        
         // Load games for new console
         loadGames();
     }
     
+    /**
+     * Appelé après que les consoles sont chargées (premier chargement uniquement)
+     * Charge les jeux pour la console sélectionnée
+     */
+    private void onConsolesLoaded() {
+        if (isFirstLoad) {
+            isFirstLoad = false;
+            Log.i(TAG, "Consoles chargées, chargement des jeux pour " + currentConsole);
+            loadGames();
+        } else {
+            Log.d(TAG, "onConsolesLoaded() appelé mais isFirstLoad=false, ignoré");
+        }
+    }
+    
     private void loadAvailableConsoles() {
-        new Thread(() -> {
+        // OPTIMISATION: Charger depuis le cache d'abord, puis scanner en arrière-plan si nécessaire
+        // Gain de performance: 0-50ms au lieu de 500ms-2s
+        String cachedConsolesJson = consolePrefs.getString("consoles_cache", null);
+        long cacheTimestamp = consolePrefs.getLong("consoles_cache_timestamp", 0);
+        long cacheAge = System.currentTimeMillis() - cacheTimestamp;
+        long cacheMaxAge = 5 * 60 * 1000; // 5 minutes
+        
+        if (cachedConsolesJson != null && cacheAge < cacheMaxAge) {
+            Log.i(TAG, "Loading consoles from cache (age: " + (cacheAge / 1000) + "s)");
             try {
-                // Appeler l'API pour obtenir les consoles disponibles
-                java.net.URL url = new java.net.URL("http://localhost:7777/gamelibrary/api/consoles");
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(5000);
-                conn.setReadTimeout(5000);
-                
-                if (conn.getResponseCode() == 200) {
-                    java.io.BufferedReader reader = new java.io.BufferedReader(
-                        new java.io.InputStreamReader(conn.getInputStream()));
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                    reader.close();
-                    
-                    JSONObject jsonObj = new JSONObject(response.toString());
-                    JSONArray consolesArray = jsonObj.getJSONArray("consoles");
-                    
-                    List<ConsoleInfo> tempConsoles = new ArrayList<>();
-                    for (int i = 0; i < consolesArray.length(); i++) {
-                        JSONObject consoleObj = consolesArray.getJSONObject(i);
-                        if (consoleObj.getBoolean("enabled")) {
-                            tempConsoles.add(new ConsoleInfo(
-                                consoleObj.getString("id"),
-                                consoleObj.getString("name"),
-                                consoleObj.getString("fullName"),
-                                consoleObj.getString("directory")
-                            ));
-                        }
-                    }
-                    
-                    runOnUiThread(() -> {
-                        availableConsoles = tempConsoles;
-                        Log.i(TAG, "Consoles chargées depuis serveur: " + availableConsoles.size());
-                        
-                        // Scanner et ajouter les sous-consoles localement
-                        scanAndAddSubconsoles();
-                        
-                        Log.i(TAG, "Total consoles (avec sous-consoles): " + availableConsoles.size());
-                        for (ConsoleInfo console : availableConsoles) {
-                            Log.i(TAG, "  - " + console.id + ": " + console.fullName);
-                        }
-                    });
-                } else {
-                    Log.e(TAG, "Erreur API consoles: " + conn.getResponseCode());
-                    // Fallback: consoles par défaut
-                    runOnUiThread(() -> setDefaultConsoles());
-                }
-                
+                parseConsolesFromCache(cachedConsolesJson);
+                // Charger les jeux immédiatement avec le cache
+                onConsolesLoaded();
+                // Rescanner en arrière-plan pour mettre à jour le cache
+                new Thread(() -> {
+                    setDefaultConsoles();
+                }).start();
+                return;
             } catch (Exception e) {
-                Log.e(TAG, "Erreur chargement consoles", e);
-                // Fallback: consoles par défaut
-                runOnUiThread(() -> setDefaultConsoles());
+                Log.w(TAG, "Error loading consoles from cache, falling back to scan", e);
             }
-        }).start();
+        }
+        
+        // Pas de cache valide, scanner directement
+        Log.i(TAG, "No valid cache, scanning consoles directly (optimized - no WebServer dependency)");
+        setDefaultConsoles();
+    }
+    
+    private void parseConsolesFromCache(String jsonString) {
+        try {
+            JSONObject jsonObj = new JSONObject(jsonString);
+            JSONArray consolesArray = jsonObj.getJSONArray("consoles");
+            
+            List<ConsoleInfo> tempConsoles = new ArrayList<>();
+            for (int i = 0; i < consolesArray.length(); i++) {
+                JSONObject consoleObj = consolesArray.getJSONObject(i);
+                tempConsoles.add(new ConsoleInfo(
+                    consoleObj.getString("id"),
+                    consoleObj.getString("name"),
+                    consoleObj.getString("fullName"),
+                    consoleObj.getString("directory")
+                ));
+            }
+            
+            availableConsoles = tempConsoles;
+            Log.i(TAG, "Loaded " + availableConsoles.size() + " consoles from cache");
+            
+            // Scanner les sous-consoles en arrière-plan
+            scanAndAddSubconsoles();
+        } catch (Exception e) {
+            Log.e(TAG, "Error parsing consoles from cache", e);
+            throw new RuntimeException(e);
+        }
+    }
+    
+    private void saveConsolesToCache(List<ConsoleInfo> consoles) {
+        try {
+            JSONObject jsonObj = new JSONObject();
+            JSONArray consolesArray = new JSONArray();
+            
+            for (ConsoleInfo console : consoles) {
+                JSONObject consoleObj = new JSONObject();
+                consoleObj.put("id", console.id);
+                consoleObj.put("name", console.name);
+                consoleObj.put("fullName", console.fullName);
+                consoleObj.put("directory", console.directory);
+                consolesArray.put(consoleObj);
+            }
+            
+            jsonObj.put("consoles", consolesArray);
+            String jsonString = jsonObj.toString();
+            
+            consolePrefs.edit()
+                .putString("consoles_cache", jsonString)
+                .putLong("consoles_cache_timestamp", System.currentTimeMillis())
+                .apply();
+            
+            Log.i(TAG, "Saved " + consoles.size() + " consoles to cache");
+        } catch (Exception e) {
+            Log.e(TAG, "Error saving consoles to cache", e);
+        }
     }
     
     private void scanAndAddSubconsoles() {
@@ -1690,13 +1896,28 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                     // Trier alphabétiquement
                     scannedConsoles.sort((a, b) -> a.id.compareTo(b.id));
                     
-                    Log.i(TAG, "Total consoles scannées: " + scannedConsoles.size());
+                    // Éviter les doublons dans scannedConsoles
+                    List<ConsoleInfo> uniqueScannedConsoles = new ArrayList<>();
+                    java.util.Set<String> seenScannedIds = new java.util.HashSet<>();
+                    java.util.Set<String> seenScannedDirs = new java.util.HashSet<>();
+                    
                     for (ConsoleInfo console : scannedConsoles) {
-                        Log.i(TAG, "  Console: " + console.id + " | Name: " + console.name + " | FullName: " + console.fullName);
+                        if (!seenScannedIds.contains(console.id) && !seenScannedDirs.contains(console.directory)) {
+                            uniqueScannedConsoles.add(console);
+                            seenScannedIds.add(console.id);
+                            seenScannedDirs.add(console.directory);
+                        } else {
+                            Log.d(TAG, "Console dupliquée ignorée dans scan: " + console.id + " / " + console.directory);
+                        }
+                    }
+                    
+                    Log.i(TAG, "Total consoles scannées (après déduplication): " + uniqueScannedConsoles.size());
+                    for (ConsoleInfo console : uniqueScannedConsoles) {
+                        Log.i(TAG, "  Console: " + console.id + " (" + console.directory + ") | Name: " + console.name + " | FullName: " + console.fullName);
                     }
                     
                     runOnUiThread(() -> {
-                        availableConsoles = scannedConsoles;
+                        availableConsoles = uniqueScannedConsoles;
                         if (availableConsoles.isEmpty()) {
                             // Si aucune console trouvée, ajouter les défauts
                             availableConsoles.add(new ConsoleInfo("nes", "NES", "Nintendo Entertainment System", "nes"));
@@ -1718,6 +1939,24 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                         }
                         
                         Log.i(TAG, "Consoles disponibles dans dropdown: " + availableConsoles.size());
+                        
+                        // Sauvegarder dans le cache pour le prochain démarrage
+                        saveConsolesToCache(availableConsoles);
+                        
+                        // Scanner et ajouter les sous-consoles localement
+                        scanAndAddSubconsoles();
+                        
+                        // Charger les jeux maintenant que les consoles sont chargées (premier chargement uniquement)
+                        onConsolesLoaded();
+                    });
+                } else {
+                    // Si GameLibrary-Data n'existe pas, utiliser les consoles par défaut
+                    runOnUiThread(() -> {
+                        availableConsoles.add(new ConsoleInfo("nes", "NES", "Nintendo Entertainment System", "nes"));
+                        availableConsoles.add(new ConsoleInfo("snes", "SNES", "Super Nintendo Entertainment System", "snes"));
+                        availableConsoles.add(new ConsoleInfo("n64", "N64", "Nintendo 64", "n64"));
+                        saveConsolesToCache(availableConsoles);
+                        onConsolesLoaded();
                     });
                 }
             } catch (Exception e) {
@@ -1726,6 +1965,10 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                     availableConsoles.add(new ConsoleInfo("nes", "NES", "Nintendo Entertainment System", "nes"));
                     availableConsoles.add(new ConsoleInfo("snes", "SNES", "Super Nintendo Entertainment System", "snes"));
                     availableConsoles.add(new ConsoleInfo("n64", "N64", "Nintendo 64", "n64"));
+                    saveConsolesToCache(availableConsoles);
+                    
+                    // Charger les jeux maintenant que les consoles sont chargées (premier chargement uniquement)
+                    onConsolesLoaded();
                 });
             }
         }).start();
@@ -2400,5 +2643,9 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
         return false;
     }
+    
+    // NOTE: Les méthodes de scan ont été déplacées dans SplashActivity
+    // pour que le scan se fasse pendant la demande de permissions.
+    // Ces méthodes peuvent être supprimées ou gardées pour un scan manuel futur.
 }
 

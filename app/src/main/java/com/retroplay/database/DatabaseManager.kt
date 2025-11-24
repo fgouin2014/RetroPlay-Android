@@ -207,37 +207,103 @@ object DatabaseManager {
     }
     
     fun lookupGame(crc: String, console: String): GameInfo? {
-        val consoleCache = gameCache[console]
+        // Pour les sous-consoles fbneo, utiliser la console parent pour la base de données
+        val dbConsole = normalizeConsoleForDatabase(console)
+        Log.d(TAG, "lookupGame: console='$console' -> dbConsole='$dbConsole', CRC=$crc")
+        
+        val consoleCache = gameCache[dbConsole]
         if (consoleCache != null) {
             val cached = consoleCache[crc]
             if (cached != null) {
                 Log.d(TAG, "Cache hit for CRC $crc: ${cached.name}")
                 return cached
+            } else {
+                Log.d(TAG, "Cache miss for CRC $crc in loaded database (${consoleCache.size} games loaded)")
             }
+        } else {
+            Log.d(TAG, "Database not loaded for $dbConsole, loading now...")
         }
         
-        Log.d(TAG, "Cache miss for CRC $crc, loading from database...")
-        loadDatabase(console)
+        loadDatabase(dbConsole)
         
-        return gameCache[console]?.get(crc)
+        val result = gameCache[dbConsole]?.get(crc)
+        if (result != null) {
+            Log.d(TAG, "✅ Found game in database: ${result.name} (CRC: $crc)")
+        } else {
+            Log.w(TAG, "⚠️ Game not found in database: CRC=$crc, console=$console (dbConsole=$dbConsole, cacheSize=${gameCache[dbConsole]?.size ?: 0})")
+        }
+        return result
+    }
+    
+    /**
+     * Normalise le nom de console pour la base de données
+     * Toutes les sous-consoles arcade (fbneo/, cps1, cps2, cps3, dataeast, taito, etc.)
+     * utilisent la même base de données FBNeo/Arcade
+     */
+    private fun normalizeConsoleForDatabase(console: String): String {
+        return when {
+            // Sous-consoles fbneo (fbneo/cps1, fbneo/taito, etc.)
+            console.startsWith("fbneo/") -> "fbneo"
+            // Consoles arcade génériques
+            console == "arcade" || console == "mame" -> "fbneo"
+            // Sous-consoles arcade directes (cps1, cps2, cps3, dataeast, taito, etc.)
+            // Toutes ces consoles utilisent la base de données FBNeo/Arcade
+            console == "cps1" || console == "cps2" || console == "cps3" || 
+            console == "cpiii" || console == "dataeast" || console == "taito" ||
+            console == "neogeo" || console == "sega" -> "fbneo"
+            else -> console
+        }
     }
     
     fun loadDatabase(console: String) {
-        if (gameCache.containsKey(console)) {
-            Log.d(TAG, "Database for $console already loaded (${gameCache[console]?.size} games)")
+        // Normaliser la console pour la base de données (sous-consoles → parent)
+        val dbConsole = normalizeConsoleForDatabase(console)
+        Log.d(TAG, "loadDatabase: console='$console' -> dbConsole='$dbConsole'")
+        
+        if (gameCache.containsKey(dbConsole)) {
+            val cacheSize = gameCache[dbConsole]?.size ?: 0
+            Log.d(TAG, "Database for $dbConsole already loaded ($cacheSize games)")
             return
         }
         
-        val consoleName = getConsoleFullName(console)
+        val consoleName = getConsoleFullName(dbConsole)
+        Log.d(TAG, "Loading database for console: $console (dbConsole=$dbConsole, consoleName=$consoleName)")
         
         // Look for .rdb file in RetroPlay-Data/database/rdb/
-        val rdbFile = File("$DATABASE_BASE_PATH/$consoleName.rdb")
+        // Pour FBNeo, essayer plusieurs noms possibles
+        val rdbFile = when (dbConsole) {
+            "fbneo", "arcade", "mame" -> {
+                // Essayer plusieurs noms possibles pour la base de données arcade
+                val possibleNames = listOf("FBNeo.rdb", "Arcade.rdb", "MAME.rdb", "fbneo.rdb", "arcade.rdb", "mame.rdb")
+                val found = possibleNames.firstOrNull { name ->
+                    val file = File("$DATABASE_BASE_PATH/$name")
+                    val exists = file.exists()
+                    Log.d(TAG, "Checking RDB file: ${file.absolutePath} -> exists=$exists")
+                    exists
+                }
+                if (found != null) {
+                    File("$DATABASE_BASE_PATH/$found")
+                } else {
+                    val fallback = File("$DATABASE_BASE_PATH/$consoleName.rdb")
+                    Log.d(TAG, "No RDB file found in possible names, using fallback: ${fallback.absolutePath}")
+                    fallback
+                }
+            }
+            else -> {
+                val file = File("$DATABASE_BASE_PATH/$consoleName.rdb")
+                Log.d(TAG, "Using standard RDB path: ${file.absolutePath}")
+                file
+            }
+        }
         
         if (!rdbFile.exists()) {
             Log.w(TAG, "⚠️ RDB file not found: ${rdbFile.absolutePath}")
-            gameCache[console] = mutableMapOf()
+            Log.w(TAG, "   Searched in: $DATABASE_BASE_PATH")
+            gameCache[dbConsole] = mutableMapOf()
             return
         }
+        
+        Log.i(TAG, "✅ Using RDB file: ${rdbFile.name} for console $dbConsole (path: ${rdbFile.absolutePath})")
         
         // Check if we have a disk cache
         val cacheDir = File(CACHE_BASE_PATH)
@@ -250,20 +316,20 @@ object DatabaseManager {
             // Load from cache (much faster!)
             Log.i(TAG, "Loading database for $consoleName from disk cache...")
             try {
-                loadFromCache(cacheFile, console).toMutableMap().also {
-                    augmentWithNoIntroVariants(it, console)
+                loadFromCache(cacheFile, dbConsole).toMutableMap().also {
+                    augmentWithNoIntroVariants(it, dbConsole)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Cache corrupted, re-parsing .rdb: ${e.message}")
-                parseAndCache(rdbFile, cacheFile, console)
+                parseAndCache(rdbFile, cacheFile, dbConsole)
             }
         } else {
             // Parse .rdb and save to cache
             Log.i(TAG, "Loading database for $consoleName from .rdb (no cache)...")
-            parseAndCache(rdbFile, cacheFile, console)
+            parseAndCache(rdbFile, cacheFile, dbConsole)
         }
         
-        gameCache[console] = games
+        gameCache[dbConsole] = games
         
         Log.i(TAG, "✅ Database loaded for $consoleName: ${games.size} games")
     }
@@ -489,6 +555,13 @@ object DatabaseManager {
     }
     
     private fun getConsoleFullName(console: String): String {
+        // Gérer toutes les sous-consoles arcade (fbneo/, cps1, cps2, cps3, dataeast, taito, etc.)
+        // Toutes utilisent la même base de données FBNeo/Arcade
+        val dbConsole = normalizeConsoleForDatabase(console)
+        if (dbConsole == "fbneo") {
+            return "FBNeo" // ou "Arcade" selon le nom du fichier .rdb disponible
+        }
+        
         return when (console) {
             "nes" -> "Nintendo - Nintendo Entertainment System"
             "snes" -> "Nintendo - Super Nintendo Entertainment System"

@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import com.retroplay.overlay.assets.OverlayAssetManager
@@ -113,8 +114,8 @@ fun RetroArchOverlayScreen(
     val movableButtonDeltas = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
     
     // P3: Charger positions sauvegardées pour boutons déplaçables au démarrage
+    val context = LocalContext.current
     LaunchedEffect(layout.name) {
-        val context = androidx.compose.ui.platform.LocalContext.current
         val prefs = context.getSharedPreferences("overlay_prefs", android.content.Context.MODE_PRIVATE)
         
         scaledLayout.buttons.forEachIndexed { index, button ->
@@ -174,6 +175,7 @@ fun RetroArchOverlayScreen(
                     onLightgunAction = onLightgunAction,
                     availableLayouts = availableLayouts,
                     currentLayoutName = layout.name,
+                    context = context,
                     swapAnalogSticks = swapAnalogSticks,
                     invertAnalogLeftY = invertAnalogLeftY,
                     invertAnalogRightY = invertAnalogRightY,
@@ -426,6 +428,7 @@ private fun handleOverlayTouch(
     onLightgunAction: (String) -> Unit,
     availableLayouts: List<String> = emptyList(),
     currentLayoutName: String = "",
+    context: android.content.Context,
     swapAnalogSticks: Boolean = false,
     invertAnalogLeftY: Boolean = false,
     invertAnalogRightY: Boolean = false,
@@ -828,9 +831,8 @@ private fun handleOverlayTouch(
                         val delta = movableButtonDeltas[buttonIndex]
                         if (delta != null) {
                             // Sauvegarder la position finale dans SharedPreferences
-                            val prefs = android.content.Context.MODE_PRIVATE
-                            val sharedPrefs = androidx.compose.ui.platform.LocalContext.current.getSharedPreferences(
-                                "overlay_prefs", prefs
+                            val sharedPrefs = context.getSharedPreferences(
+                                "overlay_prefs", android.content.Context.MODE_PRIVATE
                             )
                             val keyX = "overlay_movable_${layout.name}_${button.action}_delta_x"
                             val keyY = "overlay_movable_${layout.name}_${button.action}_delta_y"

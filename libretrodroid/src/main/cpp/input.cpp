@@ -129,7 +129,7 @@ int16_t Input::getInputState(unsigned port, unsigned device, unsigned index, uns
             }
             
             const PointerState& pointer = pads[port].pointers[index];
-            
+
             switch (id) {
                 case RETRO_DEVICE_ID_POINTER_PRESSED: {
                     bool isPressed = pointer.active && pointer.screenX >= 0.0f && pointer.screenY >= 0.0f;
@@ -221,7 +221,7 @@ int16_t Input::getInputState(unsigned port, unsigned device, unsigned index, uns
                     return 0;
             }
         }
-        
+
         // P1 #9: Keyboard Support - compatible RetroArch RETRO_DEVICE_KEYBOARD
         case RETRO_DEVICE_KEYBOARD: {
             // id is the RetroK keycode (RETROK_*)
@@ -269,8 +269,8 @@ int16_t Input::getInputState(unsigned port, unsigned device, unsigned index, uns
                         return (int16_t)(sensorState->y * MAX_RANGE_MOTION);
                     case 2: // Z
                         return (int16_t)(sensorState->z * MAX_RANGE_MOTION);
-                    default:
-                        return 0;
+        default:
+            return 0;
                 }
             }
             
@@ -551,7 +551,7 @@ float Input::getSensorInput(unsigned port, unsigned id) const {
 // Compatible with RetroArch android_input_poll_user() lignes 1580-1623
 // P2: Triggers séparés (L2/R2 axes) - Update trigger analog values
 void Input::setTriggerValue(unsigned port, int trigger, float value) {
-    if (port >= MAX_PORTS) {
+    if (port >= 4) {  // MAX_PORTS = 4 (ports 0-3)
         return;
     }
     
@@ -604,14 +604,14 @@ void Input::onKeyEvent(unsigned int port, int action, int keyCode) {
     // Try to convert as RetroPad first (gamepad buttons), then as keyboard (RetroK)
     // This allows both gamepad buttons AND keyboard keys to work
     int retroKeyCode = convertAndroidToLibretroKey(keyCode);
-    
+
     if (retroKeyCode != UNKNOWN_KEY) {
         // Gamepad button (RetroPad)
-        if (action == AKEY_EVENT_ACTION_DOWN) {
-            pads[port].pressedKeys.insert(retroKeyCode);
-        } else if (action == AKEY_EVENT_ACTION_UP) {
-            pads[port].pressedKeys.erase(retroKeyCode);
-        }
+    if (action == AKEY_EVENT_ACTION_DOWN) {
+        pads[port].pressedKeys.insert(retroKeyCode);
+    } else if (action == AKEY_EVENT_ACTION_UP) {
+        pads[port].pressedKeys.erase(retroKeyCode);
+    }
     } else {
         // Not a gamepad button, try as keyboard (RetroK)
         // Note: We can't get metaState here, so modifiers won't be available

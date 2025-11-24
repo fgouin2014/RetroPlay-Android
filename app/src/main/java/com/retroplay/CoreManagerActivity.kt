@@ -10,18 +10,21 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
+import kotlinx.coroutines.launch
 
 /**
  * Activity pour gérer le téléchargement et la suppression des cores Libretro
+ * Utilise CoreMetadataManager pour détection automatique depuis cores.json
  */
 class CoreManagerActivity : AppCompatActivity() {
     
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: CoreAdapter
-    private val cores = CoreDownloader.getAvailableCores()
+    private var cores: List<CoreDownloader.CoreInfo> = emptyList()
     
     companion object {
         private const val TAG = "CoreManagerActivity"
@@ -41,11 +44,14 @@ class CoreManagerActivity : AppCompatActivity() {
         val deviceInfoText = findViewById<TextView>(R.id.deviceInfoText)
         deviceInfoText?.text = "Device: $deviceAbi (Android ${android.os.Build.VERSION.SDK_INT})"
         
-        // Setup RecyclerView
+        // Setup RecyclerView (vide pour l'instant, sera rempli après chargement)
         recyclerView = findViewById(R.id.coresRecyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
-        adapter = CoreAdapter(cores)
+        adapter = CoreAdapter(emptyList())
         recyclerView.adapter = adapter
+        
+        // Charger les cores depuis CoreMetadataManager (détection automatique)
+        loadCoresFromMetadata()
         
         // Download All button
         findViewById<MaterialButton>(R.id.downloadAllButton)?.setOnClickListener {
@@ -56,8 +62,50 @@ class CoreManagerActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.deleteAllButton)?.setOnClickListener {
             deleteAllCores()
         }
+    }
+    
+    /**
+     * Charge les cores depuis CoreMetadataManager (détection automatique)
+     * Fallback sur liste hardcodée en cas d'erreur
+     */
+    private fun loadCoresFromMetadata() {
+        val progressDialog = ProgressDialog(this)
+        progressDialog.setTitle("Loading Cores")
+        progressDialog.setMessage("Fetching cores from buildbot...")
+        progressDialog.setCancelable(false)
+        progressDialog.show()
         
-        Log.i(TAG, "CoreManagerActivity started with ${cores.size} cores")
+        lifecycleScope.launch {
+            try {
+                // Utiliser CoreMetadataManager pour détection automatique
+                cores = CoreDownloader.getAvailableCoresFromMetadata(
+                    this@CoreManagerActivity,
+                    CoreMetadataManager.BuildType.NIGHTLY
+                )
+                
+                runOnUiThread {
+                    progressDialog.dismiss()
+                    adapter = CoreAdapter(cores)
+                    recyclerView.adapter = adapter
+                    Log.i(TAG, "Loaded ${cores.size} cores from metadata (automatic detection)")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading cores from metadata: ${e.message}", e)
+                runOnUiThread {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@CoreManagerActivity,
+                        "Error loading cores. Using fallback list.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    // Fallback sur liste hardcodée en cas d'erreur réseau
+                    cores = CoreDownloader.getAvailableCores()
+                    adapter = CoreAdapter(cores)
+                    recyclerView.adapter = adapter
+                    Log.i(TAG, "Using fallback hardcoded list: ${cores.size} cores")
+                }
+            }
+        }
     }
     
     private fun downloadAllCores() {

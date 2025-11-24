@@ -613,7 +613,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     // Stocke le timestamp du dernier tap pour détecter les taps rapides (< 200ms)
     private var lastZapperTapTime: Long = 0
     private var quickTapResetHandler: android.os.Handler? = null
-    private val quickTapResetRunnable = android.os.Runnable {
+    private val quickTapResetRunnable = Runnable {
         // Reset après 200ms si aucun nouveau tap (compatible RetroArch ligne 809-811)
         if (lastZapperTapTime > 0) {
             val timeSinceLastTap = android.os.SystemClock.elapsedRealtime() - lastZapperTapTime
@@ -1088,7 +1088,15 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
         
         // Quick Wins: Charger états Fast Forward et Audio Mute
-        fastForwardRatio = prefs.getInt("emulation_fast_forward_ratio", 2).coerceIn(1, 4)
+        // Note: fastForwardRatio est sauvegardé comme Float dans EmulationSettingsDialog
+        fastForwardRatio = try {
+            prefs.getFloat("emulation_fast_forward_ratio", 2.0f).toInt().coerceIn(1, 10)
+        } catch (e: ClassCastException) {
+            // Migration: si c'était un Int avant, le lire comme Int puis migrer vers Float
+            val oldValue = prefs.getInt("emulation_fast_forward_ratio", 2)
+            prefs.edit().putFloat("emulation_fast_forward_ratio", oldValue.toFloat()).apply()
+            oldValue.coerceIn(1, 10)
+        }
         audioMuted.value = prefs.getBoolean("emulation_audio_muted", false)
         
         // Quick Win #4: Charger shader préféré
@@ -1564,7 +1572,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                             Log.w(TAG, "[N64] Could not configure extension for port ${port + 1}: ${e.message}")
                         }
                     }
-                    
+
                     // Afficher le dialog avec les extensions configurées (si au moins une extension est configurée)
                     if (configuredExtensions.isNotEmpty()) {
                         Log.i(TAG, "[N64] Showing dialog with ${configuredExtensions.size} extensions")
@@ -1894,9 +1902,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 )
             }
             
-            // === CORE OPTIONS DIALOG ===
+            // === EMULATION SETTINGS DIALOG ===
             if (showCoreOptionsDialog.value) {
-                CoreOptionsDialog(
+                EmulationSettingsDialog(
                     gameName = gameName,
                     coreOptions = coreOptions,
                     onApply = { modifiedValues ->
@@ -1923,9 +1931,18 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                         coreOptions.clear()
                         coreOptions.addAll(updatedVars)
                         
-                        Log.i(TAG, "Applied ${modifiedValues.size} core option changes to running core")
+                        // Appliquer les settings globaux (fast forward ratio, audio volume)
+                        val savedFastForwardRatio = prefs.getFloat("emulation_fast_forward_ratio", 2.0f)
+                        fastForwardRatio = savedFastForwardRatio.toInt() // Mettre à jour la variable de classe
+                        // Si fast forward est actif, mettre à jour la vitesse
+                        if (isFastForwardActive.value) {
+                            retroView.frameSpeed = fastForwardRatio
+                        }
+                        Log.i(TAG, "Applied ${modifiedValues.size} core option changes and global settings to running core")
                     },
-                    onDismiss = { showCoreOptionsDialog.value = false }
+                    onDismiss = { showCoreOptionsDialog.value = false },
+                    context = this@RetroArchEmulatorActivity,
+                    prefs = prefs
                 )
             }
             
@@ -2519,7 +2536,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * Gère les actions lightgun depuis les overlays (gun_trigger, gun_reload, etc.)
      * Convertit le nom de l'action en ID numérique et envoie l'action au port lightgun configuré
      */
-    private fun handleLightgunAction(action: String) {
+    fun handleLightgunAction(action: String) {
         // Charger les settings lightgun pour obtenir le port
         val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
         val port = lightgunSettings.lightgunPort
@@ -2905,7 +2922,7 @@ private fun N64ExtensionsDialog(
 }
 
 @Composable
-private fun ComposeEmulatorScreen(
+internal fun ComposeEmulatorScreen(
     retroView: GLRetroView,
     console: String,
     gameName: String,
@@ -2930,6 +2947,7 @@ private fun ComposeEmulatorScreen(
     onFinishActivity: () -> Unit,
     onHotkey: (String) -> Unit,  // Callback pour hotkeys
     onHotkeyChange: (String, Boolean) -> Unit = { _, _ -> },
+    onLightgunAction: (String) -> Unit = {},  // Callback pour lightgun actions
     showDipSwitchDialog: MutableState<Boolean>,
     showCoreOptionsDialog: MutableState<Boolean>,
     dipSwitches: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
@@ -3089,9 +3107,7 @@ private fun ComposeEmulatorScreen(
                 showMainMenu.value = true
             },
             onHotkeyChange = onHotkeyChange,
-            onLightgunAction = { action ->
-                handleLightgunAction(action)
-            }
+            onLightgunAction = onLightgunAction
         )
     } else {
         // Utiliser getLayout normal pour Lemuroid
@@ -3382,11 +3398,8 @@ private fun ComposeEmulatorScreen(
                                             retroView.sendMotionEvent(source, x, y)
                                         },
                                         onHotkey = onHotkey,
-                                        onLightgunAction = { action ->
-                                            handleLightgunAction(action)
-                                        },
+                                        onLightgunAction = onLightgunAction,
                                         availableLayouts = overlayConfig.layouts.keys.toList().sorted(),
-                                        currentLayoutName = layoutName,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }

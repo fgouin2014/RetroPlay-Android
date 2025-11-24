@@ -23,15 +23,41 @@
         android:gravity="center_horizontal"
         android:background="@drawable/game_card_background">
 
-        <!-- Game Image -->
-        <ImageView
-            android:id="@+id/image"
+        <!-- Game Image with Save Overlay -->
+        <FrameLayout
             android:layout_width="110dp"
-            android:layout_height="154dp"
-            android:scaleType="centerCrop"
-            android:background="@drawable/game_image_background"
-            android:padding="2dp"
-            android:contentDescription="Game cover" />
+            android:layout_height="154dp">
+            
+            <ImageView
+                android:id="@+id/image"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:background="@drawable/game_image_background"
+                android:padding="2dp"
+                android:contentDescription="Game cover" />
+            
+            <!-- Save indicator overlay (top-right corner) -->
+            <ImageView
+                android:id="@+id/save_indicator"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="top|end"
+                android:layout_margin="4dp"
+                android:visibility="gone"
+                android:contentDescription="Has save" />
+            
+            <!-- Favorite indicator overlay (bottom-left corner) -->
+            <ImageView
+                android:id="@+id/favorite_indicator"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="bottom|start"
+                android:layout_margin="4dp"
+                android:visibility="gone"
+                android:contentDescription="Is favorite" />
+            
+        </FrameLayout>
 
         <!-- Title -->
         <TextView

@@ -114,6 +114,12 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
             });
         }
         
+        // Check if game has saves and show indicator
+        checkAndShowSaveIndicator(holder, game);
+        
+        // Check if game is favorite and show indicator
+        checkAndShowFavoriteIndicator(holder, game);
+        
         // Apply theme to item
         applyTheme(holder);
         
@@ -123,11 +129,50 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         holder.itemView.startAnimation(slideIn);
     }
     
+    /**
+     * Vérifie si le jeu a des sauvegardes et affiche l'indicateur
+     */
+    private void checkAndShowSaveIndicator(ViewHolder holder, Game game) {
+        if (holder.saveIndicator == null) return;
+        
+        String console = game.getConsole();
+        String gameName = game.getName();
+        
+        // Vérifier si au moins un slot contient une sauvegarde
+        boolean hasSave = false;
+        for (int slot = 1; slot <= 5; slot++) {
+            java.io.File saveFile = new java.io.File("/storage/emulated/0/GameLibrary-Data/saves/" + console + "/slot" + slot + "/" + gameName + ".state");
+            if (saveFile.exists()) {
+                hasSave = true;
+                break;
+            }
+        }
+        
+        if (hasSave) {
+            holder.saveIndicator.setVisibility(View.VISIBLE);
+        } else {
+            holder.saveIndicator.setVisibility(View.GONE);
+        }
+    }
+    
+    /**
+     * Vérifie si le jeu est favori et affiche l'indicateur
+     */
+    private void checkAndShowFavoriteIndicator(ViewHolder holder, Game game) {
+        if (holder.favoriteIndicator == null) return;
+        
+        if (favoritesManager != null && favoritesManager.isFavorite(game)) {
+            holder.favoriteIndicator.setVisibility(View.VISIBLE);
+        } else {
+            holder.favoriteIndicator.setVisibility(View.GONE);
+        }
+    }
+    
     private void applyTheme(ViewHolder holder) {
         android.content.Context context = holder.itemView.getContext();
         ThemeManager themeManager = ThemeManager.getInstance(context);
         int primaryColor = themeManager.getPrimaryColor(context);
-        int mediumColor = themeManager.getMediumColor(context);
+        int headerBackgroundColor = themeManager.getHeaderBackgroundColor(context);
         int textPrimaryColor = themeManager.getTextPrimaryColor(context);
         int textSecondaryColor = themeManager.getTextSecondaryColor(context);
         float density = context.getResources().getDisplayMetrics().density;
@@ -136,7 +181,7 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         if (holder.itemView instanceof com.google.android.material.card.MaterialCardView) {
             com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) holder.itemView;
             card.setStrokeColor(primaryColor);
-            card.setCardBackgroundColor(mediumColor);
+            card.setCardBackgroundColor(headerBackgroundColor);
         }
         
         // Title
@@ -159,10 +204,46 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         android.graphics.drawable.GradientDrawable imageDrawable = new android.graphics.drawable.GradientDrawable();
         imageDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         imageDrawable.setCornerRadius(6 * density); // 6dp
-        imageDrawable.setColor(mediumColor); // Background color
+        imageDrawable.setColor(headerBackgroundColor); // Background color
         imageDrawable.setStroke((int)(2 * density), primaryColor); // 2dp stroke with theme color
         holder.image.setBackground(imageDrawable);
         holder.image.setAlpha(1.0f);
+        
+        // Save indicator overlay (if visible)
+        if (holder.saveIndicator != null && holder.saveIndicator.getVisibility() == View.VISIBLE) {
+            holder.saveIndicator.setImageResource(R.drawable.ic_save_24);
+            holder.saveIndicator.setColorFilter(primaryColor);
+            holder.saveIndicator.setAlpha(1.0f);
+            
+            // Ajouter un fond circulaire semi-transparent pour meilleure visibilité
+            android.graphics.drawable.GradientDrawable indicatorBg = new android.graphics.drawable.GradientDrawable();
+            indicatorBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            // Créer une couleur avec alpha (200/255 = ~78% d'opacité)
+            int bgColorWithAlpha = android.graphics.Color.argb(200, 
+                android.graphics.Color.red(headerBackgroundColor),
+                android.graphics.Color.green(headerBackgroundColor),
+                android.graphics.Color.blue(headerBackgroundColor));
+            indicatorBg.setColor(bgColorWithAlpha);
+            holder.saveIndicator.setBackground(indicatorBg);
+        }
+        
+        // Favorite indicator overlay (if visible)
+        if (holder.favoriteIndicator != null && holder.favoriteIndicator.getVisibility() == View.VISIBLE) {
+            holder.favoriteIndicator.setImageResource(R.drawable.ic_favorite_24);
+            holder.favoriteIndicator.setColorFilter(primaryColor);
+            holder.favoriteIndicator.setAlpha(1.0f);
+            
+            // Ajouter un fond circulaire semi-transparent pour meilleure visibilité
+            android.graphics.drawable.GradientDrawable favoriteIndicatorBg = new android.graphics.drawable.GradientDrawable();
+            favoriteIndicatorBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            // Créer une couleur avec alpha (200/255 = ~78% d'opacité)
+            int bgColorWithAlpha = android.graphics.Color.argb(200, 
+                android.graphics.Color.red(headerBackgroundColor),
+                android.graphics.Color.green(headerBackgroundColor),
+                android.graphics.Color.blue(headerBackgroundColor));
+            favoriteIndicatorBg.setColor(bgColorWithAlpha);
+            holder.favoriteIndicator.setBackground(favoriteIndicatorBg);
+        }
         
         // Play button
         holder.playButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primaryColor));
@@ -171,7 +252,7 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         
         // Favorite button
         holder.favoriteButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
-        holder.favoriteButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mediumColor));
+        holder.favoriteButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(headerBackgroundColor));
         holder.favoriteButton.setStrokeColor(android.content.res.ColorStateList.valueOf(primaryColor));
         holder.favoriteButton.setAlpha(1.0f);
         
@@ -201,6 +282,12 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         
         // Mettre à jour l'UI
         updateFavoriteButton(holder.favoriteButton, game);
+        
+        // Mettre à jour l'indicateur overlay
+        checkAndShowFavoriteIndicator(holder, game);
+        
+        // Réappliquer le thème pour mettre à jour le style de l'indicateur
+        applyTheme(holder);
     }
     
     private void updateFavoriteButton(MaterialButton button, Game game) {
@@ -221,6 +308,8 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
     static class ViewHolder extends RecyclerView.ViewHolder {
         TextView title;
         ImageView image;
+        ImageView saveIndicator;
+        ImageView favoriteIndicator;
         TextView genreChip;
         TextView playersInfo;
         TextView releaseYear;
@@ -233,6 +322,8 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
             super(itemView);
             title = itemView.findViewById(R.id.title);
             image = itemView.findViewById(R.id.image);
+            saveIndicator = itemView.findViewById(R.id.save_indicator);
+            favoriteIndicator = itemView.findViewById(R.id.favorite_indicator);
             genreChip = itemView.findViewById(R.id.genre_chip);
             playersInfo = itemView.findViewById(R.id.players_info);
             releaseYear = itemView.findViewById(R.id.release_year);

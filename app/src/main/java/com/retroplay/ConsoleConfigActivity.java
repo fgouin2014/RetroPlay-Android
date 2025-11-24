@@ -173,7 +173,7 @@ public class ConsoleConfigActivity extends AppCompatActivity {
                 public View getDropDownView(int position, View convertView, ViewGroup parent) {
                     TextView view = (TextView) super.getDropDownView(position, convertView, parent);
                     view.setTextColor(android.graphics.Color.WHITE);
-                    view.setBackgroundColor(themeManager.getMediumColor(ConsoleConfigActivity.this));
+                    view.setBackgroundColor(themeManager.getHeaderBackgroundColor(ConsoleConfigActivity.this));
                     view.setTextSize(12);
                     view.setTypeface(android.graphics.Typeface.MONOSPACE);
                     view.setPadding(16, 12, 16, 12);

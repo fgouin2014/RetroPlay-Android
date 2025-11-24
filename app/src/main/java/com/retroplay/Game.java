@@ -12,6 +12,10 @@ public class Game implements java.io.Serializable {
     public String genre;
     public String players;
     
+    // Métadonnées enrichies depuis BD (lors de la génération du gamelist.json)
+    public String developer;
+    public String publisher;
+    
     // Chemins vers les images (calculés dynamiquement)
     public String imagePath;
     public String screenshotPath;
@@ -28,6 +32,24 @@ public class Game implements java.io.Serializable {
         this.releasedate = releasedate;
         this.genre = genre;
         this.players = players;
+        this.developer = null;
+        this.publisher = null;
+        
+        // Les chemins vers les images seront calculés dynamiquement par ObbManager
+        this.imagePath = null;
+        this.screenshotPath = null;
+    }
+    
+    public Game(String id, String name, String path, String desc, String releasedate, String genre, String players, String developer, String publisher) {
+        this.id = id;
+        this.name = name;
+        this.path = path;
+        this.desc = desc;
+        this.releasedate = releasedate;
+        this.genre = genre;
+        this.players = players;
+        this.developer = developer;
+        this.publisher = publisher;
         
         // Les chemins vers les images seront calculés dynamiquement par ObbManager
         this.imagePath = null;
@@ -92,6 +114,14 @@ public class Game implements java.io.Serializable {
 
     public String getPlayers() {
         return players;
+    }
+    
+    public String getDeveloper() {
+        return developer;
+    }
+    
+    public String getPublisher() {
+        return publisher;
     }
     
     public String getConsole() {

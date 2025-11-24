@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroPlay-Android - Index Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 3px solid #f5576c;
+        }
+        
+        h1 {
+            color: #f5576c;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        .stats {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 1.1em;
+            color: #555;
+        }
+        
+        .category {
+            margin-bottom: 40px;
+        }
+        
+        .category-title {
+            font-size: 1.8em;
+            color: #f5576c;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: linear-gradient(135deg, #ffeef0 0%, #ffe0e3 100%);
+            border-radius: 8px;
+            border-left: 5px solid #f5576c;
+        }
+        
+        .file-list {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 15px;
+        }
+        
+        .file-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        
+        .file-item:hover {
+            border-color: #f5576c;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(245, 87, 108, 0.2);
+        }
+        
+        .file-item a {
+            color: #495057;
+            text-decoration: none;
+            font-weight: 500;
+            display: block;
+            word-break: break-word;
+        }
+        
+        .file-item a:hover {
+            color: #f5576c;
+        }
+        
+        .file-path {
+            font-size: 0.85em;
+            color: #868e96;
+            margin-top: 5px;
+            font-style: italic;
+        }
+        
+        footer {
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 2px solid #e9ecef;
+            text-align: center;
+            color: #868e96;
+        }
+        
+        @media (max-width: 768px) {
+            .file-list {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎮 RetroPlay-Android</h1>
+            <p class="subtitle">Index de la Documentation</p>
+        </header>
+        
+        <div class="stats">
+            <strong>Total:</strong> 116 fichiers Markdown documentés
+        </div>
+        
+        <div class="category">
+            <div class="category-title">📋 README et Documentation Principale</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="README.md">README.md</a></li>
+                <li class="file-item"><a href="INDEX.md">INDEX.md</a></li>
+                <li class="file-item"><a href="INDEX_DOCUMENTATION.md">INDEX_DOCUMENTATION.md</a></li>
+                <li class="file-item"><a href="GEMINI.md">GEMINI.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">📊 Audits et Analyses</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="AUDIT_FUTURE_PROOF_2025-11-19.md">AUDIT_FUTURE_PROOF_2025-11-19.md</a></li>
+                <li class="file-item"><a href="AUDIT_LIBRETRODROID_VS_RETROARCH_APIS.md">AUDIT_LIBRETRODROID_VS_RETROARCH_APIS.md</a></li>
+                <li class="file-item"><a href="AUDIT_RETROARCH_EMULATION_FEATURES.md">AUDIT_RETROARCH_EMULATION_FEATURES.md</a></li>
+                <li class="file-item"><a href="AUDIT_ADVANCED_OVERLAY_SETTINGS.md">AUDIT_ADVANCED_OVERLAY_SETTINGS.md</a></li>
+                <li class="file-item"><a href="AUDIT_COMPLET_C_REPOS.md">AUDIT_COMPLET_C_REPOS.md</a></li>
+                <li class="file-item"><a href="AUDIT_COMPLET_2025-10-31.md">AUDIT_COMPLET_2025-10-31.md</a></li>
+                <li class="file-item"><a href="AUDIT_COMPLET_RETROPLAY.md">AUDIT_COMPLET_RETROPLAY.md</a></li>
+                <li class="file-item"><a href="AUDIT_SYNTHESIS.md">AUDIT_SYNTHESIS.md</a></li>
+                <li class="file-item"><a href="ADVANCED_OVERLAY_SETTINGS_AUDIT.md">ADVANCED_OVERLAY_SETTINGS_AUDIT.md</a></li>
+                <li class="file-item"><a href="CORE_OPTIONS_EMULATION_COMPLETE_ANALYSIS.md">CORE_OPTIONS_EMULATION_COMPLETE_ANALYSIS.md</a></li>
+                <li class="file-item"><a href="SUMMARY_FINDINGS_2025-10-31.md">SUMMARY_FINDINGS_2025-10-31.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">🎯 Zapper / Lightgun</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="ZAPPER_SOLUTION_COMPLETE.md">ZAPPER_SOLUTION_COMPLETE.md</a></li>
+                <li class="file-item"><a href="ZAPPER_RETROARCH_DISCOVERY.md">ZAPPER_RETROARCH_DISCOVERY.md</a></li>
+                <li class="file-item"><a href="ZAPPER_DECISION_POINT.md">ZAPPER_DECISION_POINT.md</a></li>
+                <li class="file-item"><a href="ZAPPER_CONCLUSION_FINALE.md">ZAPPER_CONCLUSION_FINALE.md</a></li>
+                <li class="file-item"><a href="ZAPPER_COMPARAISON_RETROARCH.md">ZAPPER_COMPARAISON_RETROARCH.md</a></li>
+                <li class="file-item"><a href="ZAPPER_BUG_MOUSEDATA3_FINAL.md">ZAPPER_BUG_MOUSEDATA3_FINAL.md</a></li>
+                <li class="file-item"><a href="ZAPPER_MOUSEDATA_3_BUG.md">ZAPPER_MOUSEDATA_3_BUG.md</a></li>
+                <li class="file-item"><a href="ZAPPER_SWITCH_CASE_BUG_DISCOVERY.md">ZAPPER_SWITCH_CASE_BUG_DISCOVERY.md</a></li>
+                <li class="file-item"><a href="ZAPPER_OVERLAY_EVENT_BLOCKING_FIX.md">ZAPPER_OVERLAY_EVENT_BLOCKING_FIX.md</a></li>
+                <li class="file-item"><a href="ZAPPER_FINAL_STATUS_REPORT.md">ZAPPER_FINAL_STATUS_REPORT.md</a></li>
+                <li class="file-item"><a href="ZAPPER_TEST_GUIDE_FINAL.md">ZAPPER_TEST_GUIDE_FINAL.md</a></li>
+                <li class="file-item"><a href="ZAPPER_FINAL_REPORT.md">ZAPPER_FINAL_REPORT.md</a></li>
+                <li class="file-item"><a href="ZAPPER_TRIGGER_ON_TOUCH_DISCOVERY.md">ZAPPER_TRIGGER_ON_TOUCH_DISCOVERY.md</a></li>
+                <li class="file-item"><a href="ZAPPER_ETAT_FINAL.md">ZAPPER_ETAT_FINAL.md</a></li>
+                <li class="file-item"><a href="ZAPPER_DEVICE_TYPE_DISCOVERY.md">ZAPPER_DEVICE_TYPE_DISCOVERY.md</a></li>
+                <li class="file-item"><a href="ZAPPER_RETRO_POINTER_DISCOVERY.md">ZAPPER_RETRO_POINTER_DISCOVERY.md</a></li>
+                <li class="file-item"><a href="ZAPPER_BUG_DOUBLE_INSTANCE.md">ZAPPER_BUG_DOUBLE_INSTANCE.md</a></li>
+                <li class="file-item"><a href="ZAPPER_HIDDEN_DISCOVERIES.md">ZAPPER_HIDDEN_DISCOVERIES.md</a></li>
+                <li class="file-item"><a href="ZAPPER_QUICK_FIX.md">ZAPPER_QUICK_FIX.md</a></li>
+                <li class="file-item"><a href="TEST_ZAPPER_GUIDE.md">TEST_ZAPPER_GUIDE.md</a></li>
+                <li class="file-item"><a href="ZAPPER_TEST_PLAN.md">ZAPPER_TEST_PLAN.md</a></li>
+                <li class="file-item"><a href="ZAPPER_CORRECTIONS_APPLIED.md">ZAPPER_CORRECTIONS_APPLIED.md</a></li>
+                <li class="file-item"><a href="ZAPPER_RESEARCH_COMPLETE_REPOS.md">ZAPPER_RESEARCH_COMPLETE_REPOS.md</a></li>
+                <li class="file-item"><a href="ZAPPER_ZONE_DISCOVERY.md">ZAPPER_ZONE_DISCOVERY.md</a></li>
+                <li class="file-item"><a href="ZAPPER_LIGHTGUN_IMPLEMENTATION_PLAN.md">ZAPPER_LIGHTGUN_IMPLEMENTATION_PLAN.md</a></li>
+                <li class="file-item"><a href="LIGHTGUN_OPTIONS_FULLY_WIRED.md">LIGHTGUN_OPTIONS_FULLY_WIRED.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">🛠️ Compilation et NDK</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="VERIFIER_NDK_ANDROID_STUDIO.md">VERIFIER_NDK_ANDROID_STUDIO.md</a></li>
+                <li class="file-item"><a href="COMPILE_FCEUMM_FIX.md">COMPILE_FCEUMM_FIX.md</a></li>
+                <li class="file-item"><a href="BUILD_FCEUMM_ANDROID.md">BUILD_FCEUMM_ANDROID.md</a></li>
+                <li class="file-item"><a href="INSTALL_NDK_AND_COMPILE.md">INSTALL_NDK_AND_COMPILE.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">⚙️ Core Options et Settings</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="CORE_OPTIONS_VS_GLOBAL_SETTINGS.md">CORE_OPTIONS_VS_GLOBAL_SETTINGS.md</a></li>
+                <li class="file-item"><a href="LIBRETRODROID_API_CAPABILITIES.md">LIBRETRODROID_API_CAPABILITIES.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">🚀 Run-Ahead</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="RUN_AHEAD_RESEARCH.md">RUN_AHEAD_RESEARCH.md</a></li>
+                <li class="file-item"><a href="RUNAHEAD_RESEARCH_COMPLETE.md">RUNAHEAD_RESEARCH_COMPLETE.md</a></li>
+                <li class="file-item"><a href="RUNAHEAD_IMPLEMENTATION_PLAN.md">RUNAHEAD_IMPLEMENTATION_PLAN.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">🗄️ Base de Données</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="DATABASE_INTEGRATION_IMPLEMENTATION_PLAN.md">DATABASE_INTEGRATION_IMPLEMENTATION_PLAN.md</a></li>
+                <li class="file-item"><a href="LIBRETRO_DATABASE_INTEGRATION_GUIDE.md">LIBRETRO_DATABASE_INTEGRATION_GUIDE.md</a></li>
+                <li class="file-item"><a href="SESSION_2025-11-05_RDB_INTEGRATION.md">SESSION_2025-11-05_RDB_INTEGRATION.md</a></li>
+                <li class="file-item"><a href="IMPLEMENTATION_CORES_GAMELIST_2025-11-19.md">IMPLEMENTATION_CORES_GAMELIST_2025-11-19.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">🎨 Interface et UI</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="QUICKACTIONSBAR_TOGGLE_IMPLEMENTATION.md">QUICKACTIONSBAR_TOGGLE_IMPLEMENTATION.md</a></li>
+                <li class="file-item"><a href="QUICK_WINS_ALL_DONE.md">QUICK_WINS_ALL_DONE.md</a></li>
+                <li class="file-item"><a href="QUICK_WINS_DONE.md">QUICK_WINS_DONE.md</a></li>
+                <li class="file-item"><a href="QUICK_WINS_TEST_GUIDE.md">QUICK_WINS_TEST_GUIDE.md</a></li>
+                <li class="file-item"><a href="QUICK_WINS_ROADMAP.md">QUICK_WINS_ROADMAP.md</a></li>
+                <li class="file-item"><a href="STATUS_BAR_IMPLEMENTATION_DONE.md">STATUS_BAR_IMPLEMENTATION_DONE.md</a></li>
+                <li class="file-item"><a href="STATUS_BAR_FINALIZED.md">STATUS_BAR_FINALIZED.md</a></li>
+                <li class="file-item"><a href="STATUS_BAR_MOCKUP.md">STATUS_BAR_MOCKUP.md</a></li>
+                <li class="file-item"><a href="SHADER_DISPLAY_FIX.md">SHADER_DISPLAY_FIX.md</a></li>
+                <li class="file-item"><a href="LOW_LEVEL_OPTIMIZATIONS.md">LOW_LEVEL_OPTIMIZATIONS.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">🎮 Overlays RetroArch</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="RETROARCH_OVERLAY_IMPLEMENTATION_PLAN.md">RETROARCH_OVERLAY_IMPLEMENTATION_PLAN.md</a></li>
+                <li class="file-item"><a href="RETROARCH_OVERLAYS_GUIDE.md">RETROARCH_OVERLAYS_GUIDE.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">🧹 Cleanup et Maintenance</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="CLEANUP_OBSOLETE_FILES_PLAN.md">CLEANUP_OBSOLETE_FILES_PLAN.md</a></li>
+                <li class="file-item"><a href="CLEANUP_COMPLETE.md">CLEANUP_COMPLETE.md</a></li>
+                <li class="file-item"><a href="CORRECTIONS_LOG.md">CORRECTIONS_LOG.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">📝 Documentation et Guides</div>
+            <ul class="file-list">
+                <li class="file-item"><a href="REPOS_EXPLORATION_COMPLETE.md">REPOS_EXPLORATION_COMPLETE.md</a></li>
+                <li class="file-item"><a href="VERIFICATION_COHERENCE.md">VERIFICATION_COHERENCE.md</a></li>
+                <li class="file-item"><a href="RETROPLAY_SUCCESS.md">RETROPLAY_SUCCESS.md</a></li>
+                <li class="file-item"><a href="METHODOLOGIE_NOS_RULES.md">METHODOLOGIE_NOS_RULES.md</a></li>
+                <li class="file-item"><a href="MODIFICATION_PAGES_EXTERNES_SECURITE.md">MODIFICATION_PAGES_EXTERNES_SECURITE.md</a></li>
+                <li class="file-item"><a href="CONFIGURATION_FINALE.md">CONFIGURATION_FINALE.md</a></li>
+                <li class="file-item"><a href="RETROPLAY_FINAL.md">RETROPLAY_FINAL.md</a></li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">📁 Documentation dans app/</div>
+            <ul class="file-list">
+                <li class="file-item">
+                    <a href="app/src/main/java/com/retroplay/overlay/ADVANCED_OPTIONS.md">app/src/main/java/com/retroplay/overlay/ADVANCED_OPTIONS.md</a>
+                    <div class="file-path">Overlay - Options Avancées</div>
+                </li>
+                <li class="file-item">
+                    <a href="app/src/main/java/com/retroplay/cheat/README.md">app/src/main/java/com/retroplay/cheat/README.md</a>
+                    <div class="file-path">Module Cheat</div>
+                </li>
+                <li class="file-item">
+                    <a href="app/src/main/assets/overlays/gamepads/gba_easy_touch/readme.md">app/src/main/assets/overlays/gamepads/gba_easy_touch/readme.md</a>
+                    <div class="file-path">Overlay GBA</div>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">📚 Documentation Oboe (Audio)</div>
+            <ul class="file-list">
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/README.md">libretrodroid/src/main/cpp/oboe/README.md</a>
+                    <div class="file-path">Oboe - Audio Engine</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/CONTRIBUTING.md">libretrodroid/src/main/cpp/oboe/CONTRIBUTING.md</a>
+                    <div class="file-path">Oboe - Contributing</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/docs/index.md">libretrodroid/src/main/cpp/oboe/docs/index.md</a>
+                    <div class="file-path">Oboe - Documentation Index</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/docs/README.md">libretrodroid/src/main/cpp/oboe/docs/README.md</a>
+                    <div class="file-path">Oboe - Documentation</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/docs/GettingStarted.md">libretrodroid/src/main/cpp/oboe/docs/GettingStarted.md</a>
+                    <div class="file-path">Oboe - Getting Started</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/docs/FullGuide.md">libretrodroid/src/main/cpp/oboe/docs/FullGuide.md</a>
+                    <div class="file-path">Oboe - Full Guide</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/docs/FAQ.md">libretrodroid/src/main/cpp/oboe/docs/FAQ.md</a>
+                    <div class="file-path">Oboe - FAQ</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/docs/AndroidAudioHistory.md">libretrodroid/src/main/cpp/oboe/docs/AndroidAudioHistory.md</a>
+                    <div class="file-path">Oboe - Android Audio History</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/docs/OpenSLESMigration.md">libretrodroid/src/main/cpp/oboe/docs/OpenSLESMigration.md</a>
+                    <div class="file-path">Oboe - OpenSL ES Migration</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/docs/PrivacyPolicy.md">libretrodroid/src/main/cpp/oboe/docs/PrivacyPolicy.md</a>
+                    <div class="file-path">Oboe - Privacy Policy</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/samples/README.md">libretrodroid/src/main/cpp/oboe/samples/README.md</a>
+                    <div class="file-path">Oboe - Samples</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/oboe/tests/README.md">libretrodroid/src/main/cpp/oboe/tests/README.md</a>
+                    <div class="file-path">Oboe - Tests</div>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="category">
+            <div class="category-title">📖 Documentation Libretro</div>
+            <ul class="file-list">
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/libretro/libretro-common/samples/core_options/README.md">libretrodroid/src/main/cpp/libretro/libretro-common/samples/core_options/README.md</a>
+                    <div class="file-path">Libretro - Core Options</div>
+                </li>
+                <li class="file-item">
+                    <a href="libretrodroid/src/main/cpp/libretro/libretro-common/glsym/README.md">libretrodroid/src/main/cpp/libretro/libretro-common/glsym/README.md</a>
+                    <div class="file-path">Libretro - OpenGL Symbols</div>
+                </li>
+            </ul>
+        </div>
+        
+        <footer>
+            <p>Index généré automatiquement - RetroPlay-Android Documentation</p>
+            <p><small>Total: 116 fichiers Markdown</small></p>
+        </footer>
+    </div>
+</body>
+</html>
+
+
+

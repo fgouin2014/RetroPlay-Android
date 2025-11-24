@@ -1,6 +1,8 @@
 package com.retroplay;
 
+import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.WebSettings;
@@ -14,10 +16,16 @@ import androidx.appcompat.app.AppCompatActivity;
 public class WebViewActivity extends AppCompatActivity {
     private WebView webView;
     private static final int WEBSERVER_PORT = 7777;
+    private static final String TAG = "WebViewActivity";
+    
+    private boolean serverStartedByThisActivity = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        
+        // Démarrer le serveur web si nécessaire (pour les jeux WASM)
+        ensureWebServerRunning();
         
         // Mode plein écran - masquer barre d'état et navigation
         setupFullscreenMode();
@@ -35,6 +43,41 @@ public class WebViewActivity extends AppCompatActivity {
         }
 
         setupWebView(gameFile, console);
+    }
+    
+    /**
+     * S'assure que le serveur web est démarré pour les jeux WASM
+     */
+    private void ensureWebServerRunning() {
+        if (isServiceRunning(WebServerService.class)) {
+            Log.i(TAG, "WebServer already running");
+            return;
+        }
+        
+        try {
+            Log.i(TAG, "Starting WebServer for WASM game...");
+            Intent serviceIntent = new Intent(this, WebServerService.class);
+            startForegroundService(serviceIntent);
+            serverStartedByThisActivity = true;
+            Log.i(TAG, "WebServer started successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting WebServer: ", e);
+        }
+    }
+    
+    /**
+     * Vérifie si un service est en cours d'exécution
+     */
+    private boolean isServiceRunning(Class<?> serviceClass) {
+        android.app.ActivityManager manager = (android.app.ActivityManager) getSystemService(android.content.Context.ACTIVITY_SERVICE);
+        if (manager != null) {
+            for (android.app.ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+                if (serviceClass.getName().equals(service.service.getClassName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
     
     private void setupFullscreenMode() {
@@ -150,6 +193,23 @@ public class WebViewActivity extends AppCompatActivity {
         if (hasFocus) {
             // Maintenir le mode plein écran même après perte de focus
             setupFullscreenMode();
+        }
+    }
+    
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        
+        // Arrêter le serveur seulement si on l'a démarré et que l'option réseau n'est pas activée
+        if (serverStartedByThisActivity) {
+            WebServerPreferences prefs = WebServerPreferences.getInstance(this);
+            if (!prefs.shouldKeepServerRunning()) {
+                Log.i(TAG, "Stopping WebServer (network mode disabled)");
+                Intent serviceIntent = new Intent(this, WebServerService.class);
+                stopService(serviceIntent);
+            } else {
+                Log.i(TAG, "Keeping WebServer running (network mode enabled)");
+            }
         }
     }
 }

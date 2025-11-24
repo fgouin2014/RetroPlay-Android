@@ -632,7 +632,15 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
         // Charger les settings depuis SharedPreferences
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
-        fastForwardRatio = prefs.getInt("emulation_fast_forward_ratio", 2).coerceIn(1, 4)
+        // Note: fastForwardRatio est sauvegardé comme Float dans EmulationSettingsDialog
+        fastForwardRatio = try {
+            prefs.getFloat("emulation_fast_forward_ratio", 2.0f).toInt().coerceIn(1, 10)
+        } catch (e: ClassCastException) {
+            // Migration: si c'était un Int avant, le lire comme Int puis migrer vers Float
+            val oldValue = prefs.getInt("emulation_fast_forward_ratio", 2)
+            prefs.edit().putFloat("emulation_fast_forward_ratio", oldValue.toFloat()).apply()
+            oldValue.coerceIn(1, 10)
+        }
         isFastForwardActive.value = prefs.getBoolean("emulation_fast_forward_active", false)
         audioMuted.value = prefs.getBoolean("emulation_audio_muted", false)
         quickActionsBarVisible.value = prefs.getBoolean("emulation_quick_actions_bar_visible", true)
@@ -1323,9 +1331,9 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     )
                 }
                 
-                // === CORE OPTIONS DIALOG ===
+                // === EMULATION SETTINGS DIALOG ===
                 if (showCoreOptionsDialog.value) {
-                    CoreOptionsDialog(
+                    EmulationSettingsDialog(
                         gameName = gameName,
                         coreOptions = coreOptions,
                         onApply = { modifiedValues ->
@@ -1352,9 +1360,11 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                             coreOptions.clear()
                             coreOptions.addAll(updatedVars)
                             
-                            Log.i(TAG, "Applied ${modifiedValues.size} core option changes to running core")
+                            Log.i(TAG, "Applied ${modifiedValues.size} core option changes and global settings to running core")
                         },
-                        onDismiss = { showCoreOptionsDialog.value = false }
+                        onDismiss = { showCoreOptionsDialog.value = false },
+                        context = this@NativeComposeEmulatorActivity,
+                        prefs = prefs
                     )
                 }
             }
@@ -2190,7 +2200,6 @@ private fun ComposeEmulatorScreen(
                                             retroView.sendMotionEvent(source, x, y)
                                         },
                                         availableLayouts = overlayConfig.layouts.keys.toList().sorted(),
-                                        currentLayoutName = layoutName,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }

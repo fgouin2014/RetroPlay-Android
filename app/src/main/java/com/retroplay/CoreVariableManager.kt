@@ -32,11 +32,40 @@ object CoreVariableManager {
                 val parts = description.split(";")
                 if (parts.isEmpty()) return@mapNotNull null
                 
-                val displayName = parts[0].trim()
-                val possibleValues = if (parts.size > 1) {
+                var displayName = parts[0].trim()
+                
+                // Si displayName est vide, générer un nom à partir de la clé
+                if (displayName.isEmpty()) {
+                    // Extraire le nom de l'option depuis la clé
+                    // Ex: "parallel-n64-screensize" -> "Screensize"
+                    // Ex: "parallel-n64-bilinear_mode" -> "Bilinear Mode"
+                    val keyParts = key.split("-")
+                    if (keyParts.size > 1) {
+                        // Prendre la dernière partie et formater
+                        val lastPart = keyParts.last()
+                        displayName = lastPart.split("_")
+                            .joinToString(" ") { word ->
+                                word.replaceFirstChar { it.uppercase() }
+                            }
+                    } else {
+                        // Fallback: utiliser la clé complète formatée
+                        displayName = key.split("_")
+                            .joinToString(" ") { word ->
+                                word.replaceFirstChar { it.uppercase() }
+                            }
+                    }
+                }
+                
+                var possibleValues = if (parts.size > 1) {
                     parts[1].trim().split("|").map { it.trim() }
                 } else {
                     emptyList()
+                }
+                
+                // Si possibleValues est vide mais currentValue est "0" ou "1", 
+                // c'est probablement un booléen numérique - générer les valeurs possibles
+                if (possibleValues.isEmpty() && currentValue.trim() in listOf("0", "1")) {
+                    possibleValues = listOf("0", "1")
                 }
                 
                 // Détecter si c'est un DIP switch (clé contient "-dip-" ou "dipswitch-")
@@ -77,26 +106,48 @@ object CoreVariableManager {
             val key = variable.key.lowercase()
             val corePrefix = coreId.lowercase()
             
-            // Gérer les deux formats possibles : underscore et tiret
-            // Ex: fichier "mame2003_plus_libretro.so" -> clés "mame2003-plus-xxx"
-            val corePrefixWithDash = corePrefix.replace("_", "-")
+            // Cas spécial : cores Mednafen (mednafen_wswan, mednafen_ngp, mednafen_pce, mednafen_lynx)
+            // Les variables utilisent juste le nom de la console sans préfixe "mednafen_"
+            // Ex: coreId = "mednafen_wswan" -> variables = "wswan_60hz_mode", "wswan_frameskip", etc.
+            val mednafenPrefixes = listOf("mednafen_wswan", "mednafen_ngp", "mednafen_pce", "mednafen_lynx", 
+                                          "mednafen-psx", "mednafen_psx", "mednafen-saturn", "mednafen_saturn")
+            val isMednafenCore = mednafenPrefixes.any { corePrefix.startsWith(it.lowercase()) }
             
-            // Créer les patterns exacts à matcher (avec séparateurs)
-            val patterns = listOf(
-                corePrefix + "-",           // Ex: "mame2003-dip-xxx"
-                corePrefix + "_",           // Ex: "mame2003_xxx"
-                corePrefixWithDash + "-",   // Ex: "mame2003-plus-dip-xxx"
-                corePrefixWithDash + "_"    // Ex: "mame2003-plus_xxx"
-            )
-            
-            // La clé doit commencer par un des patterns exacts
-            val matches = patterns.any { pattern -> key.startsWith(pattern) }
-            
-            // Exclusion spéciale : si on cherche "mame2003", exclure "mame2003-plus" et "mame2003_plus"
-            if (matches && corePrefix == "mame2003") {
-                !key.contains("mame2003-plus") && !key.contains("mame2003_plus")
+            if (isMednafenCore) {
+                // Extraire le nom de la console depuis le coreId
+                // Ex: "mednafen_wswan" -> "wswan", "mednafen_ngp" -> "ngp"
+                val consoleName = corePrefix.removePrefix("mednafen_").removePrefix("mednafen-")
+                
+                // Les variables Mednafen commencent par le nom de la console suivi d'un underscore
+                // Ex: "wswan_60hz_mode", "ngp_color_mode", "pce_cd_load_image", "lynx_rot"
+                val mednafenPatterns = listOf(
+                    consoleName + "_",      // Ex: "wswan_"
+                    consoleName + "-"       // Ex: "wswan-" (au cas où)
+                )
+                
+                mednafenPatterns.any { pattern -> key.startsWith(pattern) }
             } else {
-                matches
+                // Gérer les deux formats possibles : underscore et tiret
+                // Ex: fichier "mame2003_plus_libretro.so" -> clés "mame2003-plus-xxx"
+                val corePrefixWithDash = corePrefix.replace("_", "-")
+                
+                // Créer les patterns exacts à matcher (avec séparateurs)
+                val patterns = listOf(
+                    corePrefix + "-",           // Ex: "mame2003-dip-xxx"
+                    corePrefix + "_",           // Ex: "mame2003_xxx"
+                    corePrefixWithDash + "-",   // Ex: "mame2003-plus-dip-xxx"
+                    corePrefixWithDash + "_"    // Ex: "mame2003-plus_xxx"
+                )
+                
+                // La clé doit commencer par un des patterns exacts
+                val matches = patterns.any { pattern -> key.startsWith(pattern) }
+                
+                // Exclusion spéciale : si on cherche "mame2003", exclure "mame2003-plus" et "mame2003_plus"
+                if (matches && corePrefix == "mame2003") {
+                    !key.contains("mame2003-plus") && !key.contains("mame2003_plus")
+                } else {
+                    matches
+                }
             }
         }
         

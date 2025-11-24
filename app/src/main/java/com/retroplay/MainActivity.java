@@ -66,6 +66,7 @@ public class MainActivity extends FragmentActivity {
             hasLaunchedGameList = true;
             // Install RetroArch overlays if needed (first launch)
             // The callback will launch GameListActivity after installation
+            // Le scan sera fait dans GameListActivity pour éviter que MainActivity se ferme avant
             installRetroArchOverlays();
         }
         
@@ -75,16 +76,148 @@ public class MainActivity extends FragmentActivity {
         Log.i(TAG, "MainActivity onCreate finished");
     }
     
-    private void applyTheme() {
-        ThemeManager themeManager = ThemeManager.getInstance(this);
-        int primaryColor = themeManager.getPrimaryColor(this);
+    /**
+     * Démarre le scan automatique des gamelist.json
+     * Premier démarrage: scan complet de tous les répertoires
+     * Démarrages suivants: scan seulement si nouvelles ROMs (si toggle activé)
+     */
+    private void startGamelistScan() {
+        // Utiliser un thread séparé pour éviter de bloquer l'UI
+        new Thread(() -> {
+            try {
+                // Vérifier si c'est le premier démarrage
+                boolean isFirstLaunch = com.retroplay.GamelistScanner.INSTANCE.isFirstLaunch(this);
+                
+                if (isFirstLaunch) {
+                    Log.i(TAG, "First launch detected - Starting full console scan");
+                    // Premier démarrage: scan complet
+                    scanAllConsolesOnFirstLaunch();
+                } else {
+                    // Démarrages suivants: vérifier si auto-scan est activé
+                    boolean autoScanEnabled = com.retroplay.GamelistScanner.INSTANCE.isAutoScanEnabled(this);
+                    if (autoScanEnabled) {
+                        Log.i(TAG, "Auto-scan enabled - Scanning for new ROMs");
+                        scanNewRomsIfEnabled();
+                    } else {
+                        Log.i(TAG, "Auto-scan disabled - Skipping scan");
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error starting gamelist scan: " + e.getMessage(), e);
+            }
+        }).start();
+    }
+    
+    /**
+     * Scan complet de tous les répertoires au premier démarrage
+     */
+    private void scanAllConsolesOnFirstLaunch() {
+        android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
+        progressDialog.setTitle("Initial Scan");
+        progressDialog.setMessage("Scanning ROM directories...");
+        progressDialog.setCancelable(false);
+        progressDialog.show();
         
-        // Apply theme to games button
-        Button gamesButton = findViewById(R.id.fab_games);
-        if (gamesButton != null) {
-            gamesButton.setBackgroundColor(primaryColor);
-            gamesButton.setTextColor(android.graphics.Color.WHITE);
-            gamesButton.setAlpha(1.0f);
+        // Utiliser la méthode helper Kotlin avec callback
+        com.retroplay.GamelistScanner.scanAllConsolesAsync(this, new com.retroplay.ScanCallback() {
+            @Override
+            public void onComplete(com.retroplay.GamelistScanner.ScanResult result) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    
+                    if (result.getScannedConsoles().size() > 0) {
+                        android.widget.Toast.makeText(
+                            MainActivity.this,
+                            "Scanned " + result.getScannedConsoles().size() + 
+                            " consoles (" + result.getTotalGames() + " games)",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show();
+                        Log.i(TAG, "Initial scan completed: " + result.getScannedConsoles().size() + 
+                            " consoles, " + result.getTotalGames() + " games");
+                    } else {
+                        Log.i(TAG, "Initial scan completed: No consoles found or all already have gamelist.json");
+                    }
+                    
+                    if (result.getErrors().size() > 0) {
+                        Log.w(TAG, "Scan errors: " + result.getErrors().size());
+                        for (String error : result.getErrors()) {
+                            Log.w(TAG, "  - " + error);
+                        }
+                    }
+                });
+            }
+            
+            @Override
+            public void onError(String error) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    Log.e(TAG, "Error in initial scan: " + error);
+                    android.widget.Toast.makeText(
+                        MainActivity.this,
+                        "Scan error: " + error,
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show();
+                });
+            }
+        });
+    }
+    
+    /**
+     * Scan des nouvelles ROMs aux démarrages suivants (si toggle activé)
+     */
+    private void scanNewRomsIfEnabled() {
+        // Scan en arrière-plan sans dialog (non bloquant)
+        com.retroplay.GamelistScanner.scanNewRomsAsync(this, new com.retroplay.ScanCallback() {
+            @Override
+            public void onComplete(com.retroplay.GamelistScanner.ScanResult result) {
+                if (result.getScannedConsoles().size() > 0) {
+                    runOnUiThread(() -> {
+                        android.widget.Toast.makeText(
+                            MainActivity.this,
+                            "Updated " + result.getScannedConsoles().size() + 
+                            " consoles (" + result.getTotalGames() + " new games)",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show();
+                        Log.i(TAG, "Rescan completed: " + result.getScannedConsoles().size() + 
+                            " consoles updated, " + result.getTotalGames() + " games");
+                    });
+                } else {
+                    Log.d(TAG, "Rescan completed: No new ROMs found");
+                }
+                
+                if (result.getErrors().size() > 0) {
+                    Log.w(TAG, "Rescan errors: " + result.getErrors().size());
+                }
+            }
+            
+            @Override
+            public void onError(String error) {
+                Log.e(TAG, "Error in rescan: " + error);
+            }
+        });
+    }
+    
+    private void applyTheme() {
+        try {
+            ThemeManager themeManager = ThemeManager.getInstance(this);
+            int primaryColor = themeManager.getPrimaryColor(this);
+            
+            // Apply theme to games button
+            Button gamesButton = findViewById(R.id.fab_games);
+            if (gamesButton != null) {
+                gamesButton.setBackgroundColor(primaryColor);
+                gamesButton.setTextColor(android.graphics.Color.WHITE);
+                gamesButton.setAlpha(1.0f);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error applying theme: " + e.getMessage(), e);
+            // Fallback: use default color
+            Button gamesButton = findViewById(R.id.fab_games);
+            if (gamesButton != null) {
+                gamesButton.setBackgroundColor(0xFFFF3333); // Default red
+                gamesButton.setTextColor(android.graphics.Color.WHITE);
+                gamesButton.setAlpha(1.0f);
+            }
         }
     }
     

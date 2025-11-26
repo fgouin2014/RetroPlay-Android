@@ -1,11 +1,10 @@
 package com.retroplay
 
 import android.util.Log
+import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.util.zip.CRC32
-import java.io.FileInputStream
 
 /**
  * GamelistManager - Gestionnaire amélioré de gamelist.json
@@ -45,53 +44,22 @@ object GamelistManager {
     private const val GAMELIST_VERSION = "1.0"
     
     /**
-     * GameEntry - Format compatible RetroPie/EmulationStation (en JSON)
-     * 
-     * Champs de base (depuis BD lors de la génération):
-     * - name, description, genre, releaseDate, players
-     * 
-     * Champs RetroPie (optionnels, depuis XML ou vides par défaut):
-     * - rating, favorite, playcount, lastplayed
-     * - image, thumbnail, video, marquee
-     * 
-     * Champs RetroPlay (supplémentaires):
-     * - crc32, size, serial, md5, sha1
-     * - corePath, coreName
+     * GameEntry - Structure ES (EmulationStation) style
+     * Compatible avec format gamelist.json standard
      */
     data class GameEntry(
-        // Champs de base (compatibles RetroPie)
         val id: String,
         val name: String,
-        val path: String,
-        val description: String? = null,
+        val path: String,              // Chemin relatif (ex: "./mario.nes")
+        val desc: String? = null,      // Description complète
+        val image: String? = null,     // Chemin image boxart
+        val releasedate: String? = null, // Format: YYYYMMDDTHHMMSS (ES style)
+        val developer: String? = null,
+        val publisher: String? = null,
         val genre: String? = null,
-        val releaseDate: String? = null,
-        val players: String? = null,
-        
-        // Champs RetroPie (métadonnées enrichies depuis BD)
-        val developer: String? = null,     // "Capcom", "Nintendo", etc.
-        val publisher: String? = null,     // "Capcom", "Nintendo", etc.
-        
-        // Champs RetroPie (métadonnées personnalisées)
-        val rating: String? = null,        // "0.85" (0.0-1.0)
-        val favorite: String? = null,      // "true"/"false"
-        val playcount: String? = null,     // "5"
-        val lastplayed: String? = null,    // "2025-11-23T10:30:00"
-        
-        // Champs RetroPie (chemins médias)
-        val image: String? = null,         // "./media/box2d/game.png"
-        val thumbnail: String? = null,     // "./media/box2d/game.png"
-        val video: String? = null,         // "./media/video/game.mp4"
-        val marquee: String? = null,       // "./media/marquee/game.png"
-        
-        // Champs RetroPlay (supplémentaires)
-        val crc32: String? = null,
-        val size: Long? = null,
-        val serial: String? = null,
-        val md5: String? = null,
-        val sha1: String? = null,
-        val corePath: String? = null,
-        val coreName: String? = null
+        val players: String? = null,  // Format: "1-2" ou "1"
+        val hash: String? = null,     // Hash principal (SHA1, MD5 ou CRC32)
+        val rating: String? = null     // Note (optionnel)
     )
     
     data class GamelistMetadata(
@@ -126,7 +94,14 @@ object GamelistManager {
             
             val version = jsonObj.optString("version", GAMELIST_VERSION)
             val console = jsonObj.optString("console", consoleDir.name)
-            val gamesArray = jsonObj.getJSONArray("games")
+            
+            // Vérifier si "games" existe pour éviter les plantages
+            val gamesArray = if (jsonObj.has("games") && !jsonObj.isNull("games")) {
+                jsonObj.getJSONArray("games")
+            } else {
+                Log.w(TAG, "No 'games' array found in gamelist.json for ${consoleDir.name}")
+                JSONArray() // Retourner un tableau vide
+            }
             
             val games = mutableListOf<GameEntry>()
             for (i in 0 until gamesArray.length()) {
@@ -172,9 +147,6 @@ object GamelistManager {
         val finalExtensions = if (extensions.isEmpty()) getDefaultExtensions(canonicalId) else extensions
         
         Log.i(TAG, "Generating gamelist for ${consoleDir.name} (consoleId: $consoleId, canonical: $canonicalId)")
-        Log.d(TAG, "consoleDir.absolutePath: ${consoleDir.absolutePath}")
-        Log.d(TAG, "consoleDir.exists(): ${consoleDir.exists()}")
-        Log.d(TAG, "consoleDir.isDirectory: ${consoleDir.isDirectory}")
         Log.d(TAG, "Extensions utilisées: ${finalExtensions.joinToString(", ")}")
         
         val games = mutableListOf<GameEntry>()
@@ -239,12 +211,10 @@ object GamelistManager {
                 }
                 
                 if (isValidRom) {
-                    Log.d(TAG, "ROM trouvée: ${file.name} (path: ${file.absolutePath}, exists: ${file.exists()})")
                     val game = createGameEntryFromFile(file, consoleId, baseDir)
                     if (game != null) {
                         games.add(game)
-                    } else {
-                        Log.w(TAG, "Failed to create GameEntry for ${file.name}")
+                        Log.d(TAG, "ROM trouvée: ${file.name}")
                     }
                 }
             }
@@ -252,7 +222,58 @@ object GamelistManager {
     }
     
     /**
-     * Crée une entrée GameEntry à partir d'un fichier ROM
+     * Scanne un répertoire pour trouver de NOUVELLES ROMs seulement (optimisé pour addNewRomsToGamelist)
+     * Vérifie d'abord si le fichier existe déjà avant de calculer le hash
+     */
+    private fun scanDirectoryForNewRoms(
+        dir: File,
+        consoleId: String,
+        extensions: List<String>,
+        games: MutableList<GameEntry>,
+        baseDir: File,
+        existingPaths: Set<String>
+    ) {
+        if (!dir.exists() || !dir.isDirectory) {
+            return
+        }
+        
+        val files = dir.listFiles() ?: return
+        
+        for (file in files) {
+            if (file.isDirectory) {
+                // Scanner récursivement (pour sous-consoles comme fbneo/sega)
+                scanDirectoryForNewRoms(file, consoleId, extensions, games, baseDir, existingPaths)
+            } else if (file.isFile) {
+                val fileName = file.name.lowercase()
+                val isValidRom = extensions.any { ext ->
+                    fileName.endsWith(ext.lowercase())
+                }
+                
+                if (isValidRom) {
+                    // Vérifier d'abord si le fichier existe déjà (sans calculer le hash)
+                    val relativePath = file.relativeTo(baseDir).path.replace("\\", "/")
+                    val normalizedPath = if (relativePath.startsWith("./")) relativePath.substring(2) else relativePath
+                    
+                    // Si le fichier existe déjà, skip (pas besoin de calculer le hash)
+                    if (existingPaths.contains(normalizedPath)) {
+                        continue // Skip ce fichier, il existe déjà
+                    }
+                    
+                    // C'est une nouvelle ROM, créer l'entrée basique (sans hash)
+                    val game = createGameEntryFromFile(file, consoleId, baseDir)
+                    if (game != null) {
+                        games.add(game)
+                        Log.d(TAG, "Nouvelle ROM trouvée: ${file.name}")
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Crée une entrée GameEntry basique à partir d'un fichier ROM
+     * Pas de hash, pas de métadonnées - juste name et path
+     * L'utilisateur gère les métadonnées manuellement sur PC
      */
     private fun createGameEntryFromFile(
         file: File,
@@ -260,230 +281,12 @@ object GamelistManager {
         baseDir: File
     ): GameEntry? {
         try {
-            // IMPORTANT: Reconstruire le chemin correct à partir de baseDir et du nom du fichier
-            // car file.absolutePath peut contenir un chemin incorrect (ex: /GameLibrary/ au lieu de /GameLibrary-Data/)
-            val relativePath = try {
-                file.relativeTo(baseDir).path.replace("\\", "/")
-            } catch (e: IllegalArgumentException) {
-                // Si file n'est pas un enfant de baseDir (chemins différents), calculer manuellement
-                // Ex: file=/GameLibrary/... et baseDir=/GameLibrary-Data/...
-                val filePath = try {
-                    file.canonicalPath
-                } catch (e2: Exception) {
-                    file.absolutePath
-                }
-                val basePath = try {
-                    baseDir.canonicalPath
-                } catch (e2: Exception) {
-                    baseDir.absolutePath
-                }
-                
-                // Si les chemins sont différents, essayer de trouver le chemin relatif manuellement
-                if (filePath.startsWith(basePath)) {
-                    filePath.substring(basePath.length).trimStart('/').replace("\\", "/")
-                } else {
-                    // Fallback: utiliser juste le nom du fichier
-                    file.name
-                }
-            }
-            
-            val correctFile = File(baseDir, relativePath)
-            
-            Log.d(TAG, "createGameEntryFromFile: file=${file.absolutePath}, baseDir=${baseDir.absolutePath}")
-            Log.d(TAG, "  - file.canonicalPath: ${try { file.canonicalPath } catch (e: Exception) { "N/A" }}")
-            Log.d(TAG, "  - relativePath: $relativePath")
-            Log.d(TAG, "  - correctFile.absolutePath: ${correctFile.absolutePath}")
-            Log.d(TAG, "  - correctFile.exists(): ${correctFile.exists()}")
-            
             val fileName = file.name
             val baseName = fileName.substringBeforeLast(".")
+            val relativePath = file.relativeTo(baseDir).path.replace("\\", "/")
             
-            // Pour PSX, extraire le numéro de série au lieu de CRC32
-            val serial = if (consoleId == "psx") {
-                try {
-                    PSXSerialExtractor.extractSerial(correctFile)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not extract PSX serial for ${file.name}: ${e.message}")
-                    null
-                }
-            } else {
-                null
-            }
-            
-            // CRC32 seulement si pas PSX (ou optionnel pour autres consoles)
-            // Pour PSX, on utilise serial au lieu de CRC32
-            val crc32 = if (consoleId != "psx") {
-                try {
-                    // Utiliser correctFile au lieu de file pour garantir le bon chemin
-                    if (!correctFile.exists()) {
-                        Log.w(TAG, "File does not exist for CRC32 calculation: ${correctFile.absolutePath}")
-                        Log.w(TAG, "  - baseDir.absolutePath: ${baseDir.absolutePath}")
-                        Log.w(TAG, "  - baseDir.exists(): ${baseDir.exists()}")
-                        // Essayer avec le chemin canonique
-                        try {
-                            val canonicalFile = File(correctFile.canonicalPath)
-                            if (canonicalFile.exists()) {
-                                Log.i(TAG, "File exists at canonical path: ${canonicalFile.absolutePath}")
-                                calculateCRC32(canonicalFile)
-                            } else {
-                                null
-                            }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Could not get canonical path: ${e.message}")
-                            null
-                        }
-                    } else {
-                        calculateCRC32(correctFile)
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not calculate CRC32 for ${file.name} (path: ${correctFile.absolutePath}): ${e.message}")
-                    null
-                }
-            } else {
-                null  // Pas de CRC32 pour PSX, on utilise serial
-            }
-            
-            // Enrichir avec la base de données pour TOUS les jeux (pas seulement arcade)
-            // IMPORTANT: Passer consoleId directement à DatabaseManager.lookupGame()
-            // qui fera la normalisation interne (normalizeConsoleForDatabase)
-            // Cela permet de gérer correctement les sous-consoles comme fbneo/cps1, dataeast, taito, etc.
-            val normalizedConsoleId = com.retroplay.ConsoleNameMapper.normalizeToCanonical(consoleId)
-            val isArcade = normalizedConsoleId == "arcade" || normalizedConsoleId == "mame" || 
-                          normalizedConsoleId == "fbneo" || consoleId.startsWith("fbneo") || 
-                          consoleId.startsWith("mame") || 
-                          // Toutes les sous-consoles arcade directes
-                          consoleId == "cps1" || consoleId == "cps2" || consoleId == "cps3" ||
-                          consoleId == "cpiii" || consoleId == "dataeast" || consoleId == "taito" ||
-                          consoleId == "neogeo" || consoleId == "sega"
-            
-            var gameName = baseName
-            var gameDescription: String? = null
-            var gameGenre: String? = null
-            var gameReleaseDate: String? = null
-            var gamePlayers: String? = null
-            var gameDeveloper: String? = null
-            var gamePublisher: String? = null
-            
-            // Pour TOUS les jeux avec CRC32, chercher dans la base de données
-            // TOUT doit être enrichi lors de la génération initiale
-            if (crc32 != null) {
-                try {
-                    // IMPORTANT: Passer consoleId directement (pas normalizedConsoleId)
-                    // DatabaseManager.lookupGame() fera la normalisation interne
-                    // Cela permet de gérer correctement les sous-consoles comme fbneo/cps1, dataeast, taito, etc.
-                    val gameInfo = com.retroplay.database.DatabaseManager.lookupGame(crc32, consoleId)
-                    if (gameInfo != null) {
-                        // Nom: toujours utiliser pour arcade, sinon seulement si vide
-                        if (gameInfo.name.isNotEmpty()) {
-                            if (isArcade) {
-                                // Pour arcade: toujours remplacer (set names courts -> vrais titres)
-                                gameName = gameInfo.name
-                                Log.d(TAG, "Found arcade game name from database: $gameName (CRC: $crc32)")
-                            } else {
-                                // Pour autres consoles: utiliser seulement si le nom actuel est vide ou basique
-                                if (gameName.isEmpty() || gameName == baseName) {
-                                    gameName = gameInfo.name
-                                    Log.d(TAG, "Found game name from database: $gameName (CRC: $crc32)")
-                                }
-                            }
-                        }
-                        
-                        // Enrichir TOUTES les métadonnées depuis la base de données
-                        gameInfo.genre?.let { gameGenre = it }
-                        gameInfo.developer?.let { gameDeveloper = it }
-                        gameInfo.publisher?.let { gamePublisher = it }
-                        
-                        // Description: construire à partir de developer/publisher si disponibles
-                        if (gameDeveloper != null) {
-                            if (gamePublisher != null && gamePublisher != gameDeveloper) {
-                                gameDescription = "Developer: $gameDeveloper | Publisher: $gamePublisher"
-                            } else {
-                                gameDescription = "Developer: $gameDeveloper"
-                            }
-                        }
-                        
-                        gameInfo.releaseYear?.let { year ->
-                            gameInfo.releaseMonth?.let { month ->
-                                gameReleaseDate = String.format("%04d-%02d", year, month)
-                            } ?: run {
-                                gameReleaseDate = year.toString()
-                            }
-                        }
-                        if (gameInfo.maxPlayers > 1) {
-                            gamePlayers = "1-${gameInfo.maxPlayers}"
-                        } else if (gameInfo.maxPlayers == 1) {
-                            gamePlayers = "1"
-                        }
-                        
-                        Log.d(TAG, "✅ Enriched game metadata from database: $gameName (Genre: $gameGenre, Developer: $gameDeveloper, Publisher: $gamePublisher, Year: $gameReleaseDate, Players: $gamePlayers)")
-                    } else {
-                        // Fallback: nettoyer le nom du fichier seulement pour arcade
-                        if (isArcade) {
-                            gameName = baseName.replace("_", " ")
-                                .split(" ")
-                                .joinToString(" ") { word ->
-                                    if (word.isEmpty()) ""
-                                    else word[0].uppercaseChar() + word.substring(1).lowercase()
-                                }
-                            Log.d(TAG, "Arcade game not found in database, using cleaned filename: $gameName")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error looking up game in database: ${e.message}, using filename")
-                    // Fallback sur le nom nettoyé seulement pour arcade
-                    if (isArcade) {
-                        gameName = baseName.replace("_", " ")
-                            .split(" ")
-                            .joinToString(" ") { word ->
-                                if (word.isEmpty()) ""
-                                else word[0].uppercaseChar() + word.substring(1).lowercase()
-                            }
-                    }
-                }
-            }
-            
-            // Taille du fichier (utiliser correctFile pour garantir le bon chemin)
-            val size = correctFile.length()
-            
-            // Générer les chemins médias par défaut (compatibles RetroPie)
-            val baseNameForMedia = gameName
-            val defaultImage = "./media/box2d/$baseNameForMedia.png"
-            val defaultThumbnail = "./media/box2d/$baseNameForMedia.png"
-            
-            return GameEntry(
-                id = "0", // Sera assigné plus tard
-                name = gameName,
-                path = "./$relativePath",
-                description = gameDescription,
-                genre = gameGenre,
-                releaseDate = gameReleaseDate,
-                players = gamePlayers,
-                
-                // Champs RetroPie (enrichis depuis BD lors de la génération)
-                developer = gameDeveloper,
-                publisher = gamePublisher,
-                
-                // Champs RetroPie (vides par défaut, seront enrichis par XML si disponible)
-                rating = null,
-                favorite = null,
-                playcount = null,
-                lastplayed = null,
-                
-                // Champs RetroPie (chemins médias par défaut)
-                image = defaultImage,
-                thumbnail = defaultThumbnail,
-                video = null,  // Pas de vidéo par défaut
-                marquee = null, // Pas de marquee par défaut
-                
-                // Champs RetroPlay (supplémentaires)
-                crc32 = crc32,
-                size = size,
-                serial = serial,
-                md5 = null,
-                sha1 = null,
-                corePath = null,
-                coreName = null
-            )
+            // Créer entrée basique sans hash ni métadonnées
+            return createBasicGameEntry(baseName, relativePath)
             
         } catch (e: Exception) {
             Log.e(TAG, "Error creating game entry from ${file.name}: ${e.message}", e)
@@ -492,38 +295,38 @@ object GamelistManager {
     }
     
     /**
-     * Calcule le CRC32 d'un fichier
+     * Nettoie le nom de fichier pour en faire un nom de jeu lisible
      */
-    private fun calculateCRC32(file: File): String? {
-        try {
-            Log.d(TAG, "calculateCRC32: file=${file.absolutePath}, exists=${file.exists()}, canRead=${file.canRead()}, length=${file.length()}")
-            
-            if (!file.exists()) {
-                Log.e(TAG, "File does not exist for CRC32: ${file.absolutePath}")
-                return null
+    private fun cleanFileName(fileName: String): String {
+        return fileName.replace("_", " ")
+            .split(" ")
+            .joinToString(" ") { word ->
+                if (word.isEmpty()) ""
+                else word[0].uppercaseChar() + word.substring(1).lowercase()
             }
-            
-            if (!file.canRead()) {
-                Log.e(TAG, "File cannot be read for CRC32: ${file.absolutePath}")
-                return null
-            }
-            
-            val crc32 = CRC32()
-            FileInputStream(file).use { input ->
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    crc32.update(buffer, 0, bytesRead)
-                }
-            }
-            val crcValue = String.format("%08x", crc32.value)
-            Log.d(TAG, "CRC32 calculated successfully: $crcValue for ${file.name}")
-            return crcValue
-        } catch (e: Exception) {
-            Log.e(TAG, "Error calculating CRC32 for ${file.absolutePath}: ${e.javaClass.simpleName} - ${e.message}", e)
-            return null
-        }
     }
+    
+    /**
+     * Crée une entrée basique sans métadonnées (fallback)
+     */
+    private fun createBasicGameEntry(baseName: String, relativePath: String): GameEntry {
+        val gameName = cleanFileName(baseName)
+        return GameEntry(
+            id = "0",
+            name = gameName,
+            path = "./$relativePath",
+            desc = "",
+            image = "./media/box2d/$gameName.png",
+            releasedate = "",
+            developer = "",
+            publisher = "",
+            genre = "",
+            players = "",
+            hash = "",
+            rating = ""
+        )
+    }
+    
     
     /**
      * Sauvegarde un gamelist.json
@@ -559,75 +362,29 @@ object GamelistManager {
     
     /**
      * Convertit un GameEntry en JSONObject
-     * Format compatible RetroPie/EmulationStation (en JSON)
+     * Format standardisé: description, releaseDate (camelCase)
+     * Compatible avec parsing qui supporte les deux formats (legacy et nouveau)
+     */
+    /**
+     * Convertit un GameEntry en JSONObject (format ES)
      */
     private fun gameToJson(game: GameEntry): JSONObject {
         return JSONObject().apply {
-            // Champs de base (compatibles RetroPie)
             put("id", game.id)
             put("name", game.name)
             put("path", game.path)
             
-            // Métadonnées de base (depuis BD)
-            if (game.description != null && game.description.isNotEmpty()) {
-                put("description", game.description)
-            }
-            if (game.genre != null && game.genre.isNotEmpty()) {
-                put("genre", game.genre)
-            }
-            if (game.releaseDate != null && game.releaseDate.isNotEmpty()) {
-                put("releaseDate", game.releaseDate)
-            }
-            if (game.players != null && game.players.isNotEmpty()) {
-                put("players", game.players)
-            }
-            
-            // Champs RetroPie (enrichis depuis BD)
-            if (game.developer != null && game.developer.isNotEmpty()) {
-                put("developer", game.developer)
-            }
-            if (game.publisher != null && game.publisher.isNotEmpty()) {
-                put("publisher", game.publisher)
-            }
-            
-            // Champs RetroPie (métadonnées personnalisées)
-            if (game.rating != null && game.rating.isNotEmpty()) {
-                put("rating", game.rating)
-            }
-            if (game.favorite != null && game.favorite.isNotEmpty()) {
-                put("favorite", game.favorite)
-            }
-            if (game.playcount != null && game.playcount.isNotEmpty()) {
-                put("playcount", game.playcount)
-            }
-            if (game.lastplayed != null && game.lastplayed.isNotEmpty()) {
-                put("lastplayed", game.lastplayed)
-            }
-            
-            // Champs RetroPie (chemins médias)
-            if (game.image != null && game.image.isNotEmpty()) {
-                put("image", game.image)
-            }
-            if (game.thumbnail != null && game.thumbnail.isNotEmpty()) {
-                put("thumbnail", game.thumbnail)
-            }
-            if (game.video != null && game.video.isNotEmpty()) {
-                put("video", game.video)
-            }
-            if (game.marquee != null && game.marquee.isNotEmpty()) {
-                put("marquee", game.marquee)
-            }
-            
-            // Champs RetroPlay (supplémentaires)
-            if (game.crc32 != null) put("crc32", game.crc32)
-            if (game.size != null) put("size", game.size)
-            if (game.serial != null) put("serial", game.serial)
-            if (game.md5 != null) put("md5", game.md5)
-            if (game.sha1 != null) put("sha1", game.sha1)
-            
-            // Configuration core
-            if (game.corePath != null) put("core_path", game.corePath)
-            if (game.coreName != null) put("core_name", game.coreName)
+            // Format ES (EmulationStation style)
+            // Toujours inclure les champs, même s'ils sont vides (chaînes vides au lieu de null)
+            put("desc", game.desc ?: "")
+            put("image", game.image ?: "")
+            put("releasedate", game.releasedate ?: "")
+            put("developer", game.developer ?: "")
+            put("publisher", game.publisher ?: "")
+            put("genre", game.genre ?: "")
+            put("players", game.players ?: "")
+            put("hash", game.hash ?: "")
+            put("rating", game.rating ?: "")
         }
     }
     
@@ -645,59 +402,52 @@ object GamelistManager {
     }
     
     /**
-     * Parse un GameEntry depuis JSONObject
-     * Support des formats legacy et nouveau (compatible RetroPie)
+     * Parse un GameEntry depuis JSONObject (format ES)
+     * Support legacy pour compatibilité
      */
     private fun parseGameEntry(obj: JSONObject): GameEntry? {
         try {
-            // Support des deux formats : "description"/"releaseDate" (nouveau) et "desc"/"releasedate" (legacy)
-            val description = if (obj.has("description")) obj.optString("description", "") else obj.optString("desc", "")
-            val descriptionValue = if (description.isNotEmpty()) description else null
-            val releaseDate = if (obj.has("releaseDate")) obj.optString("releaseDate", "") else obj.optString("releasedate", "")
-            val releaseDateValue = if (releaseDate.isNotEmpty()) releaseDate else null
+            // Support legacy: "description"/"releaseDate" (ancien format)
+            // Format ES: "desc"/"releasedate" (nouveau format)
+            // Retourner des chaînes vides au lieu de null
+            val desc = when {
+                obj.has("desc") && !obj.isNull("desc") -> obj.getString("desc")
+                obj.has("description") && !obj.isNull("description") -> obj.getString("description")
+                else -> ""
+            }
+            val releasedate = when {
+                obj.has("releasedate") && !obj.isNull("releasedate") -> obj.getString("releasedate")
+                obj.has("releaseDate") && !obj.isNull("releaseDate") -> obj.getString("releaseDate")
+                else -> ""
+            }
             
-            // Helper pour lire une string optionnelle
-            fun optStringOrNull(key: String): String? {
-                return if (obj.has(key)) {
-                    val value = obj.optString(key, "")
-                    if (value.isNotEmpty()) value else null
-                } else null
+            // Vérifier les champs obligatoires pour éviter les plantages
+            if (!obj.has("id") || obj.isNull("id")) {
+                Log.w(TAG, "Game entry missing 'id' field, skipping")
+                return null
+            }
+            if (!obj.has("name") || obj.isNull("name")) {
+                Log.w(TAG, "Game entry missing 'name' field, skipping")
+                return null
+            }
+            if (!obj.has("path") || obj.isNull("path")) {
+                Log.w(TAG, "Game entry missing 'path' field, skipping")
+                return null
             }
             
             return GameEntry(
-                // Champs de base
                 id = obj.getString("id"),
                 name = obj.getString("name"),
                 path = obj.getString("path"),
-                description = descriptionValue,
-                genre = optStringOrNull("genre"),
-                releaseDate = releaseDateValue,
-                players = optStringOrNull("players"),
-                
-                // Champs RetroPie (enrichis depuis BD)
-                developer = optStringOrNull("developer"),
-                publisher = optStringOrNull("publisher"),
-                
-                // Champs RetroPie (métadonnées personnalisées)
-                rating = optStringOrNull("rating"),
-                favorite = optStringOrNull("favorite"),
-                playcount = optStringOrNull("playcount"),
-                lastplayed = optStringOrNull("lastplayed"),
-                
-                // Champs RetroPie (chemins médias)
-                image = optStringOrNull("image"),
-                thumbnail = optStringOrNull("thumbnail"),
-                video = optStringOrNull("video"),
-                marquee = optStringOrNull("marquee"),
-                
-                // Champs RetroPlay (supplémentaires)
-                crc32 = optStringOrNull("crc32"),
-                size = if (obj.has("size")) obj.getLong("size") else null,
-                serial = optStringOrNull("serial"),
-                md5 = optStringOrNull("md5"),
-                sha1 = optStringOrNull("sha1"),
-                corePath = optStringOrNull("core_path"),
-                coreName = optStringOrNull("core_name")
+                desc = desc,
+                image = if (obj.has("image") && !obj.isNull("image")) obj.getString("image") else "",
+                releasedate = releasedate,
+                developer = if (obj.has("developer") && !obj.isNull("developer")) obj.getString("developer") else "",
+                publisher = if (obj.has("publisher") && !obj.isNull("publisher")) obj.getString("publisher") else "",
+                genre = if (obj.has("genre") && !obj.isNull("genre")) obj.getString("genre") else "",
+                players = if (obj.has("players") && !obj.isNull("players")) obj.getString("players") else "",
+                hash = if (obj.has("hash") && !obj.isNull("hash")) obj.getString("hash") else "",
+                rating = if (obj.has("rating") && !obj.isNull("rating")) obj.getString("rating") else ""
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing game entry: ${e.message}", e)
@@ -713,7 +463,13 @@ object GamelistManager {
         val dirsArray = obj.optJSONArray("sourceDirectories")
         if (dirsArray != null) {
             for (i in 0 until dirsArray.length()) {
-                sourceDirs.add(dirsArray.getString(i))
+                try {
+                    if (!dirsArray.isNull(i)) {
+                        sourceDirs.add(dirsArray.getString(i))
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error parsing sourceDirectory at index $i: ${e.message}")
+                }
             }
         }
         
@@ -811,42 +567,7 @@ object GamelistManager {
                 
                 val gamesArray = org.json.JSONArray()
                 gamelist.games.forEach { game ->
-                    val gameObj = org.json.JSONObject().apply {
-                        put("id", game.id)
-                        put("name", game.name)
-                        put("path", game.path)
-                        
-                        // NOUVEAU FORMAT (camelCase) - Format standard
-                        put("description", game.description ?: "")
-                        put("genre", game.genre ?: "")
-                        put("releaseDate", game.releaseDate ?: "")
-                        put("players", game.players ?: "")
-                        
-                        // Champs RetroPie (enrichis depuis BD)
-                        if (game.developer != null && game.developer.isNotEmpty()) {
-                            put("developer", game.developer)
-                        }
-                        if (game.publisher != null && game.publisher.isNotEmpty()) {
-                            put("publisher", game.publisher)
-                        }
-                        
-                        // Métadonnées techniques
-                        if (game.crc32 != null) put("crc32", game.crc32)
-                        if (game.size != null) put("size", game.size)
-                        if (game.serial != null) put("serial", game.serial)
-                        if (game.md5 != null) put("md5", game.md5)
-                        if (game.sha1 != null) put("sha1", game.sha1)
-                        
-                        // Configuration core
-                        if (game.corePath != null) put("core_path", game.corePath)
-                        if (game.coreName != null) put("core_name", game.coreName)
-                        
-                        // Chemins d'images (compatibilité avec format existant)
-                        val baseName = game.name
-                        put("image", "./media/box2d/$baseName.png")
-                        put("screenshot", "./media/screenshot/$baseName.png")
-                        put("thumbnail", "./media/box2d/$baseName.png")
-                    }
+                    val gameObj = gameToJson(game)
                     gamesArray.put(gameObj)
                 }
                 put("games", gamesArray)
@@ -873,6 +594,210 @@ object GamelistManager {
         } catch (e: Exception) {
             Log.e(TAG, "Error generating gamelist JSON string: ${e.message}", e)
             return "{\"games\":[]}" // Fallback
+        }
+    }
+    
+    /**
+     * Ajoute seulement les nouvelles ROMs au gamelist.json existant
+     * Ne modifie pas les ROMs existantes, ajoute seulement celles qui manquent
+     * 
+     * @param consoleDir Répertoire de la console
+     * @param consoleId ID de la console
+     * @return Nombre de nouvelles ROMs ajoutées
+     */
+    fun addNewRomsToGamelist(
+        consoleDir: File,
+        consoleId: String
+    ): Int {
+        try {
+            val gamelistFile = File(consoleDir, "gamelist.json")
+            
+            // Charger le gamelist existant
+            val existingGamelist = loadGamelist(consoleDir)
+            if (existingGamelist == null) {
+                Log.w(TAG, "No existing gamelist.json found for ${consoleDir.name}, skipping add new ROMs")
+                return 0
+            }
+            
+            // Créer un set des chemins existants pour vérification rapide (normalisés)
+            val existingPaths = existingGamelist.games.map { 
+                val path = it.path.replace("\\", "/")
+                // Normaliser: enlever "./" au début
+                if (path.startsWith("./")) path.substring(2) else path
+            }.toSet()
+            
+            // Scanner le répertoire pour trouver de nouvelles ROMs (sans calculer hash pour les existantes)
+            val canonicalId = com.retroplay.ConsoleNameMapper.normalizeToCanonical(consoleId)
+            val extensions = getDefaultExtensions(canonicalId)
+            val newGames = mutableListOf<GameEntry>()
+            
+            // Utiliser une version optimisée qui vérifie d'abord si le fichier existe
+            scanDirectoryForNewRoms(consoleDir, canonicalId, extensions, newGames, consoleDir, existingPaths)
+            
+            if (newGames.isEmpty()) {
+                Log.d(TAG, "No new ROMs found for ${consoleDir.name}")
+                return 0
+            }
+            
+            Log.i(TAG, "Found ${newGames.size} new ROMs for ${consoleDir.name}")
+            
+            // Ajouter les nouvelles ROMs à la liste existante
+            val allGames = existingGamelist.games.toMutableList()
+            val maxId = existingGamelist.games.maxOfOrNull { it.id.toIntOrNull() ?: 0 } ?: 0
+            
+            // Trier les nouvelles ROMs par nom et leur assigner des IDs
+            val sortedNewGames = newGames.sortedBy { it.name.lowercase() }
+            val newGamesWithIds = sortedNewGames.mapIndexed { index, game ->
+                game.copy(id = (maxId + index + 1).toString())
+            }
+            
+            allGames.addAll(newGamesWithIds)
+            
+            // Trier toutes les entrées par nom pour cohérence
+            val sortedAllGames = allGames.sortedBy { it.name.lowercase() }
+            val finalGamesWithIds = sortedAllGames.mapIndexed { index, game ->
+                game.copy(id = (index + 1).toString())
+            }
+            
+            // Sauvegarder le gamelist mis à jour
+            val updatedGamelist = existingGamelist.copy(
+                games = finalGamesWithIds,
+                metadata = existingGamelist.metadata?.copy(
+                    totalGames = finalGamesWithIds.size
+                )
+            )
+            
+            val success = saveGamelist(updatedGamelist, consoleDir)
+            if (success) {
+                Log.i(TAG, "Added ${newGames.size} new ROMs to gamelist for ${consoleDir.name}")
+                return newGames.size
+            } else {
+                Log.e(TAG, "Failed to save updated gamelist for ${consoleDir.name}")
+                return 0
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding new ROMs to gamelist for ${consoleDir.name}: ${e.message}", e)
+            return 0
+        }
+    }
+    
+    /**
+     * Enrichit un gamelist.json existant avec les métadonnées scrappées en arrière-plan
+     * Cette fonction est appelée après le scan initial pour ne pas ralentir le scan
+     * 
+     * @param consoleDir Répertoire de la console
+     * @param consoleId ID de la console
+     * @param onProgress Callback pour notifier la progression (optionnel)
+     */
+    fun enrichGamelistWithMetadata(
+        consoleDir: File,
+        consoleId: String,
+        onProgress: ((current: Int, total: Int) -> Unit)? = null
+    ) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val gamelistFile = File(consoleDir, "gamelist.json")
+                if (!gamelistFile.exists()) {
+                    Log.w(TAG, "gamelist.json not found for ${consoleDir.name}, skipping enrichment")
+                    return@launch
+                }
+                
+                // Charger le gamelist existant
+                val gamelist = loadGamelist(consoleDir)
+                if (gamelist == null || gamelist.games.isEmpty()) {
+                    Log.w(TAG, "Empty or invalid gamelist for ${consoleDir.name}, skipping enrichment")
+                    return@launch
+                }
+                
+                val normalizedConsoleId = com.retroplay.ConsoleNameMapper.normalizeToCanonical(consoleId)
+                
+                // Vérifier si la console est supportée par ScreenScraper AVANT de commencer
+                if (!com.retroplay.scraper.ScraperManager.isConsoleSupported(normalizedConsoleId)) {
+                    Log.d(TAG, "Console '$normalizedConsoleId' not supported by ScreenScraper, skipping enrichment")
+                    return@launch
+                }
+                
+                val totalGames = gamelist.games.size
+                var enrichedCount = 0
+                var needsSave = false
+                
+                Log.i(TAG, "Starting metadata enrichment for ${consoleDir.name} ($totalGames games)")
+                
+                // Enrichir chaque jeu SÉQUENTIELLEMENT (1 thread à la fois comme spécifié par ScreenScraper)
+                // Utiliser une boucle for au lieu de mapIndexed pour garantir la sérialisation
+                val enrichedGames = mutableListOf<GameEntry>()
+                
+                for ((index, game) in gamelist.games.withIndex()) {
+                    onProgress?.invoke(index + 1, totalGames)
+                    
+                    // Si le jeu a déjà toutes les métadonnées, le garder tel quel
+                    if (game.desc != null && game.genre != null && game.developer != null) {
+                        enrichedGames.add(game)
+                        continue
+                    }
+                    
+                    // Si pas de hash, on ne peut pas scraper
+                    if (game.hash == null || game.hash.isEmpty()) {
+                        enrichedGames.add(game)
+                        continue
+                    }
+                    
+                    // Reconstruire le GameHash depuis le hash stocké
+                    // Note: On ne peut pas reconstruire les 3 hashes, donc on utilise juste celui stocké
+                    val gameHash = when {
+                        game.hash.length == 40 -> com.retroplay.scraper.HashCalculator.GameHash(sha1 = game.hash)
+                        game.hash.length == 32 -> com.retroplay.scraper.HashCalculator.GameHash(md5 = game.hash)
+                        game.hash.length == 8 -> com.retroplay.scraper.HashCalculator.GameHash(crc32 = game.hash)
+                        else -> {
+                            Log.w(TAG, "Unknown hash format for ${game.name}: ${game.hash}")
+                            enrichedGames.add(game)
+                            continue
+                        }
+                    }
+                    
+                    // Scraper les métadonnées (SÉRIALISÉ - un seul appel à la fois)
+                    // Le rate limiting dans ScraperManager garantit 12 secondes entre requêtes
+                    val scrapedMetadata = com.retroplay.scraper.ScraperManager.scrapeGame(gameHash, normalizedConsoleId)
+                    
+                    if (scrapedMetadata != null) {
+                        enrichedCount++
+                        needsSave = true
+                        
+                        // Mettre à jour avec les métadonnées scrappées (garder les valeurs existantes si présentes)
+                        enrichedGames.add(
+                            game.copy(
+                                name = scrapedMetadata.name.takeIf { it.isNotEmpty() } ?: game.name,
+                                desc = game.desc ?: scrapedMetadata.description,
+                                genre = game.genre ?: scrapedMetadata.genre,
+                                releasedate = game.releasedate ?: scrapedMetadata.releaseDate,
+                                developer = game.developer ?: scrapedMetadata.developer,
+                                publisher = game.publisher ?: scrapedMetadata.publisher,
+                                players = game.players ?: scrapedMetadata.players,
+                                rating = game.rating ?: scrapedMetadata.rating
+                            )
+                        )
+                    } else {
+                        enrichedGames.add(game)
+                    }
+                }
+                
+                // Sauvegarder le gamelist enrichi si des modifications ont été faites
+                if (needsSave) {
+                    val enrichedGamelist = gamelist.copy(games = enrichedGames)
+                    val success = saveGamelist(enrichedGamelist, consoleDir)
+                    if (success) {
+                        Log.i(TAG, "Enriched gamelist for ${consoleDir.name}: $enrichedCount/$totalGames games enriched")
+                    } else {
+                        Log.e(TAG, "Failed to save enriched gamelist for ${consoleDir.name}")
+                    }
+                } else {
+                    Log.d(TAG, "No games needed enrichment for ${consoleDir.name}")
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error enriching gamelist for ${consoleDir.name}: ${e.message}", e)
+            }
         }
     }
 }

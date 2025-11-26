@@ -497,3 +497,4 @@ private void setupAutoScanToggle() {
 
 
 
+

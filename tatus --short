@@ -1,0 +1,34 @@
+warning: in the working copy of 'app/src/main/java/com/retroplay/ArtworkResolver.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/ConsoleManagerActivity.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/Game.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/GameAdapter.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/GameDetailsActivity.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/GameListActivity.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/GamelistManager.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/GamelistScanner.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/NativeComposeEmulatorActivity.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/RetroArchEmulatorActivity.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/SplashActivity.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/WebServer.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/WebServerService.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/com/retroplay/database/DatabaseManager.kt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/res/layout/activity_console_manager.xml', LF will be replaced by CRLF the next time Git touches it
+ AUDIT_GAMELIST_SYSTEM.md                           | 232 [31m------[m
+ PLAN_OPTIMISATION_LANCEMENT.md                     | 140 [31m----[m
+ .../java/com/retroplay/ConsoleManagerActivity.java | 475 [31m------------[m
+ app/src/main/java/com/retroplay/Game.java          |  61 [32m+[m[31m-[m
+ app/src/main/java/com/retroplay/GameAdapter.java   |  39 [32m+[m[31m-[m
+ .../java/com/retroplay/GameDetailsActivity.java    | 450 [32m++++++++[m[31m----[m
+ .../main/java/com/retroplay/GameListActivity.java  | 134 [32m++[m[31m--[m
+ app/src/main/java/com/retroplay/GamelistCache.kt   | 175 [31m-----[m
+ app/src/main/java/com/retroplay/GamelistManager.kt | 813 [32m++++++++++[m[31m-----------[m
+ app/src/main/java/com/retroplay/GamelistScanner.kt |  71 [32m+[m[31m-[m
+ .../com/retroplay/NativeComposeEmulatorActivity.kt | 204 [32m+++++[m[31m-[m
+ .../main/java/com/retroplay/PSXSerialExtractor.kt  | 155 [31m----[m
+ .../com/retroplay/RetroArchEmulatorActivity.kt     | 118 [32m++[m[31m-[m
+ .../main/java/com/retroplay/SplashActivity.java    | 172 [32m+[m[31m----[m
+ app/src/main/java/com/retroplay/WebServer.java     |  25 [32m+[m[31m-[m
+ .../main/java/com/retroplay/WebServerService.java  |  12 [32m+[m[31m-[m
+ .../java/com/retroplay/database/DatabaseManager.kt | 409 [32m+[m[31m----------[m
+ .../main/res/layout/activity_console_manager.xml   |  17 [31m-[m
+ 18 files changed, 1205 insertions(+), 2497 deletions(-)

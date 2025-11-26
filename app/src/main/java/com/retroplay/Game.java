@@ -12,9 +12,11 @@ public class Game implements java.io.Serializable {
     public String genre;
     public String players;
     
-    // Métadonnées enrichies depuis BD (lors de la génération du gamelist.json)
+    // Champs ES (EmulationStation style)
     public String developer;
     public String publisher;
+    public String rating;
+    public String hash;  // Hash principal (SHA1, MD5 ou CRC32)
     
     // Chemins vers les images (calculés dynamiquement)
     public String imagePath;
@@ -25,22 +27,11 @@ public class Game implements java.io.Serializable {
     private transient boolean isFavorite = false;
 
     public Game(String id, String name, String path, String desc, String releasedate, String genre, String players) {
-        this.id = id;
-        this.name = name;
-        this.path = path;
-        this.desc = desc;
-        this.releasedate = releasedate;
-        this.genre = genre;
-        this.players = players;
-        this.developer = null;
-        this.publisher = null;
-        
-        // Les chemins vers les images seront calculés dynamiquement par ObbManager
-        this.imagePath = null;
-        this.screenshotPath = null;
+        this(id, name, path, desc, releasedate, genre, players, null, null, null, null);
     }
     
-    public Game(String id, String name, String path, String desc, String releasedate, String genre, String players, String developer, String publisher) {
+    public Game(String id, String name, String path, String desc, String releasedate, String genre, String players,
+                String developer, String publisher, String rating, String hash) {
         this.id = id;
         this.name = name;
         this.path = path;
@@ -50,6 +41,8 @@ public class Game implements java.io.Serializable {
         this.players = players;
         this.developer = developer;
         this.publisher = publisher;
+        this.rating = rating;
+        this.hash = hash;
         
         // Les chemins vers les images seront calculés dynamiquement par ObbManager
         this.imagePath = null;
@@ -124,6 +117,14 @@ public class Game implements java.io.Serializable {
         return publisher;
     }
     
+    public String getRating() {
+        return rating;
+    }
+    
+    public String getHash() {
+        return hash;
+    }
+    
     public String getConsole() {
         return consoleId;
     }
@@ -161,15 +162,27 @@ public class Game implements java.io.Serializable {
         return screenshotPath;
     }
 
+    /**
+     * Retourne le chemin local du fichier ROM
+     * Format: /storage/emulated/0/GameLibrary-Data/{console}/{filename}
+     */
     public String getFile() {
-        String fileName = path.substring(2); // Enlever "./" du début
-        // Utiliser le WebServer au lieu de file:// pour éviter les restrictions de sécurité
-        String filePath = "http://localhost:7777/gamedata/" + consoleId + "/" + fileName;
+        // Nettoyer le chemin (enlever "./" si présent)
+        String cleanPath = path.startsWith("./") ? path.substring(2) : path;
         
-        // Debug: afficher le chemin du fichier
-        System.out.println("Game file path: " + filePath + " (console: " + consoleId + ")");
+        // Construire le chemin local complet
+        String localPath = "/storage/emulated/0/GameLibrary-Data/" + consoleId + "/" + cleanPath;
         
-        return filePath;
+        return localPath;
+    }
+    
+    /**
+     * Retourne l'URL HTTP pour le WebServer (pour EmulatorJS/WebView)
+     * Format: http://localhost:7777/gamedata/{console}/{filename}
+     */
+    public String getFileUrl() {
+        String fileName = path.startsWith("./") ? path.substring(2) : path;
+        return "http://localhost:7777/gamedata/" + consoleId + "/" + fileName;
     }
     
     /**
@@ -181,12 +194,14 @@ public class Game implements java.io.Serializable {
     
     /**
      * Initialise les chemins vers les images en utilisant ObbManager
+     * Utilise maintenant des chemins locaux au lieu d'URLs HTTP
      */
     public void initializePaths(ObbManager obbManager) {
         String baseName = getBaseNameFromPath(path);
         // Utiliser consoleId au lieu de "nes" hardcodé
-        this.imagePath = "http://localhost:7777/gamedata/" + consoleId + "/media/box2d/" + baseName + ".png";
-        this.screenshotPath = "http://localhost:7777/gamedata/" + consoleId + "/media/screenshot/" + baseName + ".png";
+        // Chemins locaux pour les images
+        this.imagePath = "/storage/emulated/0/GameLibrary-Data/" + consoleId + "/media/box2d/" + baseName + ".png";
+        this.screenshotPath = "/storage/emulated/0/GameLibrary-Data/" + consoleId + "/media/screenshot/" + baseName + ".png";
         
         // Debug: afficher les chemins générés
         System.out.println("Game: " + name);

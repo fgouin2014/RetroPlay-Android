@@ -46,24 +46,32 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Game game = games.get(position);
         
-        // Set game data with database enrichment hint
+        // Set game data from gamelist.json (scrapped metadata)
         holder.title.setText(game.getTitle());
         
-        // Genre - Show DB icon if we expect it's in database
-        String genreText = game.getGenre();
-        // Note: We don't calculate CRC here (too slow for RecyclerView)
-        // Database info will be shown in GameDetailsActivity
+        // Genre - From gamelist.json (scrapped from RetroArch database)
+        String genreText = (game.getGenre() != null && !game.getGenre().isEmpty()) 
+            ? game.getGenre() 
+            : "Unknown";
         holder.genreChip.setText(genreText);
         
-        holder.playersInfo.setText("👥 " + game.getPlayers() + "P");
-        holder.releaseYear.setText(extractYear(game.getReleasedate()));
+        // Players - From gamelist.json
+        String playersText = (game.getPlayers() != null && !game.getPlayers().isEmpty()) 
+            ? "👥 " + game.getPlayers() 
+            : "👥 1";
+        holder.playersInfo.setText(playersText);
         
-        // Description - Add hint that database info available in details
-        String desc = game.getDesc();
-        if (desc != null && desc.length() > 100) {
+        // Release year - From gamelist.json
+        String year = extractYear(game.getReleasedate());
+        holder.releaseYear.setText(year);
+        
+        // Description - From gamelist.json (scrapped from RetroArch database)
+        String desc = (game.getDesc() != null && !game.getDesc().isEmpty()) 
+            ? game.getDesc() 
+            : "No description available";
+        if (desc.length() > 100) {
             desc = desc.substring(0, 100) + "...";
         }
-        desc += "\n💾 DB info in details";
         holder.description.setText(desc);
         
         // Show loading progress
@@ -262,13 +270,16 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
     
     private String extractYear(String releaseDate) {
         try {
-            if (releaseDate.length() >= 4) {
-                return releaseDate.substring(0, 4);
+            if (releaseDate != null && !releaseDate.isEmpty()) {
+                // Support format YYYY-MM-DD ou YYYY
+                if (releaseDate.length() >= 4) {
+                    return releaseDate.substring(0, 4);
+                }
             }
         } catch (Exception e) {
             // Ignore
         }
-        return "1988";
+        return "Unknown";
     }
     
     private void toggleFavorite(ViewHolder holder, Game game) {

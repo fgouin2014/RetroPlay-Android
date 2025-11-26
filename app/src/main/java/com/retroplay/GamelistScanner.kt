@@ -20,8 +20,8 @@ object GamelistScanner {
     private const val PREF_AUTO_SCAN_ENABLED = "auto_scan_enabled"
     private const val PREF_LAST_SCAN_TIME = "last_scan_time"
     
-    // Répertoires système à ignorer (public pour partage avec GamelistCache)
-    val SYSTEM_DIRECTORIES = setOf(
+    // Répertoires système à ignorer
+    private val SYSTEM_DIRECTORIES = setOf(
         "data", "emulatorjs", "vmnes", "playlists",
         "saves", "states", "cheats", "media",
         "overlays", "cores", "bios", ".cache"
@@ -151,6 +151,9 @@ object GamelistScanner {
         
         Log.i(TAG, "Scan completed: ${scannedConsoles.size} consoles, $totalGames games total")
         
+        // NOTE: Le scraping des métadonnées se fait maintenant manuellement via le bouton dans ConsoleManagerActivity
+        // pour éviter de dépasser les limites de l'API ScreenScraper
+        
         return@withContext ScanResult(scannedConsoles, errors, totalGames)
     }
     
@@ -194,10 +197,28 @@ object GamelistScanner {
             
             try {
                 val gamelistFile = File(consoleDir, "gamelist.json")
-                val needsRescan = shouldRescan(consoleDir, gamelistFile)
                 
-                if (needsRescan) {
-                    Log.i(TAG, "Rescanning console directory: $dirName (ROMs modified)")
+                // Si gamelist.json existe, ajouter seulement les nouvelles ROMs (ne pas regénérer)
+                if (gamelistFile.exists()) {
+                    Log.i(TAG, "Gamelist exists for $dirName, checking for new ROMs only")
+                    
+                    // Notifier la progression AVANT le scan
+                    callback?.onProgress(dirName, currentIndex - 1, validConsoleDirs.size, -3) // -3 = scan en cours
+                    
+                    // Ajouter seulement les nouvelles ROMs
+                    val newRomsCount = GamelistManager.addNewRomsToGamelist(consoleDir, dirName)
+                    
+                    if (newRomsCount > 0) {
+                        scannedConsoles.add(dirName)
+                        totalGames += newRomsCount
+                        Log.i(TAG, "Added $newRomsCount new ROMs to gamelist for $dirName")
+                        callback?.onProgress(dirName, currentIndex - 1, validConsoleDirs.size, newRomsCount)
+                    } else {
+                        callback?.onProgress(dirName, currentIndex - 1, validConsoleDirs.size, -1) // -1 = pas de nouvelles ROMs
+                    }
+                } else {
+                    // Pas de gamelist.json: générer un nouveau (première fois ou copié depuis PC)
+                    Log.i(TAG, "No gamelist.json found for $dirName, generating new one")
                     
                     // Notifier la progression AVANT le scan
                     callback?.onProgress(dirName, currentIndex - 1, validConsoleDirs.size, -3) // -3 = scan en cours
@@ -205,12 +226,10 @@ object GamelistScanner {
                     // Normaliser l'ID de console pour les extensions
                     val consoleId = ConsoleNameMapper.normalizeToCanonical(dirName)
                     
-                    // Régénérer le gamelist (peut prendre du temps)
-                    // Utiliser dirName (nom réel du répertoire) pour le consoleId dans le gamelist
-                    // afin que les chemins d'images pointent vers le bon répertoire
+                    // Générer le gamelist (peut prendre du temps)
                     val gamelist = GamelistManager.generateGamelist(
                         consoleDir,
-                        dirName, // Utiliser le nom réel du répertoire, pas le nom normalisé
+                        dirName, // Utiliser le nom réel du répertoire
                         includeMetadata = true
                     )
                     
@@ -221,9 +240,7 @@ object GamelistScanner {
                         if (success) {
                             scannedConsoles.add(dirName)
                             totalGames += gamelist.games.size
-                            Log.i(TAG, "Updated gamelist for $dirName: ${gamelist.games.size} games")
-                            
-                            // Notifier la progression avec le nombre de jeux
+                            Log.i(TAG, "Generated gamelist for $dirName: ${gamelist.games.size} games")
                             callback?.onProgress(dirName, currentIndex - 1, validConsoleDirs.size, gamelist.games.size)
                         } else {
                             errors.add("$dirName: Failed to save gamelist")
@@ -232,9 +249,6 @@ object GamelistScanner {
                     } else {
                         callback?.onProgress(dirName, currentIndex - 1, validConsoleDirs.size, 0)
                     }
-                } else {
-                    // Pas besoin de rescan, mais notifier quand même
-                    callback?.onProgress(dirName, currentIndex - 1, validConsoleDirs.size, -1) // -1 = pas de changement
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error rescanning $dirName: ${e.message}", e)
@@ -249,6 +263,8 @@ object GamelistScanner {
         
         if (scannedConsoles.isNotEmpty()) {
             Log.i(TAG, "Rescan completed: ${scannedConsoles.size} consoles updated, $totalGames games total")
+            // NOTE: Le scraping des métadonnées se fait maintenant manuellement via le bouton dans ConsoleManagerActivity
+            // pour éviter de dépasser les limites de l'API ScreenScraper
         }
         
         return@withContext ScanResult(scannedConsoles, errors, totalGames)
@@ -345,6 +361,31 @@ object GamelistScanner {
             } catch (e: Exception) {
                 callback.onError(e.message ?: "Unknown error")
             }
+        }
+    }
+    
+    /**
+     * Lance le scraping asynchrone en arrière-plan pour enrichir les métadonnées
+     * des gamelist.json déjà générés
+     */
+    private fun launchMetadataEnrichment(context: Context, scannedConsoles: List<String>) {
+        CoroutineScope(Dispatchers.IO).launch {
+            Log.i(TAG, "Starting background metadata enrichment for ${scannedConsoles.size} consoles")
+            
+            val gamelibraryDir = File("/storage/emulated/0/GameLibrary-Data")
+            for (consoleName in scannedConsoles) {
+                try {
+                    val consoleDir = File(gamelibraryDir, consoleName)
+                    if (consoleDir.exists() && consoleDir.isDirectory) {
+                        // Lancer l'enrichissement en arrière-plan (non-bloquant)
+                        GamelistManager.enrichGamelistWithMetadata(consoleDir, consoleName)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error launching metadata enrichment for $consoleName: ${e.message}")
+                }
+            }
+            
+            Log.i(TAG, "Background metadata enrichment started for all scanned consoles")
         }
     }
 }

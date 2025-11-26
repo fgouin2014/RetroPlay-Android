@@ -29,7 +29,7 @@ import android.net.Uri;
 public class SplashActivity extends FragmentActivity {
     private static final String TAG = "SplashActivity";
     private static final int PERMISSION_REQUEST_CODE = 1001;
-    private static final long SCAN_TIMEOUT_MS = 60000; // 60 secondes max pour le scan (augmenté pour gros scans)
+    private static final long SCAN_TIMEOUT_MS = 30000; // 30 secondes max pour le scan
     
     private static final String[] REQUIRED_PERMISSIONS = {
         Manifest.permission.READ_MEDIA_IMAGES,
@@ -46,14 +46,11 @@ public class SplashActivity extends FragmentActivity {
     private TextView detailsText;
     private boolean permissionsGranted = false;
     private boolean scanCompleted = false;
-    private boolean preloadCompleted = false;
     private boolean scanStarted = false;
-    private boolean preloadStarted = false;
     private Handler handler = new Handler(Looper.getMainLooper());
     private Runnable timeoutRunnable;
     private int scannedConsolesCount = 0;
     private int totalGamesCount = 0;
-    private int preloadedCount = 0;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -161,17 +158,10 @@ public class SplashActivity extends FragmentActivity {
         updateStatus("Preparing scan...");
         updateDetails("Checking console directories...");
         
-        // Démarrer le WebServerService en parallèle pour éviter de l'attendre dans GameListActivity
-        startWebServerServiceEarly();
-        
-        // Précharger les gamelist.json existants en parallèle
-        startPreloadGamelists();
-        
         // Timeout pour éviter d'attendre indéfiniment
         timeoutRunnable = () -> {
-            Log.w(TAG, "Scan/preload timeout reached, proceeding anyway");
+            Log.w(TAG, "Scan timeout reached, proceeding anyway");
             scanCompleted = true;
-            preloadCompleted = true;
             checkAndLaunchMainActivity();
         };
         handler.postDelayed(timeoutRunnable, SCAN_TIMEOUT_MS);
@@ -266,8 +256,8 @@ public class SplashActivity extends FragmentActivity {
                                 }
                             }
                             
-                            // Vérifier si on peut lancer (attendre aussi le préchargement)
-                            checkAndLaunchMainActivity();
+                            // Attendre un peu pour que l'utilisateur voie le résultat
+                            handler.postDelayed(() -> checkAndLaunchMainActivity(), 1500);
                         }
                         
                         @Override
@@ -277,8 +267,8 @@ public class SplashActivity extends FragmentActivity {
                             Log.e(TAG, "Error in initial scan: " + error);
                             updateStatus("Scan error");
                             updateDetails("Could not complete scan.\n" + error);
-                            // Vérifier si on peut lancer (attendre aussi le préchargement)
-                            checkAndLaunchMainActivity();
+                            // Attendre un peu avant de continuer
+                            handler.postDelayed(() -> checkAndLaunchMainActivity(), 2000);
                         }
                     });
                 } else {
@@ -350,8 +340,7 @@ public class SplashActivity extends FragmentActivity {
                                     updateDetails("No new ROMs found");
                                 }
                                 
-                                // Vérifier si on peut lancer (attendre aussi le préchargement)
-                                checkAndLaunchMainActivity();
+                                handler.postDelayed(() -> checkAndLaunchMainActivity(), 1000);
                             }
                             
                             @Override
@@ -361,8 +350,7 @@ public class SplashActivity extends FragmentActivity {
                                 Log.e(TAG, "Error in rescan: " + error);
                                 updateStatus("Ready");
                                 updateDetails("Scan error: " + error);
-                                // Vérifier si on peut lancer (attendre aussi le préchargement)
-                                checkAndLaunchMainActivity();
+                                handler.postDelayed(() -> checkAndLaunchMainActivity(), 1000);
                             }
                         });
                     } else {
@@ -372,8 +360,7 @@ public class SplashActivity extends FragmentActivity {
                         Log.i(TAG, "Auto-scan disabled - Skipping scan");
                         updateStatus("Ready");
                         updateDetails("Auto-scan disabled");
-                        // Vérifier si on peut lancer (attendre aussi le préchargement)
-                        checkAndLaunchMainActivity();
+                        handler.postDelayed(() -> checkAndLaunchMainActivity(), 500);
                     }
                 }
             } catch (Exception e) {
@@ -387,59 +374,26 @@ public class SplashActivity extends FragmentActivity {
     }
     
     /**
-     * Démarre le préchargement des gamelist.json existants
-     */
-    private void startPreloadGamelists() {
-        if (preloadStarted) {
-            return; // Déjà lancé
-        }
-        
-        preloadStarted = true;
-        Log.i(TAG, "Starting gamelist preload...");
-        
-        // Précharger en arrière-plan
-        new Thread(() -> {
-            com.retroplay.GamelistCache.INSTANCE.preloadAllGamelists(this, new com.retroplay.GamelistCache.PreloadCallback() {
-                @Override
-                public void onProgress(String consoleName, int current, int total) {
-                    handler.post(() -> {
-                        if (current == 1 && total > 1) {
-                            updateDetails("Preloading gamelist.json... (" + current + "/" + total + ")");
-                        } else if (current > 1) {
-                            updateDetails("Preloading gamelist.json... (" + current + "/" + total + ")");
-                        }
-                    });
-                }
-                
-                @Override
-                public void onComplete(int loadedCount) {
-                    handler.post(() -> {
-                        preloadCompleted = true;
-                        preloadedCount = loadedCount;
-                        Log.i(TAG, "Gamelist preload complete: " + loadedCount + " gamelist.json loaded");
-                        checkAndLaunchMainActivity();
-                    });
-                }
-            });
-        }).start();
-    }
-    
-    /**
-     * Vérifie si on peut lancer MainActivity (permissions + scan terminé + préchargement terminé)
+     * Vérifie si on peut lancer MainActivity (permissions + scan terminé)
      */
     private void checkAndLaunchMainActivity() {
-        if (permissionsGranted && scanCompleted && preloadCompleted) {
-            Log.i(TAG, "All ready (scan: " + scannedConsolesCount + " consoles, preload: " + preloadedCount + " gamelist.json), launching MainActivity");
-            updateStatus("Ready!");
-            updateDetails(scannedConsolesCount > 0 ? 
-                scannedConsolesCount + " console" + (scannedConsolesCount > 1 ? "s" : "") + 
-                " ready with " + totalGamesCount + " game" + (totalGamesCount != 1 ? "s" : "") :
-                "Ready");
-            
-            // Lancer immédiatement (délais supprimés pour optimisation)
-            Intent intent = new Intent(this, MainActivity.class);
-            startActivity(intent);
-            finish();
+        if (permissionsGranted && scanCompleted) {
+            // Délai pour que l'utilisateur voie le résultat du scan (réduit de 300ms à 100ms)
+            handler.postDelayed(() -> {
+                Log.i(TAG, "All ready, launching MainActivity");
+                updateStatus("Launching...");
+                updateDetails(scannedConsolesCount > 0 ? 
+                    scannedConsolesCount + " console" + (scannedConsolesCount > 1 ? "s" : "") + 
+                    " ready with " + totalGamesCount + " game" + (totalGamesCount != 1 ? "s" : "") :
+                    "Ready");
+                
+                // Petit délai final avant le lancement (réduit de 800ms à 300ms)
+                handler.postDelayed(() -> {
+                    Intent intent = new Intent(this, MainActivity.class);
+                    startActivity(intent);
+                    finish();
+                }, 300);
+            }, 100);
         }
     }
     
@@ -468,78 +422,6 @@ public class SplashActivity extends FragmentActivity {
             }
         });
     }
-    
-    /**
-     * Démarre le WebServerService tôt pour éviter de l'attendre dans GameListActivity
-     */
-    private void startWebServerServiceEarly() {
-        new Thread(() -> {
-            try {
-                // Vérifier si le service est déjà démarré
-                if (isServiceRunning(com.retroplay.WebServerService.class)) {
-                    Log.i(TAG, "WebServerService already running");
-                    return;
-                }
-                
-                // Démarrer le service
-                Log.i(TAG, "Starting WebServerService early in SplashActivity...");
-                Intent serviceIntent = new Intent(this, com.retroplay.WebServerService.class);
-                startForegroundService(serviceIntent);
-                
-                // Attendre un peu que le service démarre
-                Thread.sleep(200);
-                
-                // Vérifier que le WebServer est prêt (max 3 secondes)
-                int maxRetries = 6;
-                int retryDelay = 500;
-                boolean serverReady = false;
-                
-                for (int i = 0; i < maxRetries; i++) {
-                    try {
-                        java.net.URL testUrl = new java.net.URL("http://localhost:7777/gamelibrary/api/consoles");
-                        java.net.HttpURLConnection testConn = (java.net.HttpURLConnection) testUrl.openConnection();
-                        testConn.setRequestMethod("GET");
-                        testConn.setConnectTimeout(500);
-                        testConn.setReadTimeout(500);
-                        int responseCode = testConn.getResponseCode();
-                        testConn.disconnect();
-                        
-                        if (responseCode == 200) {
-                            serverReady = true;
-                            Log.i(TAG, "WebServer ready in SplashActivity after " + (i + 1) + " attempts");
-                            break;
-                        }
-                    } catch (Exception e) {
-                        if (i < maxRetries - 1) {
-                            Thread.sleep(retryDelay);
-                        }
-                    }
-                }
-                
-                if (!serverReady) {
-                    Log.w(TAG, "WebServer not ready in SplashActivity, will retry in GameListActivity");
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Error starting WebServerService early: " + e.getMessage());
-            }
-        }).start();
-    }
-    
-    /**
-     * Vérifie si un service est déjà en cours d'exécution
-     */
-    private boolean isServiceRunning(Class<?> serviceClass) {
-        android.app.ActivityManager manager = (android.app.ActivityManager) getSystemService(android.content.Context.ACTIVITY_SERVICE);
-        if (manager != null) {
-            for (android.app.ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
-                if (serviceClass.getName().equals(service.service.getClassName())) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-    
     /**
      * Gère la réponse aux demandes de permissions
      */

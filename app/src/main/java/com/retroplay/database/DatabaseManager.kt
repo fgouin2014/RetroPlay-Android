@@ -3,159 +3,35 @@ package com.retroplay.database
 import android.util.Log
 import kotlinx.coroutines.*
 import java.io.File
-import java.io.FileInputStream
-import java.util.zip.CRC32
-import java.util.zip.ZipFile
-import java.util.Locale
 
+/**
+ * DatabaseManager - Lookup simplifié hash-based
+ * 
+ * Utilise uniquement les hashes (CRC32 pour compatibilité RDB) pour lookup
+ * Le calcul de hash est déplacé vers HashCalculator
+ */
 object DatabaseManager {
     private const val TAG = "DatabaseManager"
     private const val DATABASE_BASE_PATH = "/storage/emulated/0/RetroPlay-Data/database/rdb"
     private const val CACHE_BASE_PATH = "/storage/emulated/0/RetroPlay-Data/database/cache"
-    private val NOINTRO_BASE_PATHS = listOf(
-        "/storage/emulated/0/RetroPlay-Data/database/no-intro",
-        "/storage/emulated/0/RetroPlay-Data/database/metadat/no-intro"
-    )
     
     private val gameCache = mutableMapOf<String, MutableMap<String, GameInfo>>()
-    private val noIntroCacheDir = File("$CACHE_BASE_PATH/no-intro")
-    private val noIntroCrcPattern = Regex("""crc\s+([0-9a-fA-F]{8})""")
-    private val noIntroGameNamePattern = Regex("""game\s*\(\s*name\s+"([^"]+)"""")
     
     // Coroutine scope for async operations
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     // Progress callback for loading
-    // Kotlin automatically generates setter: onLoadProgress = ... (Java: setOnLoadProgress(...))
     var onLoadProgress: ((String, Int, Int) -> Unit)? = null
     
+    /**
+     * DEPRECATED: Utiliser HashCalculator.calculateHash() à la place
+     * Gardé pour compatibilité avec code existant
+     */
+    @Deprecated("Use HashCalculator.calculateHash() instead", ReplaceWith("HashCalculator.calculateHash(File(filePath))"))
     fun calculateCRC32(filePath: String): String? {
-        return try {
-            val file = File(filePath)
-            if (!file.exists()) {
-                Log.e(TAG, "File not found: $filePath")
-                return null
-            }
-            
-            // If file is a ZIP, extract and calculate CRC on ROM inside
-            if (file.name.endsWith(".zip", ignoreCase = true) || file.name.endsWith(".7z", ignoreCase = true)) {
-                return calculateCRC32FromArchive(file)
-            }
-            
-            val crc32 = CRC32()
-            val buffer = ByteArray(8192)
-            var skipBytes = 0
-            
-            // NES ROMs: Skip 16-byte iNES header (starts with "NES\x1A")
-            if (file.name.endsWith(".nes", ignoreCase = true)) {
-                FileInputStream(file).use { fis ->
-                    val header = ByteArray(4)
-                    if (fis.read(header) == 4 && 
-                        header[0] == 'N'.code.toByte() && 
-                        header[1] == 'E'.code.toByte() && 
-                        header[2] == 'S'.code.toByte() && 
-                        header[3] == 0x1A.toByte()) {
-                        skipBytes = 16  // Skip iNES header
-                        Log.d(TAG, "NES ROM detected, skipping 16-byte iNES header")
-                    }
-                }
-            }
-            
-            FileInputStream(file).use { fis ->
-                // Skip header if needed
-                if (skipBytes > 0) {
-                    fis.skip(skipBytes.toLong())
-                }
-                
-                var bytesRead: Int
-                while (fis.read(buffer).also { bytesRead = it } != -1) {
-                    crc32.update(buffer, 0, bytesRead)
-                }
-            }
-            
-            val crcValue = crc32.value.toString(16).uppercase().padStart(8, '0')
-            Log.d(TAG, "CRC32 calculated for ${file.name}: $crcValue (skipBytes=$skipBytes)")
-            return crcValue
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error calculating CRC32 for $filePath: ${e.message}", e)
-            null
-        }
-    }
-    private fun calculateCRC32FromArchive(archiveFile: File): String? {
-        return try {
-            if (!archiveFile.name.endsWith(".zip", ignoreCase = true)) {
-                Log.w(TAG, "Only .zip archives supported for now (not .7z)")
-                return null
-            }
-            
-            ZipFile(archiveFile).use { zip ->
-                // Find first ROM file in the archive
-                val entry = zip.entries().asSequence().firstOrNull { entry ->
-                    !entry.isDirectory && (
-                        entry.name.endsWith(".nes", ignoreCase = true) ||
-                        entry.name.endsWith(".unh", ignoreCase = true) ||  // UnHeadered NES
-                        entry.name.endsWith(".unf", ignoreCase = true) ||  // UnHeadered FDS
-                        entry.name.endsWith(".sfc", ignoreCase = true) ||
-                        entry.name.endsWith(".smc", ignoreCase = true) ||
-                        entry.name.endsWith(".gb", ignoreCase = true) ||
-                        entry.name.endsWith(".gbc", ignoreCase = true) ||
-                        entry.name.endsWith(".gba", ignoreCase = true) ||
-                        entry.name.endsWith(".bin", ignoreCase = true) ||
-                        entry.name.endsWith(".gen", ignoreCase = true) ||
-                        entry.name.endsWith(".md", ignoreCase = true)
-                    )
-                }
-                
-                if (entry == null) {
-                    Log.w(TAG, "No ROM file found in archive: ${archiveFile.name}")
-                    return null
-                }
-                
-                Log.d(TAG, "Found ROM in archive: ${entry.name}")
-                
-                // Read the ROM from the ZIP and calculate CRC
-                zip.getInputStream(entry).use { stream ->
-                    val crc32 = CRC32()
-                    val buffer = ByteArray(8192)
-                    var skipBytes = 0
-                    
-                    // Check if NES ROM with iNES header
-                    if (entry.name.endsWith(".nes", ignoreCase = true)) {
-                        // Read first 4 bytes to check for iNES header
-                        val header = ByteArray(4)
-                        val headerRead = stream.read(header)
-                        
-                        if (headerRead == 4 && 
-                            header[0] == 'N'.code.toByte() && 
-                            header[1] == 'E'.code.toByte() && 
-                            header[2] == 'S'.code.toByte() && 
-                            header[3] == 0x1A.toByte()) {
-                            // Skip remaining 12 bytes of iNES header (already read 4)
-                            stream.skip(12)
-                            skipBytes = 16
-                            Log.d(TAG, "iNES header detected in ${entry.name}, skipping 16 bytes")
-                        } else {
-                            // Not iNES, include those 4 bytes we just read
-                            crc32.update(header, 0, 4)
-                        }
-                    }
-                    
-                    // Calculate CRC on the rest of the data
-                    var bytesRead: Int
-                    while (stream.read(buffer).also { bytesRead = it } != -1) {
-                        crc32.update(buffer, 0, bytesRead)
-                    }
-                    
-                    val crcValue = crc32.value.toString(16).uppercase().padStart(8, '0')
-                    Log.d(TAG, "CRC32 from ZIP: ${archiveFile.name} → ${entry.name} = $crcValue (skipBytes=$skipBytes)")
-                    return crcValue
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error calculating CRC from archive: ${e.message}", e)
-            null
-        }
+        val file = File(filePath)
+        val hash = com.retroplay.scraper.HashCalculator.calculateHash(file)
+        return hash?.crc32
     }
     
     /**
@@ -207,103 +83,37 @@ object DatabaseManager {
     }
     
     fun lookupGame(crc: String, console: String): GameInfo? {
-        // Pour les sous-consoles fbneo, utiliser la console parent pour la base de données
-        val dbConsole = normalizeConsoleForDatabase(console)
-        Log.d(TAG, "lookupGame: console='$console' -> dbConsole='$dbConsole', CRC=$crc")
-        
-        val consoleCache = gameCache[dbConsole]
+        val consoleCache = gameCache[console]
         if (consoleCache != null) {
             val cached = consoleCache[crc]
             if (cached != null) {
                 Log.d(TAG, "Cache hit for CRC $crc: ${cached.name}")
                 return cached
-            } else {
-                Log.d(TAG, "Cache miss for CRC $crc in loaded database (${consoleCache.size} games loaded)")
             }
-        } else {
-            Log.d(TAG, "Database not loaded for $dbConsole, loading now...")
         }
         
-        loadDatabase(dbConsole)
+        Log.d(TAG, "Cache miss for CRC $crc, loading from database...")
+        loadDatabase(console)
         
-        val result = gameCache[dbConsole]?.get(crc)
-        if (result != null) {
-            Log.d(TAG, "✅ Found game in database: ${result.name} (CRC: $crc)")
-        } else {
-            Log.w(TAG, "⚠️ Game not found in database: CRC=$crc, console=$console (dbConsole=$dbConsole, cacheSize=${gameCache[dbConsole]?.size ?: 0})")
-        }
-        return result
-    }
-    
-    /**
-     * Normalise le nom de console pour la base de données
-     * Toutes les sous-consoles arcade (fbneo/, cps1, cps2, cps3, dataeast, taito, etc.)
-     * utilisent la même base de données FBNeo/Arcade
-     */
-    private fun normalizeConsoleForDatabase(console: String): String {
-        return when {
-            // Sous-consoles fbneo (fbneo/cps1, fbneo/taito, etc.)
-            console.startsWith("fbneo/") -> "fbneo"
-            // Consoles arcade génériques
-            console == "arcade" || console == "mame" -> "fbneo"
-            // Sous-consoles arcade directes (cps1, cps2, cps3, dataeast, taito, etc.)
-            // Toutes ces consoles utilisent la base de données FBNeo/Arcade
-            console == "cps1" || console == "cps2" || console == "cps3" || 
-            console == "cpiii" || console == "dataeast" || console == "taito" ||
-            console == "neogeo" || console == "sega" -> "fbneo"
-            else -> console
-        }
+        return gameCache[console]?.get(crc)
     }
     
     fun loadDatabase(console: String) {
-        // Normaliser la console pour la base de données (sous-consoles → parent)
-        val dbConsole = normalizeConsoleForDatabase(console)
-        Log.d(TAG, "loadDatabase: console='$console' -> dbConsole='$dbConsole'")
-        
-        if (gameCache.containsKey(dbConsole)) {
-            val cacheSize = gameCache[dbConsole]?.size ?: 0
-            Log.d(TAG, "Database for $dbConsole already loaded ($cacheSize games)")
+        if (gameCache.containsKey(console)) {
+            Log.d(TAG, "Database for $console already loaded (${gameCache[console]?.size} games)")
             return
         }
         
-        val consoleName = getConsoleFullName(dbConsole)
-        Log.d(TAG, "Loading database for console: $console (dbConsole=$dbConsole, consoleName=$consoleName)")
+        val consoleName = getConsoleFullName(console)
         
         // Look for .rdb file in RetroPlay-Data/database/rdb/
-        // Pour FBNeo, essayer plusieurs noms possibles
-        val rdbFile = when (dbConsole) {
-            "fbneo", "arcade", "mame" -> {
-                // Essayer plusieurs noms possibles pour la base de données arcade
-                val possibleNames = listOf("FBNeo.rdb", "Arcade.rdb", "MAME.rdb", "fbneo.rdb", "arcade.rdb", "mame.rdb")
-                val found = possibleNames.firstOrNull { name ->
-                    val file = File("$DATABASE_BASE_PATH/$name")
-                    val exists = file.exists()
-                    Log.d(TAG, "Checking RDB file: ${file.absolutePath} -> exists=$exists")
-                    exists
-                }
-                if (found != null) {
-                    File("$DATABASE_BASE_PATH/$found")
-                } else {
-                    val fallback = File("$DATABASE_BASE_PATH/$consoleName.rdb")
-                    Log.d(TAG, "No RDB file found in possible names, using fallback: ${fallback.absolutePath}")
-                    fallback
-                }
-            }
-            else -> {
-                val file = File("$DATABASE_BASE_PATH/$consoleName.rdb")
-                Log.d(TAG, "Using standard RDB path: ${file.absolutePath}")
-                file
-            }
-        }
+        val rdbFile = File("$DATABASE_BASE_PATH/$consoleName.rdb")
         
         if (!rdbFile.exists()) {
             Log.w(TAG, "⚠️ RDB file not found: ${rdbFile.absolutePath}")
-            Log.w(TAG, "   Searched in: $DATABASE_BASE_PATH")
-            gameCache[dbConsole] = mutableMapOf()
+            gameCache[console] = mutableMapOf()
             return
         }
-        
-        Log.i(TAG, "✅ Using RDB file: ${rdbFile.name} for console $dbConsole (path: ${rdbFile.absolutePath})")
         
         // Check if we have a disk cache
         val cacheDir = File(CACHE_BASE_PATH)
@@ -316,20 +126,18 @@ object DatabaseManager {
             // Load from cache (much faster!)
             Log.i(TAG, "Loading database for $consoleName from disk cache...")
             try {
-                loadFromCache(cacheFile, dbConsole).toMutableMap().also {
-                    augmentWithNoIntroVariants(it, dbConsole)
-                }
+                loadFromCache(cacheFile, console).toMutableMap()
             } catch (e: Exception) {
                 Log.w(TAG, "Cache corrupted, re-parsing .rdb: ${e.message}")
-                parseAndCache(rdbFile, cacheFile, dbConsole)
+                parseAndCache(rdbFile, cacheFile, console)
             }
         } else {
             // Parse .rdb and save to cache
             Log.i(TAG, "Loading database for $consoleName from .rdb (no cache)...")
-            parseAndCache(rdbFile, cacheFile, dbConsole)
+            parseAndCache(rdbFile, cacheFile, console)
         }
         
-        gameCache[dbConsole] = games
+        gameCache[console] = games
         
         Log.i(TAG, "✅ Database loaded for $consoleName: ${games.size} games")
     }
@@ -342,8 +150,6 @@ object DatabaseManager {
         val consoleMap = games.mapValues { (_, game) ->
             game.copy(console = console)
         }.toMutableMap()
-        
-        augmentWithNoIntroVariants(consoleMap, console)
         
         // Save to disk cache
         try {
@@ -377,160 +183,6 @@ object DatabaseManager {
         }
     }
     
-    private fun augmentWithNoIntroVariants(
-        gamesByCrc: MutableMap<String, GameInfo>,
-        console: String
-    ) {
-        val consoleName = getConsoleFullName(console)
-        Log.i(TAG, "No-Intro augmentation started for $consoleName")
-        val noIntroFile = resolveNoIntroFile(consoleName) ?: run {
-            Log.i(TAG, "No-Intro metadata missing for $consoleName (searched ${NOINTRO_BASE_PATHS.joinToString()})")
-            return
-        }
-
-        val nameIndex = gamesByCrc.values.groupBy { it.name }
-        var currentComment: String? = null
-        var currentGameName: String? = null
-        var added = 0
-        var romLines = 0
-        var matchedBase = 0
-
-        noIntroFile.useLines { lines ->
-            lines.forEach { line ->
-                val trimmed = line.trim()
-                when {
-                    // Capture official game name from No-Intro block header
-                    trimmed.startsWith("game ") -> {
-                        val m = noIntroGameNamePattern.find(trimmed)
-                        currentGameName = m?.groupValues?.getOrNull(1)
-                    }
-                    trimmed.startsWith("comment ") -> {
-                        currentComment = trimmed.substringAfter("comment")
-                            .trim()
-                            .trim('"')
-                    }
-                    trimmed.startsWith("rom ") -> {
-                        romLines++
-                        val crcMatch = noIntroCrcPattern.find(trimmed) ?: return@forEach
-                        val crc = crcMatch.groupValues[1].uppercase(Locale.US)
-                        if (gamesByCrc.containsKey(crc)) {
-                            return@forEach
-                        }
-                        // Prefer official game name from 'game (...)', fallback to comment if used
-                        val baseKey = currentGameName ?: currentComment ?: return@forEach
-                        val baseGame = nameIndex[baseKey]?.firstOrNull()
-                        if (baseGame != null) {
-                            gamesByCrc[crc] = baseGame.copy(crc = crc)
-                            added++
-                            matchedBase++
-                        }
-                    }
-                    trimmed == ")" -> {
-                        currentComment = null
-                        currentGameName = null
-                    }
-                }
-            }
-        }
-
-        Log.i(
-            TAG,
-            "No-Intro augmentation finished for $consoleName, roms=$romLines, matched=$matchedBase, added=$added (source=${noIntroFile.absolutePath})"
-        )
-    }
-    
-    private fun resolveNoIntroFile(consoleFullName: String): File? {
-        if (!noIntroCacheDir.exists()) {
-            noIntroCacheDir.mkdirs()
-        }
-
-        NOINTRO_BASE_PATHS.forEach { base ->
-            // 1) Exact match (.dat)
-            val exactPlain = File("$base/$consoleFullName.dat")
-            if (exactPlain.exists()) {
-                Log.i(TAG, "Using No-Intro DAT (exact): ${exactPlain.absolutePath}")
-                return exactPlain
-            }
-
-            // 2) Exact match zipped (.dat.zip)
-            val exactZip = File("$base/$consoleFullName.dat.zip")
-            if (exactZip.exists()) {
-                val cachedFile = File(noIntroCacheDir, "$consoleFullName.dat")
-                val needsExtraction = !cachedFile.exists() || cachedFile.lastModified() < exactZip.lastModified()
-                if (needsExtraction) {
-                    try {
-                        unzipDatFile(exactZip, cachedFile)
-                        Log.i(TAG, "Extracted ${exactZip.name} to cache for $consoleFullName")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to extract ${exactZip.name}: ${e.message}", e)
-                        if (cachedFile.exists()) cachedFile.delete()
-                        return@forEach
-                    }
-                }
-                if (cachedFile.exists()) {
-                    Log.i(TAG, "Using No-Intro DAT (cached from zip): ${cachedFile.absolutePath}")
-                    return cachedFile
-                }
-            }
-
-            // 3) Fallback: any DAT whose name starts with or contains the consoleFullName (handles variants)
-            val baseDir = File(base)
-            if (baseDir.exists() && baseDir.isDirectory) {
-                val candidates = baseDir.listFiles { file ->
-                    val n = file.name
-                    file.isFile && n.endsWith(".dat", ignoreCase = true) &&
-                        (n.startsWith(consoleFullName, ignoreCase = true) || n.contains(consoleFullName, ignoreCase = true))
-                }?.sortedBy { it.name } ?: emptyList()
-
-                if (candidates.isNotEmpty()) {
-                    Log.i(TAG, "Using No-Intro DAT (variant): ${candidates.first().absolutePath}")
-                    return candidates.first()
-                }
-
-                // 4) Fallback for zipped variants
-                val zippedCandidates = baseDir.listFiles { file ->
-                    val n = file.name
-                    file.isFile && n.endsWith(".dat.zip", ignoreCase = true) &&
-                        (n.startsWith(consoleFullName, ignoreCase = true) || n.contains(consoleFullName, ignoreCase = true))
-                } ?: emptyArray()
-                if (zippedCandidates.isNotEmpty()) {
-                    val chosen = zippedCandidates.sortedBy { it.name }.first()
-                    val cachedFile = File(noIntroCacheDir, "${consoleFullName}.dat")
-                    val needsExtraction = !cachedFile.exists() || cachedFile.lastModified() < chosen.lastModified()
-                    if (needsExtraction) {
-                        try {
-                            unzipDatFile(chosen, cachedFile)
-                            Log.i(TAG, "Extracted ${chosen.name} (variant) to cache for $consoleFullName")
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Failed to extract ${chosen.name}: ${e.message}", e)
-                            if (cachedFile.exists()) cachedFile.delete()
-                            return@forEach
-                        }
-                    }
-                    if (cachedFile.exists()) {
-                        Log.i(TAG, "Using No-Intro DAT (cached from zip variant): ${cachedFile.absolutePath}")
-                        return cachedFile
-                    }
-                }
-            }
-        }
-        return null
-    }
-    
-    private fun unzipDatFile(zipFile: File, outputFile: File) {
-        ZipFile(zipFile).use { zip ->
-            val entry = zip.entries().asSequence()
-                .firstOrNull { !it.isDirectory && it.name.endsWith(".dat", ignoreCase = true) }
-                ?: throw IllegalArgumentException("No .dat entry found in ${zipFile.name}")
-
-            outputFile.outputStream().use { out ->
-                zip.getInputStream(entry).use { input ->
-                    input.copyTo(out)
-                }
-            }
-            outputFile.setLastModified(zipFile.lastModified())
-        }
-    }
 
     fun getCheatsPath(gameInfo: GameInfo, console: String): File? {
         val consoleName = getConsoleFullName(console)
@@ -555,13 +207,6 @@ object DatabaseManager {
     }
     
     private fun getConsoleFullName(console: String): String {
-        // Gérer toutes les sous-consoles arcade (fbneo/, cps1, cps2, cps3, dataeast, taito, etc.)
-        // Toutes utilisent la même base de données FBNeo/Arcade
-        val dbConsole = normalizeConsoleForDatabase(console)
-        if (dbConsole == "fbneo") {
-            return "FBNeo" // ou "Arcade" selon le nom du fichier .rdb disponible
-        }
-        
         return when (console) {
             "nes" -> "Nintendo - Nintendo Entertainment System"
             "snes" -> "Nintendo - Super Nintendo Entertainment System"

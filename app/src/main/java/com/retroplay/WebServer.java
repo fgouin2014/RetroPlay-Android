@@ -504,32 +504,9 @@ public class WebServer {
                 Log.i(TAG, "Served improved auto-generated gamelist.json for " + consoleName);
             }
             
-        } catch (java.net.SocketException e) {
-            // Broken pipe: client a fermé la connexion avant la fin de l'envoi
-            // C'est normal, pas besoin de logger comme erreur
-            if (e.getMessage() != null && e.getMessage().contains("Broken pipe")) {
-                Log.d(TAG, "Client closed connection during gamelist.json generation (normal)");
-            } else {
-                Log.w(TAG, "Socket error during gamelist.json generation: " + e.getMessage());
-            }
-            // Ne pas envoyer de réponse d'erreur, la connexion est déjà fermée
-        } catch (java.io.IOException e) {
-            // Autres erreurs IO (connexion fermée, etc.)
-            if (e.getMessage() != null && (e.getMessage().contains("Broken pipe") || 
-                                          e.getMessage().contains("Connection reset"))) {
-                Log.d(TAG, "Client closed connection during gamelist.json generation (normal)");
-            } else {
-                Log.w(TAG, "IO error during gamelist.json generation: " + e.getMessage());
-            }
-            // Ne pas envoyer de réponse d'erreur, la connexion est probablement fermée
         } catch (Exception e) {
             Log.e(TAG, "Error generating improved gamelist.json", e);
-            try {
-                sendErrorResponse(outputStream, 500, "Internal Server Error");
-            } catch (Exception sendError) {
-                // Si on ne peut pas envoyer l'erreur, la connexion est probablement fermée
-                Log.d(TAG, "Could not send error response (connection closed)");
-            }
+            sendErrorResponse(outputStream, 500, "Internal Server Error");
         }
     }
     

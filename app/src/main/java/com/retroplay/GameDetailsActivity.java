@@ -50,6 +50,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     private TextView gameGenre;
     private TextView gamePlayers;
     private TextView gameReleaseDate;
+    private TextView gameRating;
     private Button playButton;
     private MaterialButton playNativeButton;
     private MaterialButton loadSaveButton;
@@ -169,6 +170,8 @@ public class GameDetailsActivity extends AppCompatActivity {
         gameGenre = findViewById(R.id.game_genre);
         gamePlayers = findViewById(R.id.game_players);
         gameReleaseDate = findViewById(R.id.game_release_date);
+        // gameRating n'existe pas dans le layout actuel, laisser null
+        gameRating = null;
         playButton = findViewById(R.id.play_button);
         playNativeButton = findViewById(R.id.play_native_button);
         loadSaveButton = findViewById(R.id.load_save_button);
@@ -185,6 +188,10 @@ public class GameDetailsActivity extends AppCompatActivity {
         consoleDefaultInfo = findViewById(R.id.consoleDefaultInfo);
     }
     
+    /**
+     * Popule les détails du jeu depuis le gamelist.json (pas de lookup runtime)
+     * Style ES: toutes les métadonnées sont dans le gamelist.json
+     */
     private void populateGameDetails() {
         // Titre du jeu
         gameTitle.setText(game.getName());
@@ -193,83 +200,224 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Images (load immediately)
         loadGameImages();
         
-        // === UTILISER UNIQUEMENT LES MÉTADONNÉES DU GAMELIST.JSON ===
-        // TOUT est déjà enrichi lors de la génération initiale
-        // Pas de lookup de base de données - utiliser directement les métadonnées du Game object
-        currentGameCRC = null; // Pas besoin de CRC dans GameDetailsActivity
-        currentGameInfo = null; // Pas besoin de GameInfo - tout est dans le gamelist.json
-        setGameInfoDialogVisible(false);
-        
-        // Afficher directement les métadonnées du gamelist.json
+        // Afficher les métadonnées directement depuis le Game object (gamelist.json)
         updateGameDetailsFromGamelist();
     }
     
     /**
-     * Update game details UI avec les métadonnées du gamelist.json
-     * TOUT est déjà enrichi lors de la génération initiale - pas de lookup de base de données
+     * Update game details UI avec métadonnées du gamelist.json
+     * Style ES: toutes les métadonnées sont déjà dans le gamelist.json
      */
     private void updateGameDetailsFromGamelist() {
-        Log.d(TAG, "Using gamelist.json metadata (already enriched during generation)");
+        // Stocker hash pour GameInfoDialog
+        currentGameCRC = game.getHash();
+        currentGameInfo = null; // Plus de lookup runtime
+        updateGameInfoButtonState();
         
-        // Description - Utiliser directement depuis le gamelist.json
-        // Si description est vide mais developer/publisher existent, construire la description
+        // Description
         String description = (game.getDesc() != null && !game.getDesc().isEmpty()) 
             ? game.getDesc() 
-            : "";
+            : "No description available";
         
-        // Si pas de description mais developer/publisher disponibles, construire
-        if (description.isEmpty()) {
-            if (game.getDeveloper() != null && !game.getDeveloper().isEmpty()) {
-                if (game.getPublisher() != null && !game.getPublisher().isEmpty() && !game.getPublisher().equals(game.getDeveloper())) {
-                    description = "Developer: " + game.getDeveloper() + " | Publisher: " + game.getPublisher();
-                } else {
-                    description = "Developer: " + game.getDeveloper();
-                }
-            }
-        }
-        
-        if (description.isEmpty()) {
-            description = "No description available";
+        // Ajouter hash si disponible
+        if (game.getHash() != null) {
+            description += "\n\n💾 Hash: " + game.getHash();
         }
         gameDescription.setText(description);
         
-        // Genre - Utiliser directement depuis le gamelist.json
-        String displayGenre = (game.getGenre() != null && !game.getGenre().isEmpty()) 
-            ? game.getGenre() 
-            : "";
+        // Genre
+        String displayGenre = (game.getGenre() != null && !game.getGenre().isEmpty())
+            ? "🎭 " + game.getGenre()
+            : "🎭 Unknown";
         gameGenre.setText(displayGenre);
         
-        // Nombre de joueurs - Utiliser directement depuis le gamelist.json
-        int maxPlayers = 1; // Default
-        String playersStr = (game.getPlayers() != null) 
-            ? game.getPlayers().replaceAll("[^0-9]", "") 
-            : "";
-        if (!playersStr.isEmpty()) {
-            try {
-                maxPlayers = Integer.parseInt(playersStr);
-            } catch (NumberFormatException e) {
-                maxPlayers = 1; // Fallback
-            }
+        // Nombre de joueurs
+        String playersText = "👥 ";
+        if (game.getPlayers() != null && !game.getPlayers().isEmpty()) {
+            playersText += game.getPlayers();
+        } else {
+            playersText += "1";
         }
-        String playersText = "👥 " + maxPlayers + "P";
         gamePlayers.setText(playersText);
         
-        // Date de sortie - Utiliser directement depuis le gamelist.json
-        // Ajouter developer si disponible
-        String releaseDate = (game.getReleasedate() != null && !game.getReleasedate().isEmpty()) 
-            ? formatReleaseDate(game.getReleasedate()) 
-            : "";
-        
-        // Ajouter developer/publisher à la date si disponible
+        // Date de sortie
+        String releaseDate = formatReleaseDate(game.getReleasedate());
         if (game.getDeveloper() != null && !game.getDeveloper().isEmpty()) {
-            if (!releaseDate.isEmpty()) {
-                releaseDate += " • 🏢 " + game.getDeveloper();
+            releaseDate += " • 🏢 " + game.getDeveloper();
+        }
+        if (game.getPublisher() != null && !game.getPublisher().isEmpty() && 
+            !game.getPublisher().equals(game.getDeveloper())) {
+            releaseDate += " • 📦 " + game.getPublisher();
+        }
+        gameReleaseDate.setText(releaseDate);
+        
+        // Rating si disponible
+        if (gameRating != null) {
+            if (game.getRating() != null && !game.getRating().isEmpty()) {
+                gameRating.setText("⭐ " + game.getRating());
+                gameRating.setVisibility(View.VISIBLE);
             } else {
-                releaseDate = "🏢 " + game.getDeveloper();
+                gameRating.setVisibility(View.GONE);
+            }
+        }
+    }
+    
+    /**
+     * DEPRECATED: Résout le chemin de la ROM pour le calcul du CRC32
+     * Plus utilisé - les métadonnées sont dans le gamelist.json
+     */
+    @Deprecated
+    private String resolveRomPathForMetadata() {
+        final String baseDir = "/storage/emulated/0/GameLibrary-Data/";
+        final String consoleDir = getRealConsoleDirectory(game.getConsole());
+        final String console = game.getConsole().toLowerCase();
+        
+        // Utiliser DIRECTEMENT game.getPath() (chemin local, pas URL HTTP)
+        // Format: "./mario.zip" ou "mario.zip"
+        String rawPath = game.getPath();
+        if (rawPath == null || rawPath.isEmpty()) {
+            Log.e(TAG, "[DB] game.getPath() is null or empty");
+            return null;
+        }
+        
+        // Nettoyer le chemin (enlever "./" si présent)
+        String cleanPath = rawPath.startsWith("./") ? rawPath.substring(2) : rawPath;
+        
+        // Construire le chemin complet local
+        String localPath = baseDir + consoleDir + "/" + cleanPath;
+        Log.d(TAG, "[DB] Using local file path (not HTTP): " + localPath);
+        
+        // Extraire juste le nom du fichier pour le cache
+        String fileName = cleanPath;
+        int lastSlash = cleanPath.lastIndexOf("/");
+        if (lastSlash >= 0) {
+            fileName = cleanPath.substring(lastSlash + 1);
+        }
+        
+        // Normaliser le nom de console AVANT de détecter le type de fichier
+        String canonicalId = ConsoleNameMapper.normalizeToCanonical(console);
+        Log.d(TAG, "[DB] Console: " + console + " -> Canonical: " + canonicalId);
+        
+        // Détecter si c'est une archive qui serait extraite en cache
+        boolean isNativeCompressedFormat = 
+            fileName.endsWith(".pbp") || fileName.endsWith(".chd") || 
+            fileName.endsWith(".cso") || fileName.endsWith(".daa");
+        boolean isArcadeZip = (console.startsWith("fbneo") || 
+                               console.equals("arcade") || 
+                               console.equals("mame") || 
+                               console.equals("neogeo")) && 
+                              fileName.endsWith(".zip");
+        boolean isArchive = (fileName.endsWith(".zip") || fileName.endsWith(".7z")) && !isArcadeZip;
+        
+        // TOUTES les consoles: vérifier le cache d'abord si c'est une archive
+        // (même pour les consoles non listées dans le switch, elles utiliseront .bin par défaut)
+        if (isArchive && !isNativeCompressedFormat) {
+            // Construire le chemin du cache (MÊME logique que extractToCacheAsync)
+            // Utiliser le répertoire réel de la console (pas l'ID canonique)
+            final String cacheDir = baseDir + ".cache/" + consoleDir;
+            
+            // Déterminer l'extension cible selon la console
+            // IMPORTANT: Le default utilise .bin pour TOUTES les consoles non listées
+            final String targetExtension;
+            switch (canonicalId) {
+                case "lynx": targetExtension = ".lnx"; break;
+                case "atari2600": targetExtension = ".a26"; break;
+                case "atari5200":
+                case "a5200": targetExtension = ".a52"; break;
+                case "atari7800":
+                case "a7800": targetExtension = ".a78"; break;
+                case "nes":
+                case "famicom":
+                case "fc": targetExtension = ".nes"; break;
+                case "snes":
+                case "sfc":
+                case "superfamicom": targetExtension = ".sfc"; break;
+                case "n64": targetExtension = ".z64"; break;
+                case "gb": targetExtension = ".gb"; break;
+                case "gbc": targetExtension = ".gbc"; break;
+                case "gba": targetExtension = ".gba"; break;
+                case "genesis":
+                case "megadrive":
+                case "md": targetExtension = ".bin"; break;
+                case "mastersystem":
+                case "sms": targetExtension = ".sms"; break;
+                case "gamegear":
+                case "gg": targetExtension = ".gg"; break;
+                case "32x": targetExtension = ".32x"; break;
+                case "ngp": targetExtension = ".ngp"; break;
+                case "wonderswancolor":
+                case "ws": targetExtension = ".ws"; break;
+                case "pce": targetExtension = ".pce"; break;
+                case "psx":
+                case "ps1":
+                case "playstation": targetExtension = ".bin"; break; // PSX peut être .bin, .cue, .iso, etc.
+                case "psp": targetExtension = ".iso"; break;
+                case "fbneo":
+                case "arcade": targetExtension = ".zip"; break;
+                // DEFAULT: Pour TOUTES les autres consoles non listées, utiliser .bin
+                // Cela garantit que toutes les consoles fonctionnent, même celles non explicitement listées
+                default: 
+                    targetExtension = ".bin"; 
+                    Log.d(TAG, "[DB] Console '" + canonicalId + "' not in switch, using default .bin extension");
+                    break;
+            }
+            
+            // Nom du fichier extrait (sans région) - MÊME logique que extractToCacheAsync
+            String simpleName = game.getName().replaceAll("\\s*\\(.*?\\)\\s*", "").trim();
+            String cachedRomPath = cacheDir + "/" + simpleName + targetExtension;
+            
+            // Vérifier si déjà en cache (nom exact)
+            java.io.File cachedRomFile = new java.io.File(cachedRomPath);
+            if (cachedRomFile.exists()) {
+                Log.d(TAG, "[DB] Using cached ROM for CRC calculation: " + cachedRomPath);
+                return cachedRomPath;
+            }
+            
+            // Si pas trouvé, chercher dans le répertoire cache (variantes de noms)
+            java.io.File cacheDirFile = new java.io.File(cacheDir);
+            if (cacheDirFile.exists() && cacheDirFile.isDirectory()) {
+                java.io.File[] cacheFiles = cacheDirFile.listFiles();
+                if (cacheFiles != null) {
+                    Log.d(TAG, "[DB] Cache directory exists, searching for: " + simpleName + targetExtension + " (found " + cacheFiles.length + " files)");
+                    // Chercher un fichier avec la bonne extension
+                    for (java.io.File file : cacheFiles) {
+                        if (file.isFile() && file.getName().endsWith(targetExtension)) {
+                            // Vérifier si le nom correspond (sans tenir compte de la casse et des caractères spéciaux)
+                            String cacheFileName = file.getName().replace(targetExtension, "").toLowerCase();
+                            String simpleNameLower = simpleName.toLowerCase();
+                            if (cacheFileName.equals(simpleNameLower) || 
+                                cacheFileName.contains(simpleNameLower) || 
+                                simpleNameLower.contains(cacheFileName)) {
+                                Log.d(TAG, "[DB] Using cached ROM (variant name) for CRC calculation: " + file.getAbsolutePath());
+                                return file.getAbsolutePath();
+                            }
+                        }
+                    }
+                    Log.d(TAG, "[DB] No matching cached ROM found in cache directory");
+                }
+            } else {
+                Log.d(TAG, "[DB] Cache directory does not exist: " + cacheDir);
             }
         }
         
-        gameReleaseDate.setText(releaseDate);
+        // Sinon, utiliser le chemin local direct (pas d'URL HTTP)
+        // DatabaseManager.calculateCRC32() gère l'extraction depuis ZIP automatiquement
+        java.io.File localFile = new java.io.File(localPath);
+        if (localFile.exists()) {
+            Log.d(TAG, "[DB] Using local file for CRC calculation: " + localPath);
+            return localPath;
+        } else {
+            Log.w(TAG, "[DB] Local file does not exist: " + localPath);
+            // Dernier recours: essayer avec juste le nom du fichier
+            String fallbackPath = baseDir + consoleDir + "/" + fileName;
+            java.io.File fallbackFile = new java.io.File(fallbackPath);
+            if (fallbackFile.exists()) {
+                Log.d(TAG, "[DB] Using fallback path: " + fallbackPath);
+                return fallbackPath;
+            }
+            Log.e(TAG, "[DB] Neither localPath nor fallbackPath exist");
+            return localPath; // Retourner quand même pour que calculateCRC32() gère l'erreur
+        }
     }
     
     private void loadGameImages() {
@@ -348,35 +496,22 @@ public class GameDetailsActivity extends AppCompatActivity {
         applyTheme();
     }
     
-    /**
-     * Obtient le nom du jeu à utiliser pour les intents
-     * Pour les jeux d'arcade, utilise le nom de la base de données si disponible
-     */
-    private String getGameNameForIntent() {
-        String console = game.getConsole().toLowerCase();
-        boolean isArcade = console.equals("arcade") || console.equals("mame") || 
-                          console.startsWith("fbneo") || console.equals("neogeo") ||
-                          console.equals("cps1") || console.equals("cps2") || console.equals("cps3");
-        
-        if (isArcade && currentGameInfo != null && currentGameInfo.getName() != null && !currentGameInfo.getName().isEmpty()) {
-            Log.d(TAG, "Using database name for arcade game: " + currentGameInfo.getName());
-            return currentGameInfo.getName();
-        }
-        
-        return game.getName();
-    }
-    
     private void launchGame() {
-        String gameNameForIntent = getGameNameForIntent();
-        Log.i(TAG, "Lancement du jeu (WASM): " + gameNameForIntent);
+        Log.i(TAG, "Lancement du jeu (WASM): " + game.getName());
         
         // Get console configuration (options avancées non accessibles dans EmulatorJS GUI)
         ConsoleConfigActivity.ConsoleConfig config = ConsoleConfigActivity.getConfig(this, game.getConsole());
         
         // Get core override if exists
-        String fileName = game.getFile();
-        if (fileName.startsWith("http://") || fileName.startsWith("https://")) {
-            fileName = fileName.substring(fileName.lastIndexOf("/") + 1);
+        // Extraire le nom de fichier depuis le chemin local
+        String fileName = game.getPath();
+        if (fileName.startsWith("./")) {
+            fileName = fileName.substring(2);
+        }
+        // Extraire juste le nom du fichier (sans le chemin)
+        int lastSlash = fileName.lastIndexOf("/");
+        if (lastSlash >= 0) {
+            fileName = fileName.substring(lastSlash + 1);
         }
         String consoleDir = getRealConsoleDirectory(game.getConsole());
         String relativePath = consoleDir + "/" + fileName;
@@ -397,8 +532,9 @@ public class GameDetailsActivity extends AppCompatActivity {
             // Autres consoles utilisent WebView
             Log.i(TAG, "Launching with WebView");
             Intent intent = new Intent(this, WebViewActivity.class);
-            intent.putExtra("file", game.getFile());
-            intent.putExtra("gameName", gameNameForIntent);
+            // Utiliser getFileUrl() pour le WebView qui a besoin d'une URL HTTP
+            intent.putExtra("file", game.getFileUrl());
+            intent.putExtra("gameName", game.getName());
             intent.putExtra("console", game.getConsole());
             intent.putExtra("touchScale", config.touchScale);
             intent.putExtra("touchAlpha", config.touchAlpha);
@@ -471,11 +607,15 @@ public class GameDetailsActivity extends AppCompatActivity {
         String slotInfo = (slot == 0) ? "[NEW GAME]" : "[LOAD SLOT " + slot + "]";
         Log.i(TAG, "Lancement du jeu (NATIVE COMPOSE): " + game.getName() + " " + slotInfo);
         
-        // Extraire le nom du fichier depuis l'URL ou utiliser tel quel
-        String fileName = game.getFile();
-        if (fileName.startsWith("http://") || fileName.startsWith("https://")) {
-            // Extraire juste le nom du fichier depuis l'URL
-            fileName = fileName.substring(fileName.lastIndexOf("/") + 1);
+        // Extraire le nom du fichier depuis le chemin local
+        String fileName = game.getPath();
+        if (fileName.startsWith("./")) {
+            fileName = fileName.substring(2);
+        }
+        // Extraire juste le nom du fichier (sans le chemin)
+        int lastSlash = fileName.lastIndexOf("/");
+        if (lastSlash >= 0) {
+            fileName = fileName.substring(lastSlash + 1);
         }
         
         // Construire le chemin complet vers la ROM
@@ -535,6 +675,17 @@ public class GameDetailsActivity extends AppCompatActivity {
         // === DATABASE LOOKUP (NEW) ===
         // Calculate CRC32 and lookup game metadata
         String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
+        
+        // Fallback: Si le calcul échoue, utiliser le hash du gamelist.json si c'est un CRC32 (8 caractères hex)
+        if (gameCRC == null && game.getHash() != null && !game.getHash().isEmpty()) {
+            String hash = game.getHash();
+            // CRC32 = 8 caractères hexadécimaux (ex: "A1B2C3D4")
+            if (hash.length() == 8 && hash.matches("[0-9A-Fa-f]{8}")) {
+                gameCRC = hash.toUpperCase();
+                Log.i(TAG, "Using CRC32 from gamelist.json: " + gameCRC);
+            }
+        }
+        
         if (gameCRC != null) {
             Log.i(TAG, "ROM CRC32: " + gameCRC);
             
@@ -561,17 +712,16 @@ public class GameDetailsActivity extends AppCompatActivity {
             } else {
                 Log.w(TAG, "⚠️ Game not found in database (CRC: " + gameCRC + ")");
             }
+        } else {
+            Log.w(TAG, "⚠️ Could not determine CRC32 for game (ROM calculation failed and no CRC32 in gamelist.json)");
         }
         
         // Determine which emulator activity to use based on user preference
         Class<?> emulatorActivity = getEmulatorActivityClass(game.getConsole());
         
-        // Pour les jeux d'arcade, utiliser le nom de la base de données si disponible
-        String gameNameForIntent = getGameNameForIntent();
-        
         Intent intent = new Intent(this, emulatorActivity);
         intent.putExtra("romPath", romPath);
-        intent.putExtra("gameName", gameNameForIntent);
+        intent.putExtra("gameName", game.getName());
         intent.putExtra("gameId", currentGalleryGameId);
         intent.putExtra("console", game.getConsole());
         intent.putExtra("loadSlot", slot);  // 0 = nouvelle partie, 1-5 = charger slot
@@ -880,11 +1030,21 @@ public class GameDetailsActivity extends AppCompatActivity {
         // === DATABASE LOOKUP (NEW) ===
         // Calculate CRC32 and lookup game metadata
         String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
-        com.retroplay.database.GameInfo gameInfo = null;
+        
+        // Fallback: Si le calcul échoue, utiliser le hash du gamelist.json si c'est un CRC32 (8 caractères hex)
+        if (gameCRC == null && game.getHash() != null && !game.getHash().isEmpty()) {
+            String hash = game.getHash();
+            // CRC32 = 8 caractères hexadécimaux (ex: "A1B2C3D4")
+            if (hash.length() == 8 && hash.matches("[0-9A-Fa-f]{8}")) {
+                gameCRC = hash.toUpperCase();
+                Log.i(TAG, "Using CRC32 from gamelist.json: " + gameCRC);
+            }
+        }
+        
         if (gameCRC != null) {
             Log.i(TAG, "ROM CRC32: " + gameCRC);
             
-            gameInfo = com.retroplay.database.DatabaseManager.INSTANCE.lookupGame(gameCRC, game.getConsole());
+            com.retroplay.database.GameInfo gameInfo = com.retroplay.database.DatabaseManager.INSTANCE.lookupGame(gameCRC, game.getConsole());
             if (gameInfo != null) {
                 Log.i(TAG, "✅ Game identified from database:");
                 Log.i(TAG, "  Name: " + gameInfo.getName());
@@ -907,30 +1067,16 @@ public class GameDetailsActivity extends AppCompatActivity {
             } else {
                 Log.w(TAG, "⚠️ Game not found in database (CRC: " + gameCRC + ")");
             }
+        } else {
+            Log.w(TAG, "⚠️ Could not determine CRC32 for game (ROM calculation failed and no CRC32 in gamelist.json)");
         }
         
         // Determine which emulator activity to use based on user preference
         Class<?> emulatorActivity = getEmulatorActivityClass(game.getConsole());
         
-        // Pour les jeux d'arcade, utiliser le nom de la base de données si disponible
-        // Dans launchWithCachedRom, on a déjà gameInfo, donc on peut l'utiliser directement
-        String gameNameForIntent = game.getName();
-        String console = game.getConsole().toLowerCase();
-        boolean isArcade = console.equals("arcade") || console.equals("mame") || 
-                          console.startsWith("fbneo") || console.equals("neogeo") ||
-                          console.equals("cps1") || console.equals("cps2") || console.equals("cps3");
-        
-        if (isArcade && gameInfo != null && gameInfo.getName() != null && !gameInfo.getName().isEmpty()) {
-            gameNameForIntent = gameInfo.getName();
-            Log.d(TAG, "Using database name for arcade game: " + gameNameForIntent);
-        } else {
-            // Fallback sur getGameNameForIntent() qui utilise currentGameInfo
-            gameNameForIntent = getGameNameForIntent();
-        }
-        
         Intent intent = new Intent(this, emulatorActivity);
         intent.putExtra("romPath", romPath);
-        intent.putExtra("gameName", gameNameForIntent);
+        intent.putExtra("gameName", game.getName());
         intent.putExtra("gameId", currentGalleryGameId);
         intent.putExtra("console", game.getConsole());
         intent.putExtra("loadSlot", slot);
@@ -944,13 +1090,11 @@ public class GameDetailsActivity extends AppCompatActivity {
     }
     
     private void openCheatActivity() {
-        // Pour les jeux d'arcade, utiliser le nom de la base de données si disponible
-        String gameNameForIntent = getGameNameForIntent();
-        Log.i(TAG, "Opening cheat codes for: " + gameNameForIntent);
+        Log.i(TAG, "Opening cheat codes for: " + game.getName());
         
         Intent intent = new Intent(this, com.retroplay.cheat.CheatActivity.class);
         intent.putExtra("console", game.getConsole());
-        intent.putExtra("gameName", gameNameForIntent);
+        intent.putExtra("gameName", game.getName());
         startActivity(intent);
     }
     
@@ -1413,9 +1557,15 @@ public class GameDetailsActivity extends AppCompatActivity {
      * Met à jour le texte du bouton core override selon l'état actuel
      */
     private void updateCoreOverrideButton() {
-        String fileName = game.getFile();
-        if (fileName.startsWith("http://") || fileName.startsWith("https://")) {
-            fileName = fileName.substring(fileName.lastIndexOf("/") + 1);
+        // Extraire le nom de fichier depuis le chemin local
+        String fileName = game.getPath();
+        if (fileName.startsWith("./")) {
+            fileName = fileName.substring(2);
+        }
+        // Extraire juste le nom du fichier (sans le chemin)
+        int lastSlash = fileName.lastIndexOf("/");
+        if (lastSlash >= 0) {
+            fileName = fileName.substring(lastSlash + 1);
         }
         
         String consoleDir = getRealConsoleDirectory(game.getConsole());
@@ -1497,9 +1647,15 @@ public class GameDetailsActivity extends AppCompatActivity {
      * Affiche un dialog pour choisir le core à utiliser pour ce jeu
      */
     private void showCoreOverrideDialog() {
-        String fileName = game.getFile();
-        if (fileName.startsWith("http://") || fileName.startsWith("https://")) {
-            fileName = fileName.substring(fileName.lastIndexOf("/") + 1);
+        // Extraire le nom de fichier depuis le chemin local
+        String fileName = game.getPath();
+        if (fileName.startsWith("./")) {
+            fileName = fileName.substring(2);
+        }
+        // Extraire juste le nom du fichier (sans le chemin)
+        int lastSlash = fileName.lastIndexOf("/");
+        if (lastSlash >= 0) {
+            fileName = fileName.substring(lastSlash + 1);
         }
         
         String consoleDir = getRealConsoleDirectory(game.getConsole());
@@ -2127,56 +2283,46 @@ public class GameDetailsActivity extends AppCompatActivity {
         final String baseDir = "/storage/emulated/0/GameLibrary-Data/";
         final String consoleDir = getRealConsoleDirectory(game.getConsole());
 
-        String fileUrl = game.getFile();
-        String relativePath = null;
-
-        if (fileUrl != null && !fileUrl.isEmpty()) {
-            if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
-                int markerIndex = fileUrl.indexOf("/gamedata/");
-                if (markerIndex >= 0) {
-                    relativePath = fileUrl.substring(markerIndex + "/gamedata/".length());
-                } else {
-                    relativePath = fileUrl.substring(fileUrl.lastIndexOf('/') + 1);
-                }
-            } else {
-                relativePath = fileUrl;
-            }
-        }
-
-        if (relativePath != null && !relativePath.isEmpty()) {
-            File directFile = new File(baseDir + relativePath);
+        // Utiliser directement le chemin local retourné par getFile()
+        String localPath = game.getFile();
+        if (localPath != null && !localPath.isEmpty()) {
+            File directFile = new File(localPath);
             if (directFile.exists()) {
                 return directFile.getAbsolutePath();
             }
         }
 
+        // Fallback: utiliser game.getPath() pour construire le chemin
         String rawPath = game.getPath();
         if (rawPath != null && !rawPath.isEmpty()) {
-            if (rawPath.startsWith("./")) {
-                rawPath = rawPath.substring(2);
-            }
-
-            File candidate = new File(baseDir + rawPath);
+            // Nettoyer le chemin (enlever "./" si présent)
+            String cleanPath = rawPath.startsWith("./") ? rawPath.substring(2) : rawPath;
+            
+            // Essayer avec le chemin complet
+            File candidate = new File(baseDir + cleanPath);
             if (candidate.exists()) {
                 return candidate.getAbsolutePath();
             }
 
-            File remapped = new File(baseDir + consoleDir + "/" + rawPath);
+            // Essayer avec le répertoire de console
+            File remapped = new File(baseDir + consoleDir + "/" + cleanPath);
             if (remapped.exists()) {
                 return remapped.getAbsolutePath();
             }
+            
+            // Extraire juste le nom du fichier et essayer dans le répertoire de console
+            int lastSlash = cleanPath.lastIndexOf('/');
+            String fileName = lastSlash >= 0 ? cleanPath.substring(lastSlash + 1) : cleanPath;
+            File finalCandidate = new File(baseDir + consoleDir + "/" + fileName);
+            if (finalCandidate.exists()) {
+                return finalCandidate.getAbsolutePath();
+            }
+            
+            // Dernier recours: retourner le chemin même s'il n'existe pas
+            return baseDir + consoleDir + "/" + fileName;
         }
 
-        String fileName = "";
-        if (relativePath != null && !relativePath.isEmpty()) {
-            int lastSlash = relativePath.lastIndexOf('/');
-            fileName = lastSlash >= 0 ? relativePath.substring(lastSlash + 1) : relativePath;
-        } else if (rawPath != null && !rawPath.isEmpty()) {
-            String sanitized = rawPath.startsWith("./") ? rawPath.substring(2) : rawPath;
-            int lastSlash = sanitized.lastIndexOf('/');
-            fileName = lastSlash >= 0 ? sanitized.substring(lastSlash + 1) : sanitized;
-        }
-
-        return baseDir + consoleDir + "/" + fileName;
+        // Si tout échoue, retourner un chemin par défaut
+        return baseDir + consoleDir + "/unknown.rom";
     }
 }

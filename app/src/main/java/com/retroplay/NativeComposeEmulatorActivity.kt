@@ -59,6 +59,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.LaunchedEffect
 import java.io.File
 import java.io.FileOutputStream
 import android.graphics.Bitmap
@@ -73,6 +75,7 @@ import com.retroplay.ui.SmartConfigOsdData
 import com.retroplay.runahead.RunAheadManager
 import com.retroplay.gallery.ScreenshotRepository
 import com.retroplay.rewind.RewindManager
+import com.retroplay.CoreConfigManager
 
 /**
  * Native Compose Emulator Activity
@@ -152,6 +155,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     private val showCoreChangeConfirmDialog = mutableStateOf(false)
     private var coreChangeConfirmMessage = ""
     private val quickActionsBarVisible = mutableStateOf(true)
+    private val quickActionsBarAutoHideEnabled = mutableStateOf(true)  // Auto-hide activé par défaut
+    private val quickActionsBarAutoHideTimer = mutableStateOf(0L)  // Timer pour auto-hide
     private val isFastForwardActive = mutableStateOf(false)
     private val audioMuted = mutableStateOf(false)
     private var fastForwardRatio = 2
@@ -473,42 +478,97 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         val clampedX = touchX.coerceIn(bounds.left, bounds.right)
         val clampedY = touchY.coerceIn(bounds.top, bounds.bottom)
         
+        // CRITIQUE: LibretroDroid attend [0, 1] et fait la conversion [-0x7fff, +0x7fff] lui-même
+        // Formule dans input.cpp: (pointerScreenXAxis - 0.5f) * 2.0 * 0x7fff
+        // POINTER_PRESSED = (X >= 0 && Y >= 0) donc on DOIT envoyer [0, 1] !
         val relativeX = (clampedX - bounds.left) / bounds.width
         val relativeY = (clampedY - bounds.top) / bounds.height
-        
-        // Normaliser pour RETRO_DEVICE_POINTER: [0,1] → [-0x7fff, 0x7fff]
-        // Note: POINTER utilise -0x7fff à +0x7fff (différent de LIGHTGUN qui utilise -0x8000)
-        val normalizedX = (relativeX * 2f - 1f) * 0x7fff
-        val normalizedY = (relativeY * 2f - 1f) * 0x7fff
         
         when (event.actionMasked) {
             android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
                 // Envoyer position POINTER au core
                 // MOTION_SOURCE_POINTER = 3 (de LibretroDroid.java)
+                // IMPORTANT: Envoyer [0, 1] (pas [-1, 1]) car LibretroDroid fait la conversion
+                // TEST: Envoyer sur port 1 ET port 0 pour voir lequel fonctionne
                 retroView.sendMotionEvent(
                     com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
-                    normalizedX / 0x7fff,  // Normaliser -1.0 à +1.0
-                    normalizedY / 0x7fff,
-                    1  // Port 2 (Zapper)
+                    relativeX,  // 0.0 à 1.0 (LibretroDroid convertit en [-0x7fff, +0x7fff])
+                    relativeY,  // 0.0 à 1.0
+                    1  // Port 2 (index 1) = Zapper
+                )
+                // TEST: Aussi sur port 0 au cas où FCEUmm lit sur port 0
+                retroView.sendMotionEvent(
+                    com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
+                    relativeX,
+                    relativeY,
+                    0  // Port 1 (index 0) - TEST
                 )
                 
                 if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-                    Log.d(TAG, "[ZAPPER] Touch DOWN at (${touchX.toInt()}, ${touchY.toInt()}) → POINTER($normalizedX, $normalizedY) on port 2")
+                    Log.i(TAG, "[ZAPPER] ===== TOUCH DOWN =====")
+                    Log.i(TAG, "[ZAPPER] Screen touch: (${touchX.toInt()}, ${touchY.toInt()})")
+                    Log.i(TAG, "[ZAPPER] Bounds: left=${bounds.left.toInt()}, top=${bounds.top.toInt()}, width=${bounds.width.toInt()}, height=${bounds.height.toInt()}")
+                    Log.i(TAG, "[ZAPPER] Clamped: (${clampedX.toInt()}, ${clampedY.toInt()})")
+                    Log.i(TAG, "[ZAPPER] Relative [0-1]: ($relativeX, $relativeY)")
+                    Log.i(TAG, "[ZAPPER] Sending POINTER to port 1 (index) = port 2 (NES)")
+                    Log.i(TAG, "[ZAPPER] LibretroDroid will store: pointer[0].screenX=$relativeX, pointer[0].screenY=$relativeY")
+                    Log.i(TAG, "[ZAPPER] LibretroDroid will set: pointer[0].active = ${relativeX >= 0f && relativeY >= 0f}")
+                    Log.i(TAG, "[ZAPPER] FCEUmm will read: input_cb(port=1, RETRO_DEVICE_POINTER, index=0, POINTER_PRESSED)")
+                    Log.i(TAG, "[ZAPPER] Expected POINTER_PRESSED = ${if (relativeX >= 0f && relativeY >= 0f) "TRUE (1)" else "FALSE (0)"}")
                     
-                    // Si triggerOnTouch, tir instantané (simule tap rapide)
+                    // CRITIQUE: En mode RetroPointer, FCEUmm lit POINTER_PRESSED pour le trigger
+                    // Mais pour être sûr, on envoie aussi MOUSE_BUTTON_LEFT comme RetroArchEmulatorActivity
+                    // Cela fonctionne en double: POINTER_PRESSED ET MOUSE_BUTTON_LEFT
                     if (triggerOnTouch) {
-                        // Note: POINTER_PRESSED géré automatiquement par onTouchEvent de GLRetroView
-                        // Pas besoin d'envoyer Button A explicitement
-                        Log.d(TAG, "[ZAPPER] Trigger on touch enabled - instant shot")
+                        Log.i(TAG, "[ZAPPER] Sending MOUSE_BUTTON_LEFT pressed on port 1 (triggerOnTouch=true)")
+                        retroView.sendMouseButton(
+                            com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                            true,  // Pressed
+                            1  // Port 2 (index 1)
+                        )
+                        // TEST: Aussi sur port 0
+                        retroView.sendMouseButton(
+                            com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                            true,  // Pressed
+                            0  // Port 1 (index 0) - TEST
+                        )
+                        Log.i(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT sent on ports 0 and 1")
+                    } else {
+                        Log.i(TAG, "[ZAPPER] triggerOnTouch=false, will fire on ACTION_UP")
                     }
+                    Log.i(TAG, "[ZAPPER] =========================")
                 }
                 return true
             }
             
             android.view.MotionEvent.ACTION_UP -> {
-                // Release POINTER
-                Log.d(TAG, "[ZAPPER] Touch UP - POINTER released")
-                // Note: GLRetroView.onTouchEvent() gère automatiquement le release via POINTER_PRESSED=0
+                // Si triggerOnTouch = false, déclencher le trigger MAINTENANT (au release)
+                if (!triggerOnTouch) {
+                    retroView.sendMouseButton(
+                        com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                        true,  // Pressed
+                        1  // Port 2 (index 1)
+                    )
+                    Log.i(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT pressed on port 1 (triggerOnTouch=false, firing on UP)")
+                }
+                
+                // Release POINTER - envoyer position avec valeurs négatives pour désactiver POINTER_PRESSED
+                // LibretroDroid: POINTER_PRESSED = (X >= 0 && Y >= 0)
+                // En envoyant (-1, -1), POINTER_PRESSED devient false
+                retroView.sendMotionEvent(
+                    com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
+                    -1f,  // Valeur négative = POINTER_PRESSED = false
+                    -1f,
+                    1  // Port 2
+                )
+                
+                // Release MOUSE_BUTTON_LEFT
+                retroView.sendMouseButton(
+                    com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                    false,  // Released
+                    1  // Port 2 (index 1)
+                )
+                Log.i(TAG, "[ZAPPER] Touch UP - POINTER released (sent -1, -1), MOUSE_BUTTON_LEFT released")
                 return true
             }
             
@@ -644,6 +704,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         isFastForwardActive.value = prefs.getBoolean("emulation_fast_forward_active", false)
         audioMuted.value = prefs.getBoolean("emulation_audio_muted", false)
         quickActionsBarVisible.value = prefs.getBoolean("emulation_quick_actions_bar_visible", true)
+        quickActionsBarAutoHideEnabled.value = prefs.getBoolean("emulation_quick_actions_bar_auto_hide", true)
+        quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()  // Initialiser au démarrage
         val savedSettings = loadSettings(prefs, console)
         
         // ALWAYS use NATIVE (Radial/Lemuroid) in this activity
@@ -801,7 +863,33 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     }
                 }
                 "nes" -> {
-                    // Configuration Zapper sera faite APRÈS la création de retroView
+                    // Configuration NES / FCEUmm depuis .cfg (comme RetroArchEmulatorActivity)
+                    Log.i(TAG, "[NES] Loading FCEUmm configuration from .cfg file")
+                    
+                    // Créer la config par défaut si inexistante
+                    CoreConfigManager.createDefaultConfigIfNeeded(this@NativeComposeEmulatorActivity, "FCEUmm", CoreConfigManager.getDefaultConfig("fceumm"))
+                    
+                    // Charger la config depuis le .cfg
+                    val config = CoreConfigManager.loadConfig(this@NativeComposeEmulatorActivity, "FCEUmm")
+                    
+                    if (config.isNotEmpty()) {
+                        // Convertir Map<String, String> en Array<Variable>
+                        val nesVariables = config.map { (key, value) ->
+                            Variable(key, value)
+                        }.toTypedArray()
+                        
+                        try {
+                            variables = nesVariables
+                            Log.i(TAG, "[NES] Loaded ${nesVariables.size} variables from FCEUmm.cfg")
+                            config.forEach { (key, value) ->
+                                Log.d(TAG, "[NES]   $key = \"$value\"")
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "[NES] Failed to set variables from .cfg: ${e.message}")
+                        }
+                    } else {
+                        Log.w(TAG, "[NES] No configuration found in FCEUmm.cfg, using defaults")
+                    }
                 }
                 "snes" -> {
                     val blendMode = corePrefs.getInt("${prefix}snes_blend_mode", 0)
@@ -978,19 +1066,29 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
         }
         
-        // ⚠️ ZAPPER DÉSACTIVÉ DANS NATIVE MODE
-        // Le Zapper cause des problèmes en mode Native
-        // Utiliser RetroArchEmulatorActivity (PLAY sans "Native") pour les jeux Zapper
+        // Configuration Zapper APRÈS le chargement du core (1 seconde de délai)
         if (isZapperGame) {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                runOnUiThread {
-                    Toast.makeText(
-                        this@NativeComposeEmulatorActivity,
-                        "⚠️ Duck Hunt detected!\nPlease use PLAY (not PLAY NATIVE) for Zapper games",
-                        Toast.LENGTH_LONG
-                    ).show()
+                try {
+                    // CRITIQUE: FCEUmm nécessite RETRO_DEVICE_ZAPPER (258) pour appeler get_mouse_input()
+                    // Mais ensuite, en mode RetroPointer (touchscreen), get_mouse_input() lit RETRO_DEVICE_POINTER
+                    // Donc on DOIT configurer RETRO_DEVICE_ZAPPER (258) pour que get_mouse_input() soit appelé!
+                    // Port 2 (index 1) = Position traditionnelle du Zapper NES
+                    retroView.setControllerType(1, 258)  // Port 2 (index 1) = RETRO_DEVICE_ZAPPER (258)
+                    Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_ZAPPER (258) on port 2 (index 1)")
+                    Log.i(TAG, "[NES] FCEUmm will call get_mouse_input() which reads RETRO_DEVICE_POINTER in RetroPointer mode")
+                    
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@NativeComposeEmulatorActivity,
+                            "Zapper detected! Touch game area to shoot",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "[NES] Failed to configure Zapper: ${e.message}")
                 }
-            }, 1000)
+            }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
         }
 
         // Configurer les extensions contrôleur pour N64
@@ -1096,6 +1194,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     showAdvancedRadialSettings = showAdvancedRadialSettings,
                     showQuickMenu = showQuickMenu,
                     quickActionsBarVisible = quickActionsBarVisible,
+                    quickActionsBarAutoHideEnabled = quickActionsBarAutoHideEnabled,
+                    quickActionsBarAutoHideTimer = quickActionsBarAutoHideTimer,
                     isFastForwardActive = isFastForwardActive.value,
                     audioMuted = audioMuted.value,
                     runAheadManager = runAheadManager,
@@ -1127,6 +1227,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     isZapperGame = isZapperGame,
                     gameViewBounds = gameViewBounds,  // Passer le state pour capture
                     onZapperTouch = { event ->
+                        // Réafficher la barre si auto-hide activé
+                        if (quickActionsBarAutoHideEnabled.value) {
+                            quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()
+                        }
                         val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
                         handleZapperTouch(event, gameViewBounds.value, lightgunSettings.lightgunTriggerOnTouch, lightgunSettings.lightgunAllowOffscreen)
                     },
@@ -1448,8 +1552,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
             coreFileName = when (consoleKey) {
             // Nintendo
-            "nes" -> "fceumm_libretro_android.so"
-            "snes" -> "snes9x_libretro_android.so"
+            "nes", "famicom", "fc" -> "fceumm_libretro_android.so"
+            "snes", "sfc", "superfamicom", "super famicom" -> "snes9x_libretro_android.so"
             "n64" -> "parallel_n64_libretro_android.so"
             "gb", "gbc" -> "gambatte_libretro_android.so"
             "gba" -> "libmgba_libretro_android.so"
@@ -1745,6 +1849,8 @@ private fun ComposeEmulatorScreen(
     showAdvancedRadialSettings: MutableState<Boolean>,
     showQuickMenu: MutableState<Boolean>,
     quickActionsBarVisible: MutableState<Boolean>,
+    quickActionsBarAutoHideEnabled: MutableState<Boolean>,
+    quickActionsBarAutoHideTimer: MutableState<Long>,
     isFastForwardActive: Boolean,
     audioMuted: Boolean,
     runAheadManager: RunAheadManager? = null,
@@ -1944,6 +2050,13 @@ private fun ComposeEmulatorScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black)
+                    .pointerInteropFilter { event ->
+                        // Détecter tous les touches pour réafficher la barre (auto-hide)
+                        if (quickActionsBarAutoHideEnabled.value && event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                            quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()
+                        }
+                        false  // Ne pas consommer l'événement, laisser passer
+                    }
             ) {
                 SmartConfigOsd(
                     modifier = Modifier
@@ -2320,7 +2433,34 @@ private fun ComposeEmulatorScreen(
                     }
                 }
                 
-            if (quickActionsBarVisible.value) {
+            // Auto-hide: Calculer si la barre doit être visible
+            val shouldShowBar = remember(quickActionsBarVisible.value, quickActionsBarAutoHideEnabled.value, quickActionsBarAutoHideTimer.value) {
+                if (!quickActionsBarVisible.value) {
+                    false  // Barre désactivée manuellement
+                } else if (!quickActionsBarAutoHideEnabled.value) {
+                    true  // Auto-hide désactivé
+                } else {
+                    // Auto-hide activé: vérifier si le timer est récent (< 3 secondes)
+                    val currentTime = android.os.SystemClock.elapsedRealtime()
+                    val timeSinceLastTouch = currentTime - quickActionsBarAutoHideTimer.value
+                    timeSinceLastTouch < 3000L  // 3 secondes
+                }
+            }
+            
+            // LaunchedEffect pour mettre à jour la visibilité après le délai
+            LaunchedEffect(quickActionsBarAutoHideTimer.value, quickActionsBarAutoHideEnabled.value, quickActionsBarVisible.value) {
+                if (quickActionsBarVisible.value && quickActionsBarAutoHideEnabled.value) {
+                    // Initialiser le timer au démarrage
+                    if (quickActionsBarAutoHideTimer.value == 0L) {
+                        quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()
+                    }
+                    // Attendre 3 secondes puis vérifier
+                    delay(3000)
+                    // La recomposition se fera automatiquement via shouldShowBar
+                }
+            }
+            
+            if (shouldShowBar) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2791,6 +2931,10 @@ private fun ComposeEmulatorScreen(
                                     Color.Transparent
                             )
                             .pointerInteropFilter { event ->
+                                // Réafficher la barre si auto-hide activé
+                                if (quickActionsBarAutoHideEnabled.value && event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                                    quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()
+                                }
                                 // Laisser passer les touches vers le gamepad si hors zone centrale
                                 val handled = onZapperTouch(event)
                                 android.util.Log.d("ZapperBox", "Touch at (${event.x}, ${event.y}) handled=$handled")

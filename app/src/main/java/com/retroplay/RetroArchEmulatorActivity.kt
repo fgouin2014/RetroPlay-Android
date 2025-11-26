@@ -56,6 +56,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.LaunchedEffect
 import java.io.File
 import java.io.FileOutputStream
 import android.graphics.Bitmap
@@ -649,6 +650,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         triggerDelay: Int = 0,
         lightgunPort: Int = 1  // Port 2 (index 1) = Zapper NES traditionnel
     ): Boolean {
+        // CRITIQUE: Si lightgunPort = -1 (all ports), utiliser le port par défaut (1 = port 2 NES)
+        val actualPort = if (lightgunPort < 0) 1 else lightgunPort.coerceIn(0, 3)
+        
         if (!isZapperGame) {
             return false
         }
@@ -790,7 +794,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
                     relativeX,  // 0.0 à 1.0 (LibretroDroid convertit)
                     relativeY,  // 0.0 à 1.0
-                    lightgunPort  // Port configuré (index 0-3)
+                    actualPort  // Port configuré (index 0-3), corrigé si -1
                 )
                 
                 if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
@@ -811,14 +815,45 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     
                     // Déclencher le trigger selon l'option triggerOnTouch
                     if (triggerOnTouch) {
-                        // NOUVEAU: Envoyer MOUSE BUTTON LEFT (trigger)
-                        // RetroArch Android mappe le trigger Zapper à Mouse Button 1 (clic gauche)
-                        retroView.sendMouseButton(
-                            com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                            true,  // Pressed
-                            lightgunPort
-                        )
-                        Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $lightgunPort (triggerOnTouch=true${if (isQuickTap) ", quick tap" else ""})")
+                        // Attendre triggerDelay si configuré (pour synchroniser avec le flash blanc)
+                        if (triggerDelay > 0) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                retroView.sendMouseButton(
+                                    com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                                    true,  // Pressed
+                                    actualPort
+                                )
+                                Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $actualPort (triggerOnTouch=true, delay=${triggerDelay}ms${if (isQuickTap) ", quick tap" else ""})")
+                                
+                                // Maintenir le trigger pendant 1 frame (~16ms à 60fps) pour meilleure détection
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                    retroView.sendMouseButton(
+                                        com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                                        false,  // Released
+                                        actualPort
+                                    )
+                                    Log.d(TAG, "[ZAPPER] MOUSE BUTTON LEFT released after 16ms pulse")
+                                }, 16)  // 1 frame à 60fps
+                            }, triggerDelay.toLong())
+                        } else {
+                            // Pas de délai: envoi immédiat
+                            retroView.sendMouseButton(
+                                com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                                true,  // Pressed
+                                actualPort
+                            )
+                            Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $actualPort (triggerOnTouch=true, no delay${if (isQuickTap) ", quick tap" else ""})")
+                            
+                            // Maintenir le trigger pendant 1 frame (~16ms à 60fps) pour meilleure détection
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                retroView.sendMouseButton(
+                                    com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                                    false,  // Released
+                                    actualPort
+                                )
+                                Log.d(TAG, "[ZAPPER] MOUSE BUTTON LEFT released after 16ms pulse")
+                            }, 16)  // 1 frame à 60fps
+                        }
                     } else {
                         Log.i(TAG, "[ZAPPER] Touch DOWN registered, waiting for UP to trigger (triggerOnTouch=false${if (isQuickTap) ", quick tap" else ""})")
                     }
@@ -841,7 +876,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     Log.d(TAG, "  14. NES coords valid?      $nesValid")
                     Log.d(TAG, "  15. FCEUmm crosshair (screen): (${fceummCrosshairXOnScreen.toInt()}, ${fceummCrosshairYOnScreen.toInt()})")
                     Log.d(TAG, "  16. Delta (touch - FCEUmm): (${deltaX.toInt()}px, ${deltaY.toInt()}px) ${if (deltaY > 0) "FCEUmm trop BAS" else if (deltaY < 0) "FCEUmm trop HAUT" else "ALIGNÉ"}")
-                    Log.d(TAG, "  17. Port: $lightgunPort | PRESSED: ${relativeX >= 0f && relativeY >= 0f}")
+                    Log.d(TAG, "  17. Port: $actualPort | PRESSED: ${relativeX >= 0f && relativeY >= 0f}")
                     
                     // NOTE: En mode RetroPointer, le trigger est AUTOMATIQUE via POINTER_PRESSED
                     // FCEUmm lit: input_cb(port, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED)
@@ -860,9 +895,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     retroView.sendMouseButton(
                         com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
                         true,  // Pressed
-                        lightgunPort
+                        actualPort
                     )
-                    Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $lightgunPort (triggerOnTouch=false, firing on UP)")
+                    Log.i(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT pressed on port $actualPort (triggerOnTouch=false, firing on UP)")
                     
                     // Attendre triggerDelay si configuré
                     if (triggerDelay > 0) {
@@ -877,7 +912,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
                     -1f,  // X négatif → pointerScreenXAxis < 0
                     -1f,  // Y négatif → pointerScreenYAxis < 0
-                    lightgunPort
+                    actualPort
                 )
                 Log.d(TAG, "[ZAPPER] Touch UP - POINTER reset to (-1, -1), POINTER_PRESSED now FALSE")
                 
@@ -885,9 +920,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 retroView.sendMouseButton(
                     com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
                     false,  // Released
-                    lightgunPort
+                    actualPort
                 )
-                Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT released on port $lightgunPort")
+                Log.i(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT released on port $actualPort")
                 
                 return true
             }
@@ -1105,6 +1140,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         // QuickActionsBar visibility: Charger état
         quickActionsBarVisible.value = prefs.getBoolean("emulation_quick_actions_bar_visible", true)
+        quickActionsBarAutoHideEnabled.value = prefs.getBoolean("emulation_quick_actions_bar_auto_hide", true)
+        quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()  // Initialiser au démarrage
         
         // Crosshair Mode: Charger mode d'affichage du crosshair Zapper
         val savedCrosshairMode = prefs.getString("emulation_crosshair_mode", "RETROPLAY_ONLY") ?: "RETROPLAY_ONLY"
@@ -1722,6 +1759,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 audioMuted = audioMuted.value,
                 currentShaderName = currentShader.value.displayName,
                 quickActionsBarVisible = quickActionsBarVisible.value,
+                quickActionsBarAutoHideEnabled = quickActionsBarAutoHideEnabled,
+                quickActionsBarAutoHideTimer = quickActionsBarAutoHideTimer,
                 crosshairMode = crosshairMode.value,
                 showDipSwitchDialog = showDipSwitchDialog,
                 showCoreOptionsDialog = showCoreOptionsDialog,
@@ -2177,8 +2216,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             
             coreFileName = when (consoleKey) {
                 // Nintendo
-                "nes" -> "fceumm_libretro_android.so"
-                "snes" -> "snes9x_libretro_android.so"
+                "nes", "famicom", "fc" -> "fceumm_libretro_android.so"
+                "snes", "sfc", "superfamicom", "super famicom" -> "snes9x_libretro_android.so"
                 "n64" -> "parallel_n64_libretro_android.so"
                 "gb", "gbc" -> "gambatte_libretro_android.so"
                 "gba" -> "libmgba_libretro_android.so"
@@ -2370,6 +2409,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     
     // État pour QuickActionsBar visibility (MutableState pour reactivity Compose)
     private val quickActionsBarVisible = mutableStateOf(true)
+    private val quickActionsBarAutoHideEnabled = mutableStateOf(true)  // Auto-hide activé par défaut
+    private val quickActionsBarAutoHideTimer = mutableStateOf(0L)  // Timer pour auto-hide
     
     // État pour mode d'affichage du crosshair Zapper (MutableState pour reactivity Compose)
     private val crosshairMode = mutableStateOf(CrosshairMode.RETROPLAY_ONLY)
@@ -2967,6 +3008,8 @@ internal fun ComposeEmulatorScreen(
     audioMuted: Boolean = false,
     currentShaderName: String = "None",
     quickActionsBarVisible: Boolean = true,
+    quickActionsBarAutoHideEnabled: MutableState<Boolean>? = null,
+    quickActionsBarAutoHideTimer: MutableState<Long>? = null,
     crosshairMode: CrosshairMode = CrosshairMode.RETROPLAY_ONLY,
     // Disk Swapper & Screenshot
     showDiskSwapperDialog: MutableState<Boolean>,
@@ -3128,6 +3171,13 @@ internal fun ComposeEmulatorScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .pointerInteropFilter { event ->
+                        // Détecter tous les touches pour réafficher la barre (auto-hide)
+                        if (quickActionsBarAutoHideEnabled?.value == true && event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                            quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
+                        }
+                        false  // Ne pas consommer l'événement, laisser passer
+                    }
                     .background(Color.Black)
             ) {
                 if (layoutVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
@@ -3179,6 +3229,11 @@ internal fun ComposeEmulatorScreen(
                                     gameViewBounds.value = realBounds
                                 }
                                 .pointerInteropFilter { event ->
+                                    // Réafficher la barre si auto-hide activé
+                                    if (quickActionsBarAutoHideEnabled?.value == true && event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                                        quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
+                                    }
+                                    
                                     // Gérer Zapper en background (seulement pour touch hors overlay)
                                     // L'overlay au-dessus intercepte les touch sur boutons AVANT que ceci soit appelé
                                     // Donc ce code est appelé SEULEMENT pour touch hors boutons
@@ -3475,8 +3530,35 @@ internal fun ComposeEmulatorScreen(
                 }
                 // NO ELSE - RetroArch mode ONLY in this activity!
                 
+                // Auto-hide: Calculer si la barre doit être visible
+                val shouldShowBar = remember(quickActionsBarVisible, quickActionsBarAutoHideEnabled, quickActionsBarAutoHideTimer) {
+                    if (!quickActionsBarVisible) {
+                        false  // Barre désactivée manuellement
+                    } else if (quickActionsBarAutoHideEnabled == null || !quickActionsBarAutoHideEnabled.value) {
+                        true  // Auto-hide désactivé ou non disponible
+                    } else {
+                        // Auto-hide activé: vérifier si le timer est récent (< 3 secondes)
+                        val currentTime = android.os.SystemClock.elapsedRealtime()
+                        val timeSinceLastTouch = currentTime - (quickActionsBarAutoHideTimer?.value ?: 0L)
+                        timeSinceLastTouch < 3000L  // 3 secondes
+                    }
+                }
+                
+                // LaunchedEffect pour mettre à jour la visibilité après le délai
+                LaunchedEffect(quickActionsBarAutoHideTimer?.value, quickActionsBarAutoHideEnabled?.value, quickActionsBarVisible) {
+                    if (quickActionsBarVisible && quickActionsBarAutoHideEnabled?.value == true && quickActionsBarAutoHideTimer != null) {
+                        // Initialiser le timer au démarrage
+                        if (quickActionsBarAutoHideTimer.value == 0L) {
+                            quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()
+                        }
+                        // Attendre 3 secondes puis vérifier
+                        delay(3000)
+                        // La recomposition se fera automatiquement via shouldShowBar
+                    }
+                }
+                
                 // Quick Actions Bar (Hybrid mode - variante F)
-                if (quickActionsBarVisible) {
+                if (shouldShowBar) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()

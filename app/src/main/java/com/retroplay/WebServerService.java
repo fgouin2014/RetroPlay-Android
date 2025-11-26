@@ -181,8 +181,18 @@ public class WebServerService extends Service {
         }
     }
     
+    /**
+     * Vérifie si le serveur web est en cours d'exécution et prêt
+     */
     public boolean isServerRunning() {
-        return webServer != null;
+        return webServer != null && webServer.isRunning();
+    }
+    
+    /**
+     * Retourne l'instance du WebServer (pour vérification externe)
+     */
+    public WebServer getWebServer() {
+        return webServer;
     }
 }
 

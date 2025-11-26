@@ -674,52 +674,69 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                     Log.w(TAG, "availableConsoles is empty, using currentConsole as directory. This may cause issues if currentConsole is an ID instead of a directory name.");
                 }
                 
-                // OPTIMISATION: Vérifier le cache EN PREMIER (préchargé pendant splashscreen)
-                // Cela évite les lectures de fichiers et les AUTO SCAN inutiles
-                String json = com.retroplay.GamelistCache.INSTANCE.getGamelistJson(realConsoleDirectory);
-                
-                if (json != null && !json.isEmpty()) {
-                    // Cache hit: utiliser directement les données en cache
-                    Log.d(TAG, "✅ Cache hit for " + realConsoleDirectory + ", using cached gamelist.json");
-                    parseAndDisplayGames(json, realConsoleDirectory);
-                    return;
-                }
-                
-                // Cache miss: vérifier si le fichier existe
+                // Lire le gamelist.json depuis le stockage interne selon la console sélectionnée
+                // Support des sous-consoles (ex: fbneo/sega)
+                // Utiliser le nom réel du répertoire, pas l'ID canonique
                 String gamelistPath = "/storage/emulated/0/GameLibrary-Data/" + realConsoleDirectory + "/gamelist.json";
                 java.io.File gamelistFile = new java.io.File(gamelistPath);
-                Log.d(TAG, "Cache miss for " + realConsoleDirectory + ", checking file: " + gamelistPath);
+                Log.d(TAG, "Looking for gamelist.json at: " + gamelistPath);
                 
-                if (gamelistFile.exists()) {
-                    // Fichier existe: lire depuis le fichier et mettre à jour le cache
-                    Log.d(TAG, "Reading gamelist.json from file for " + realConsoleDirectory);
-                    java.io.FileInputStream fis = new java.io.FileInputStream(gamelistFile);
-                    byte[] buffer = new byte[(int) gamelistFile.length()];
-                    fis.read(buffer);
-                    fis.close();
-                    json = new String(buffer, StandardCharsets.UTF_8);
+                if (!gamelistFile.exists()) {
+                    Log.i(TAG, "Fichier gamelist.json non trouvé: " + gamelistPath);
+                    Log.i(TAG, "Tentative AUTO SCAN via API serveur...");
                     
-                    // Mettre à jour le cache pour les prochaines fois
-                    com.retroplay.GamelistCache.INSTANCE.updateCache(realConsoleDirectory, json);
-                    Log.d(TAG, "✅ Updated cache for " + realConsoleDirectory);
+                    // Try to load auto-generated gamelist from server
+                    // Utiliser le nom réel du répertoire pour la requête HTTP
+                    try {
+                        java.net.URL autoScanUrl = new java.net.URL("http://localhost:7777/gamedata/" + realConsoleDirectory + "/gamelist.json");
+                        java.net.HttpURLConnection autoConn = (java.net.HttpURLConnection) autoScanUrl.openConnection();
+                        autoConn.setRequestMethod("GET");
+                        autoConn.setConnectTimeout(5000);
+                        autoConn.setReadTimeout(5000);
+                        
+                        if (autoConn.getResponseCode() == 200) {
+                            Log.i(TAG, "AUTO SCAN successful for " + currentConsole);
+                            // Read the auto-generated gamelist
+                            java.io.BufferedReader autoReader = new java.io.BufferedReader(
+                                new java.io.InputStreamReader(autoConn.getInputStream()));
+                            StringBuilder autoResponse = new StringBuilder();
+                            String autoLine;
+                            while ((autoLine = autoReader.readLine()) != null) {
+                                autoResponse.append(autoLine);
+                            }
+                            autoReader.close();
+                            
+                            // Parse the auto-generated JSON - Passer realConsoleDirectory pour les chemins d'images
+                            parseAndDisplayGames(autoResponse.toString(), realConsoleDirectory);
+                            return;
+                        } else {
+                            Log.w(TAG, "AUTO SCAN failed with code: " + autoConn.getResponseCode());
+                        }
+                    } catch (Exception autoEx) {
+                        Log.e(TAG, "AUTO SCAN error: " + autoEx.getMessage());
+                    }
                     
-                    // Parse and display games
-                    parseAndDisplayGames(json, realConsoleDirectory);
+                    // If auto-scan also failed, show error
+                    runOnUiThread(() -> {
+                        isLoading = false;
+                        loadingProgress.setVisibility(View.GONE);
+                        emptyState.setVisibility(View.VISIBLE);
+                        android.widget.Toast.makeText(GameListActivity.this, 
+                            "No games found for " + currentConsole.toUpperCase() + " (no gamelist.json and auto-scan failed)", 
+                            android.widget.Toast.LENGTH_LONG).show();
+                    });
                     return;
                 }
                 
-                // Fichier n'existe pas: afficher erreur (AUTO SCAN est fait uniquement par GamelistScanner)
-                Log.w(TAG, "Fichier gamelist.json non trouvé: " + gamelistPath);
-                Log.w(TAG, "AUTO SCAN doit être fait par GamelistScanner, pas depuis GameListActivity");
-                
-                runOnUiThread(() -> {
-                    isLoading = false;
-                    loadingProgress.setVisibility(View.GONE);
-                    emptyState.setVisibility(View.VISIBLE);
-                    android.widget.Toast.makeText(GameListActivity.this, 
-                        "No gamelist.json found for " + currentConsole.toUpperCase() + ". Please run initial scan.", 
-                        android.widget.Toast.LENGTH_LONG).show();
-                });
+                // Lire le contenu du fichier
+                java.io.FileInputStream fis = new java.io.FileInputStream(gamelistFile);
+                byte[] buffer = new byte[(int) gamelistFile.length()];
+                fis.read(buffer);
+                fis.close();
+                String json = new String(buffer, StandardCharsets.UTF_8);
+
+                // Parse and display games - Passer realConsoleDirectory pour les chemins d'images
+                parseAndDisplayGames(json, realConsoleDirectory);
 
             } catch (Exception e) {
                 Log.e(TAG, "Erreur chargement liste des jeux", e);
@@ -747,21 +764,21 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
             List<Game> tempGames = new ArrayList<>();
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject obj = arr.getJSONObject(i);
-                // Utiliser optString() avec valeurs par défaut pour éviter les erreurs si champs manquants
-                // Support des deux formats : "description"/"releaseDate" (nouveau format standard) et "desc"/"releasedate" (legacy)
-                // PRIORITÉ au nouveau format (description, releaseDate)
-                String desc = obj.optString("description", "");
-                if (desc.isEmpty()) {
-                    desc = obj.optString("desc", "");  // Fallback legacy
+                // Support format ES: "desc"/"releasedate" (nouveau) et "description"/"releaseDate" (legacy)
+                String desc = obj.optString("desc", null);
+                if (desc == null || desc.isEmpty()) {
+                    desc = obj.optString("description", "");  // Fallback legacy
                 }
-                String releaseDate = obj.optString("releaseDate", "");
-                if (releaseDate.isEmpty()) {
-                    releaseDate = obj.optString("releasedate", "");  // Fallback legacy
+                String releaseDate = obj.optString("releasedate", null);
+                if (releaseDate == null || releaseDate.isEmpty()) {
+                    releaseDate = obj.optString("releaseDate", "");  // Fallback legacy
                 }
                 
-                // Lire les métadonnées enrichies depuis BD (générées lors de la création du gamelist.json)
+                // Parser les nouveaux champs ES
                 String developer = obj.optString("developer", null);
                 String publisher = obj.optString("publisher", null);
+                String rating = obj.optString("rating", null);
+                String hash = obj.optString("hash", null);
                 
                 Game game = new Game(
                         obj.getString("id"),
@@ -772,7 +789,9 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                         obj.optString("genre", ""),
                         obj.optString("players", ""),
                         developer,
-                        publisher
+                        publisher,
+                        rating,
+                        hash
                 );
                 // Définir la console pour ce jeu - Utiliser realConsoleDirectory pour les chemins d'images
                 // IMPORTANT: Utiliser le nom réel du répertoire (ex: "megadrive") et non l'ID canonique (ex: "genesis")
@@ -952,18 +971,21 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                                 if (gameName.toLowerCase().contains(query.toLowerCase())) {
                                     // Utiliser optString() avec valeurs par défaut pour éviter les erreurs
                                     // Support des deux formats : "desc"/"releasedate" (legacy) et "description"/"releaseDate" (nouveau)
-                                    String desc = obj.optString("desc", "");
-                                    if (desc.isEmpty()) {
+                                    // Support format ES: "desc"/"releasedate" (nouveau) et "description"/"releaseDate" (legacy)
+                                    String desc = obj.optString("desc", null);
+                                    if (desc == null || desc.isEmpty()) {
                                         desc = obj.optString("description", "");
                                     }
-                                    String releaseDate = obj.optString("releasedate", "");
-                                    if (releaseDate.isEmpty()) {
+                                    String releaseDate = obj.optString("releasedate", null);
+                                    if (releaseDate == null || releaseDate.isEmpty()) {
                                         releaseDate = obj.optString("releaseDate", "");
                                     }
                                     
-                                    // Lire les métadonnées enrichies depuis BD
+                                    // Parser les nouveaux champs ES
                                     String developer = obj.optString("developer", null);
                                     String publisher = obj.optString("publisher", null);
+                                    String rating = obj.optString("rating", null);
+                                    String hash = obj.optString("hash", null);
                                     
                                     Game game = new Game(
                                         obj.getString("id"),
@@ -974,7 +996,9 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
                                         obj.optString("genre", ""),
                                         obj.optString("players", ""),
                                         developer,
-                                        publisher
+                                        publisher,
+                                        rating,
+                                        hash
                                     );
                                     game.setConsole(console.id);
                                     game.initializePaths(null);

@@ -1504,12 +1504,27 @@ fun RetroArchSettingsDialog(
                         // ========== ONGLET 3: RETROARCH GENERAL SETTINGS ==========
                             
                             // ========== SHADERS SECTION ==========
-                            Text(
-                                text = "Shaders",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Shaders",
+                                    color = Color(0xFFFF9800),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                TextButton(
+                                    onClick = {
+                                        // Reset Shader to default
+                                        prefs.edit().putString("emulation_shader_preset", "DEFAULT").apply()
+                                        onShaderChanged("DEFAULT")
+                                    }
+                                ) {
+                                    Text("Reset", color = Color(0xFF888888), fontSize = 12.sp)
+                                }
+                            }
                             
                             var selectedShaderName by remember { 
                                 mutableStateOf(
@@ -1569,18 +1584,37 @@ fun RetroArchSettingsDialog(
                             HorizontalDivider(color = Color(0xFF444444))
 
                             // ========== VIDEO SECTION ==========
-                            Text(
-                                text = "Video Settings",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Video Settings",
+                                    color = Color(0xFFFF9800),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                TextButton(
+                                    onClick = {
+                                        // Reset Video Settings to defaults
+                                        val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+                                        com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = true))
+                                        prefs.edit().putString("emulation_video_aspect_ratio", "AUTO").apply()
+                                        onVsyncChanged(true)
+                                    }
+                                ) {
+                                    Text("Reset", color = Color(0xFF888888), fontSize = 12.sp)
+                                }
+                            }
                             
                             var vsyncEnabled by remember { 
                                 mutableStateOf(
                                     com.retroplay.config.RetroPlayConfigManager.loadConfig().videoVsync
                                 )
                             }
+                            
+                            val vsyncIsDefault = vsyncEnabled == true
                             
                             SwitchRow(
                                 title = "VSync",
@@ -1591,18 +1625,108 @@ fun RetroArchSettingsDialog(
                                     val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
                                     com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = it))
                                     onVsyncChanged(it)
-                                }
+                                },
+                                showModifiedIndicator = !vsyncIsDefault
                             )
+                            
+                            // Aspect Ratio
+                            var selectedAspectRatio by remember { 
+                                mutableStateOf(
+                                    prefs.getString("emulation_video_aspect_ratio", "AUTO") ?: "AUTO"
+                                )
+                            }
+                            var expandedAspectRatioMenu by remember { mutableStateOf(false) }
+                            
+                            val aspectRatios = listOf(
+                                "AUTO" to "Auto (Core Default)",
+                                "4:3" to "4:3 (1.33:1)",
+                                "16:9" to "16:9 (1.78:1)",
+                                "16:10" to "16:10 (1.6:1)",
+                                "1:1" to "1:1 (Square)",
+                                "21:9" to "21:9 (2.33:1)"
+                            )
+                            
+                            val aspectRatioIsDefault = selectedAspectRatio == "AUTO"
+                            
+                            Box {
+                                Button(
+                                    onClick = { expandedAspectRatioMenu = true },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (aspectRatioIsDefault) Color(0xFF2A2A2A) else Color(0xFF3A2A1A)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "Aspect Ratio: ${aspectRatios.find { it.first == selectedAspectRatio }?.second ?: selectedAspectRatio}",
+                                                color = Color.White
+                                            )
+                                            if (!aspectRatioIsDefault) {
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("●", color = Color(0xFFFF9800), fontSize = 8.sp)
+                                            }
+                                        }
+                                        Text("▼", color = Color(0xFF888888))
+                                    }
+                                }
+                                
+                                androidx.compose.material3.DropdownMenu(
+                                    expanded = expandedAspectRatioMenu,
+                                    onDismissRequest = { expandedAspectRatioMenu = false },
+                                    modifier = Modifier.background(Color(0xFF1C1C1C))
+                                ) {
+                                    aspectRatios.forEach { (ratio, displayName) ->
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { 
+                                                Text(
+                                                    text = displayName,
+                                                    color = if (ratio == selectedAspectRatio) Color(0xFFFF9800) else Color.White
+                                                )
+                                            },
+                                            onClick = {
+                                                selectedAspectRatio = ratio
+                                                expandedAspectRatioMenu = false
+                                                prefs.edit().putString("emulation_video_aspect_ratio", ratio).apply()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
 
                             HorizontalDivider(color = Color(0xFF444444))
 
                             // ========== AUDIO SECTION ==========
-                            Text(
-                                text = "Audio Settings",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Audio Settings",
+                                    color = Color(0xFFFF9800),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                TextButton(
+                                    onClick = {
+                                        // Reset Audio Settings to defaults
+                                        prefs.edit()
+                                            .putFloat("emulation_audio_volume", 1.0f)
+                                            .putBoolean("emulation_audio_muted", false)
+                                            .putBoolean("emulation_audio_low_latency", false)
+                                            .apply()
+                                        onAudioVolumeChanged(1.0f)
+                                        onAudioMuteChanged(false)
+                                    }
+                                ) {
+                                    Text("Reset", color = Color(0xFF888888), fontSize = 12.sp)
+                                }
+                            }
                             
                             var audioVolume by remember { 
                                 mutableStateOf(prefs.getFloat("emulation_audio_volume", 1.0f)) 
@@ -1611,18 +1735,28 @@ fun RetroArchSettingsDialog(
                                 mutableStateOf(prefs.getBoolean("emulation_audio_muted", false)) 
                             }
                             
-                            SliderWithLabel(
-                                label = "Volume",
-                                value = audioVolume,
-                                onValueChange = { 
-                                    audioVolume = it
-                                    prefs.edit().putFloat("emulation_audio_volume", it).apply()
-                                    onAudioVolumeChanged(it)
-                                },
-                                valueRange = 0.0f..1.0f,
-                                displayValue = "${(audioVolume * 100).toInt()}%",
-                                activeColor = Color(0xFF4CAF50)
-                            )
+                            val volumeIsDefault = audioVolume == 1.0f
+                            
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                SliderWithLabel(
+                                    label = "Volume",
+                                    value = audioVolume,
+                                    onValueChange = { 
+                                        audioVolume = it
+                                        prefs.edit().putFloat("emulation_audio_volume", it).apply()
+                                        onAudioVolumeChanged(it)
+                                    },
+                                    valueRange = 0.0f..1.0f,
+                                    displayValue = "${(audioVolume * 100).toInt()}%",
+                                    activeColor = Color(0xFF4CAF50)
+                                )
+                                if (!volumeIsDefault) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("●", color = Color(0xFFFF9800), fontSize = 8.sp)
+                                }
+                            }
+                            
+                            val muteIsDefault = !audioMuted
                             
                             SwitchRow(
                                 title = "Mute Audio",
@@ -1632,7 +1766,27 @@ fun RetroArchSettingsDialog(
                                     audioMuted = it
                                     prefs.edit().putBoolean("emulation_audio_muted", it).apply()
                                     onAudioMuteChanged(it)
-                                }
+                                },
+                                showModifiedIndicator = !muteIsDefault
+                            )
+                            
+                            var lowLatencyAudio by remember { 
+                                mutableStateOf(
+                                    prefs.getBoolean("emulation_audio_low_latency", false)
+                                )
+                            }
+                            
+                            val lowLatencyIsDefault = !lowLatencyAudio
+                            
+                            SwitchRow(
+                                title = "Low Latency Audio",
+                                subtitle = "Use low latency audio mode (reduces audio delay, may increase battery usage)",
+                                checked = lowLatencyAudio,
+                                onCheckedChange = { 
+                                    lowLatencyAudio = it
+                                    prefs.edit().putBoolean("emulation_audio_low_latency", it).apply()
+                                },
+                                showModifiedIndicator = !lowLatencyIsDefault
                             )
 
                             HorizontalDivider(color = Color(0xFF444444))
@@ -1861,7 +2015,8 @@ fun SwitchRow(
     title: String,
     subtitle: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    showModifiedIndicator: Boolean = false
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1879,7 +2034,13 @@ fun SwitchRow(
         )
         Spacer(Modifier.width(12.dp))
         Column {
-            Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                if (showModifiedIndicator) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("●", color = Color(0xFFFF9800), fontSize = 8.sp)
+                }
+            }
             Text(subtitle, color = Color(0xFF9E9E9E), fontSize = 12.sp)
         }
     }

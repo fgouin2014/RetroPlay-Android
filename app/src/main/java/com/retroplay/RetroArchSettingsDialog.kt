@@ -1499,10 +1499,9 @@ fun RetroArchSettingsDialog(
                                     )
                                 )
                             }
-                        }
                     }
                         2 -> {
-                            // ========== ONGLET 3: RETROARCH GENERAL SETTINGS ==========
+                        // ========== ONGLET 3: RETROARCH GENERAL SETTINGS ==========
                             
                             // ========== SHADERS SECTION ==========
                             Text(
@@ -1513,259 +1512,258 @@ fun RetroArchSettingsDialog(
                             )
                             
                             var selectedShaderName by remember { 
-                        mutableStateOf(
-                            prefs.getString("emulation_shader_preset", "DEFAULT") ?: "DEFAULT"
-                        )
-                    }
-                    var expandedShaderMenu by remember { mutableStateOf(false) }
-                    
-                    val availableShaders = com.retroplay.shader.ShaderManager.ShaderPreset.values()
-                    val currentShader = com.retroplay.shader.ShaderManager.fromString(selectedShaderName)
-                    
-                    Box {
-                        Button(
-                            onClick = { expandedShaderMenu = true },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF2A2A2A)
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Shader Preset: ${currentShader.displayName}",
-                                    color = Color.White
+                                mutableStateOf(
+                                    prefs.getString("emulation_shader_preset", "DEFAULT") ?: "DEFAULT"
                                 )
-                                Text("▼", color = Color(0xFF888888))
                             }
-                        }
-                        
-                        androidx.compose.material3.DropdownMenu(
-                            expanded = expandedShaderMenu,
-                            onDismissRequest = { expandedShaderMenu = false },
-                            modifier = Modifier.background(Color(0xFF1C1C1C))
-                        ) {
-                            availableShaders.forEach { shader ->
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { 
+                            var expandedShaderMenu by remember { mutableStateOf(false) }
+                            
+                            val availableShaders = com.retroplay.shader.ShaderManager.ShaderPreset.values()
+                            val currentShader = com.retroplay.shader.ShaderManager.fromString(selectedShaderName)
+                            
+                            Box {
+                                Button(
+                                    onClick = { expandedShaderMenu = true },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF2A2A2A)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Text(
-                                            text = "${shader.icon} ${shader.displayName}",
-                                            color = if (shader == currentShader) Color(0xFFFF9800) else Color.White
+                                            text = "Shader Preset: ${currentShader.displayName}",
+                                            color = Color.White
                                         )
-                                    },
-                                    onClick = {
-                                        selectedShaderName = shader.name
-                                        expandedShaderMenu = false
-                                        prefs.edit().putString("emulation_shader_preset", shader.name).apply()
-                                        onShaderChanged(shader.name)
+                                        Text("▼", color = Color(0xFF888888))
                                     }
-                                )
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(color = Color(0xFF444444))
-
-                    // ========== VIDEO SECTION ==========
-                    Text(
-                        text = "Video Settings",
-                        color = Color(0xFFFF9800),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    
-                    var vsyncEnabled by remember { 
-                        mutableStateOf(
-                            com.retroplay.config.RetroPlayConfigManager.loadConfig().videoVsync
-                        )
-                    }
-                    
-                    SwitchRow(
-                        title = "VSync",
-                        subtitle = "Vertical synchronization (reduces screen tearing)",
-                        checked = vsyncEnabled,
-                        onCheckedChange = { 
-                            vsyncEnabled = it
-                            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-                            com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = it))
-                            onVsyncChanged(it)
-                        }
-                    )
-
-                    HorizontalDivider(color = Color(0xFF444444))
-
-                    // ========== AUDIO SECTION ==========
-                    Text(
-                        text = "Audio Settings",
-                        color = Color(0xFFFF9800),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    
-                    var audioVolume by remember { 
-                        mutableStateOf(prefs.getFloat("emulation_audio_volume", 1.0f)) 
-                    }
-                    var audioMuted by remember { 
-                        mutableStateOf(prefs.getBoolean("emulation_audio_muted", false)) 
-                    }
-                    
-                    SliderWithLabel(
-                        label = "Volume",
-                        value = audioVolume,
-                            onValueChange = { 
-                            audioVolume = it
-                            prefs.edit().putFloat("emulation_audio_volume", it).apply()
-                            onAudioVolumeChanged(it)
-                        },
-                        valueRange = 0.0f..1.0f,
-                        displayValue = "${(audioVolume * 100).toInt()}%",
-                        activeColor = Color(0xFF4CAF50)
-                    )
-                    
-                    SwitchRow(
-                        title = "Mute Audio",
-                        subtitle = "Disable all audio output",
-                        checked = audioMuted,
-                        onCheckedChange = { 
-                            audioMuted = it
-                            prefs.edit().putBoolean("emulation_audio_muted", it).apply()
-                            onAudioMuteChanged(it)
-                        }
-                    )
-
-                    HorizontalDivider(color = Color(0xFF444444))
-
-                    // ========== ADVANCED SECTION ==========
-                    Text(
-                        text = "Advanced Settings",
-                        color = Color(0xFFFF9800),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    
-                    var fastForwardRatio by remember { 
-                        mutableStateOf(prefs.getFloat("emulation_fast_forward_ratio", 2.0f)) 
-                    }
-                    
-                    SliderWithLabel(
-                        label = "Fast Forward Ratio",
-                        value = fastForwardRatio,
-                        onValueChange = { 
-                            fastForwardRatio = it
-                            prefs.edit().putFloat("emulation_fast_forward_ratio", it).apply()
-                            onFastForwardRatioChanged(it)
-                        },
-                        valueRange = 1.0f..10.0f,
-                        displayValue = "${fastForwardRatio.toInt()}x",
-                        activeColor = Color(0xFFFF9800)
-                    )
-                    
-                    var rewindEnabled by remember { 
-                        mutableStateOf(
-                            com.retroplay.config.RetroPlayConfigManager.loadConfig().rewindEnable
-                        )
-                    }
-                    
-                    SwitchRow(
-                        title = "Rewind",
-                        subtitle = "Enable rewind functionality (requires buffer)",
-                        checked = rewindEnabled,
-                        onCheckedChange = { 
-                            rewindEnabled = it
-                            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-                            com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(rewindEnable = it))
-                            onRewindEnabledChanged(it)
-                        }
-                    )
-                    
-                    SwitchRow(
-                        title = "Debug Mode",
-                        subtitle = "Show overlay debug information",
-                        checked = debugModeState.value,
-                        onCheckedChange = { debugModeState.value = it }
-                    )
-
-                    HorizontalDivider(color = Color(0xFF444444))
-
-                    // ========== INPUT SETTINGS (HOTKEYS) SECTION ==========
-                    Text(
-                        text = "Input Settings (Hotkeys)",
-                        color = Color(0xFFFF9800),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    
-                    Text(
-                        text = "Hotkeys are configured in overlay .cfg files. Available hotkeys:",
-                        color = Color(0xFF888888),
-                        fontSize = 12.sp
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Liste des hotkeys disponibles
-                    val hotkeys = listOf(
-                        "Save State" to "save_state",
-                        "Load State" to "load_state",
-                        "State Slot +" to "state_slot_increase",
-                        "State Slot -" to "state_slot_decrease",
-                        "Fast Forward" to "toggle_fast_forward",
-                        "Rewind" to "rewind",
-                        "Reset" to "reset",
-                        "Pause Toggle" to "pause_toggle",
-                        "Audio Mute" to "audio_mute_toggle",
-                        "Shader Next" to "shader_next",
-                        "Shader Prev" to "shader_prev",
-                        "Screenshot" to "screenshot",
-                        "Frame Advance" to "frame_advance"
-                    )
-                    
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        hotkeys.forEach { (displayName, action) ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = displayName,
-                                        color = Color.White,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = action,
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
                                 }
-                                Text(
-                                    text = "✓",
-                                    color = Color(0xFF4CAF50),
-                                    fontSize = 14.sp
+                                
+                                androidx.compose.material3.DropdownMenu(
+                                    expanded = expandedShaderMenu,
+                                    onDismissRequest = { expandedShaderMenu = false },
+                                    modifier = Modifier.background(Color(0xFF1C1C1C))
+                                ) {
+                                    availableShaders.forEach { shader ->
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { 
+                                                Text(
+                                                    text = "${shader.icon} ${shader.displayName}",
+                                                    color = if (shader == currentShader) Color(0xFFFF9800) else Color.White
+                                                )
+                                            },
+                                            onClick = {
+                                                selectedShaderName = shader.name
+                                                expandedShaderMenu = false
+                                                prefs.edit().putString("emulation_shader_preset", shader.name).apply()
+                                                onShaderChanged(shader.name)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            HorizontalDivider(color = Color(0xFF444444))
+
+                            // ========== VIDEO SECTION ==========
+                            Text(
+                                text = "Video Settings",
+                                color = Color(0xFFFF9800),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            
+                            var vsyncEnabled by remember { 
+                                mutableStateOf(
+                                    com.retroplay.config.RetroPlayConfigManager.loadConfig().videoVsync
                                 )
                             }
+                            
+                            SwitchRow(
+                                title = "VSync",
+                                subtitle = "Vertical synchronization (reduces screen tearing)",
+                                checked = vsyncEnabled,
+                                onCheckedChange = { 
+                                    vsyncEnabled = it
+                                    val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+                                    com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = it))
+                                    onVsyncChanged(it)
+                                }
+                            )
+
+                            HorizontalDivider(color = Color(0xFF444444))
+
+                            // ========== AUDIO SECTION ==========
+                            Text(
+                                text = "Audio Settings",
+                                color = Color(0xFFFF9800),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            
+                            var audioVolume by remember { 
+                                mutableStateOf(prefs.getFloat("emulation_audio_volume", 1.0f)) 
+                            }
+                            var audioMuted by remember { 
+                                mutableStateOf(prefs.getBoolean("emulation_audio_muted", false)) 
+                            }
+                            
+                            SliderWithLabel(
+                                label = "Volume",
+                                value = audioVolume,
+                                onValueChange = { 
+                                    audioVolume = it
+                                    prefs.edit().putFloat("emulation_audio_volume", it).apply()
+                                    onAudioVolumeChanged(it)
+                                },
+                                valueRange = 0.0f..1.0f,
+                                displayValue = "${(audioVolume * 100).toInt()}%",
+                                activeColor = Color(0xFF4CAF50)
+                            )
+                            
+                            SwitchRow(
+                                title = "Mute Audio",
+                                subtitle = "Disable all audio output",
+                                checked = audioMuted,
+                                onCheckedChange = { 
+                                    audioMuted = it
+                                    prefs.edit().putBoolean("emulation_audio_muted", it).apply()
+                                    onAudioMuteChanged(it)
+                                }
+                            )
+
+                            HorizontalDivider(color = Color(0xFF444444))
+
+                            // ========== ADVANCED SECTION ==========
+                            Text(
+                                text = "Advanced Settings",
+                                color = Color(0xFFFF9800),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            
+                            var fastForwardRatio by remember { 
+                                mutableStateOf(prefs.getFloat("emulation_fast_forward_ratio", 2.0f)) 
+                            }
+                            
+                            SliderWithLabel(
+                                label = "Fast Forward Ratio",
+                                value = fastForwardRatio,
+                                onValueChange = { 
+                                    fastForwardRatio = it
+                                    prefs.edit().putFloat("emulation_fast_forward_ratio", it).apply()
+                                    onFastForwardRatioChanged(it)
+                                },
+                                valueRange = 1.0f..10.0f,
+                                displayValue = "${fastForwardRatio.toInt()}x",
+                                activeColor = Color(0xFFFF9800)
+                            )
+                            
+                            var rewindEnabled by remember { 
+                                mutableStateOf(
+                                    com.retroplay.config.RetroPlayConfigManager.loadConfig().rewindEnable
+                                )
+                            }
+                            
+                            SwitchRow(
+                                title = "Rewind",
+                                subtitle = "Enable rewind functionality (requires buffer)",
+                                checked = rewindEnabled,
+                                onCheckedChange = { 
+                                    rewindEnabled = it
+                                    val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+                                    com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(rewindEnable = it))
+                                    onRewindEnabledChanged(it)
+                                }
+                            )
+                            
+                            SwitchRow(
+                                title = "Debug Mode",
+                                subtitle = "Show overlay debug information",
+                                checked = debugModeState.value,
+                                onCheckedChange = { debugModeState.value = it }
+                            )
+
+                            HorizontalDivider(color = Color(0xFF444444))
+
+                            // ========== INPUT SETTINGS (HOTKEYS) SECTION ==========
+                            Text(
+                                text = "Input Settings (Hotkeys)",
+                                color = Color(0xFFFF9800),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            
+                            Text(
+                                text = "Hotkeys are configured in overlay .cfg files. Available hotkeys:",
+                                color = Color(0xFF888888),
+                                fontSize = 12.sp
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Liste des hotkeys disponibles
+                            val hotkeys = listOf(
+                                "Save State" to "save_state",
+                                "Load State" to "load_state",
+                                "State Slot +" to "state_slot_increase",
+                                "State Slot -" to "state_slot_decrease",
+                                "Fast Forward" to "toggle_fast_forward",
+                                "Rewind" to "rewind",
+                                "Reset" to "reset",
+                                "Pause Toggle" to "pause_toggle",
+                                "Audio Mute" to "audio_mute_toggle",
+                                "Shader Next" to "shader_next",
+                                "Shader Prev" to "shader_prev",
+                                "Screenshot" to "screenshot",
+                                "Frame Advance" to "frame_advance"
+                            )
+                            
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                hotkeys.forEach { (displayName, action) ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = displayName,
+                                                color = Color.White,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Text(
+                                                text = action,
+                                                color = Color(0xFF888888),
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                        Text(
+                                            text = "✓",
+                                            color = Color(0xFF4CAF50),
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            Text(
+                                text = "Note: Hotkeys are triggered from overlay buttons. To configure hotkeys, edit the overlay .cfg file or use overlay buttons.",
+                                color = Color(0xFF666666),
+                                fontSize = 11.sp,
+                                fontStyle = FontStyle.Italic
+                            )
                         }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Text(
-                        text = "Note: Hotkeys are triggered from overlay buttons. To configure hotkeys, edit the overlay .cfg file or use overlay buttons.",
-                        color = Color(0xFF666666),
-                        fontSize = 11.sp,
-                        fontStyle = FontStyle.Italic
-                    )
-                        }
-                    }
                     }
 
                     HorizontalDivider(color = Color(0xFF444444))

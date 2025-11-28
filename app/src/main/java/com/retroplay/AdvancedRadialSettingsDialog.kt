@@ -396,34 +396,3 @@ private fun RadialSlider(
     }
 }
 
-@Composable
-private fun SwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.Transparent)
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = Color.White, style = MaterialTheme.typography.bodyMedium)
-            if (subtitle.isNotEmpty()) {
-                Text(subtitle, color = Color(0xFF888888), style = MaterialTheme.typography.labelSmall)
-            }
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color(0xFF4CAF50),
-                checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f)
-            )
-        )
-    }
-}

@@ -601,7 +601,7 @@ object GamelistManager {
             for (i in 0 until dirsArray.length()) {
                 try {
                     if (!dirsArray.isNull(i)) {
-                        sourceDirs.add(dirsArray.getString(i))
+                sourceDirs.add(dirsArray.getString(i))
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Error parsing sourceDirectory at index $i: ${e.message}")

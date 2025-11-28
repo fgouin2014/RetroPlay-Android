@@ -1695,9 +1695,12 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             loadAndApplyCheats()
         }, if (loadSlot > 0) 3000 else 8000)  // 8s pour NEW GAME, 3s pour LOAD SAVE
         
-        // State pour capturer les bounds exacts du GLRetroView (pour Zapper)
-        // Défini ICI (dans l'Activity) pour être accessible dans onZapperTouch
+        // State pour capturer les bounds exacts du GLRetroView (pour Zapper et Aspect Ratio)
+        // Défini ICI (dans l'Activity) pour être accessible dans onZapperTouch et applyAspectRatio
         val gameViewBounds = mutableStateOf<androidx.compose.ui.geometry.Rect?>(null)
+        
+        // Stocker la référence pour applyAspectRatio
+        gameViewBoundsForAspectRatio = gameViewBounds
         
         setContent {
             ComposeEmulatorScreen(
@@ -1854,6 +1857,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     applyRewindSettings()
                     Log.i(TAG, "[REWIND] Enabled changed to: $enabled")
                 },
+                onAspectRatioChanged = onAspectRatioChangedCallback,
                 rewindManager = rewindManager
             )
             
@@ -2475,6 +2479,14 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     // État pour shader selection (MutableState pour reactivity Compose)
     private val currentShader = mutableStateOf(com.retroplay.shader.ShaderManager.ShaderPreset.DEFAULT)
     
+    // Référence aux bounds pour aspect ratio (initialisée dans onCreate)
+    private var gameViewBoundsForAspectRatio: MutableState<androidx.compose.ui.geometry.Rect?>? = null
+    
+    // Callback pour aspect ratio (utilise une lambda qui appelle applyAspectRatio)
+    private val onAspectRatioChangedCallback: (String) -> Unit = { aspectRatio ->
+        applyAspectRatio(aspectRatio)
+    }
+    
     // État pour QuickActionsBar visibility (MutableState pour reactivity Compose)
     private val quickActionsBarVisible = mutableStateOf(true)
     private val quickActionsBarAutoHideEnabled = mutableStateOf(true)  // Auto-hide activé par défaut
@@ -2753,7 +2765,76 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
     }
     
-    // Quick Win #4: Shader Cycle (Next shader)
+    /**
+     * Applique un aspect ratio personnalisé en calculant et appliquant le viewport approprié
+     * @param aspectRatioString Aspect ratio sélectionné ("AUTO", "4:3", "16:9", etc.)
+     */
+    fun applyAspectRatio(aspectRatioString: String) {
+        if (aspectRatioString == "AUTO") {
+            // Mode AUTO: utiliser l'aspect ratio du core (viewport plein écran)
+            runOnUiThread {
+                retroView.viewport = android.graphics.RectF(0f, 0f, 1f, 1f)
+                Log.i(TAG, "[ASPECT_RATIO] Reset to AUTO (core default)")
+            }
+            return
+        }
+        
+        // Convertir le string en float (ex: "4:3" -> 1.333f)
+        val targetAspectRatio = when (aspectRatioString) {
+            "4:3" -> 4f / 3f
+            "16:9" -> 16f / 9f
+            "16:10" -> 16f / 10f
+            "1:1" -> 1f / 1f
+            "21:9" -> 21f / 9f
+            else -> {
+                Log.w(TAG, "[ASPECT_RATIO] Unknown ratio: $aspectRatioString, using AUTO")
+                runOnUiThread {
+                    retroView.viewport = android.graphics.RectF(0f, 0f, 1f, 1f)
+                }
+                return
+            }
+        }
+        
+        // Récupérer les bounds du GLRetroView
+        val bounds = gameViewBoundsForAspectRatio?.value
+        if (bounds == null) {
+            // Retry après un court délai si bounds pas disponible
+            Log.w(TAG, "[ASPECT_RATIO] GLRetroView bounds not available yet, will retry")
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                applyAspectRatio(aspectRatioString)
+            }, 100)
+            return
+        }
+        
+        val screenWidth = bounds.width
+        val screenHeight = bounds.height
+        val screenAspectRatio = screenWidth / screenHeight
+        
+        // Calculer le viewport avec letterboxing
+        val viewport = if (screenAspectRatio > targetAspectRatio) {
+            // Écran plus large que le ratio cible → Bandes noires à gauche/droite
+            val gameWidth = screenHeight * targetAspectRatio
+            val letterboxWidth = (screenWidth - gameWidth) / 2f
+            val left = letterboxWidth / screenWidth
+            val right = 1f - left
+            android.graphics.RectF(left, 0f, right, 1f)
+        } else {
+            // Écran plus haut que le ratio cible → Bandes noires en haut/bas
+            val gameHeight = screenWidth / targetAspectRatio
+            val letterboxHeight = (screenHeight - gameHeight) / 2f
+            val top = letterboxHeight / screenHeight
+            val bottom = 1f - top
+            android.graphics.RectF(0f, top, 1f, bottom)
+        }
+        
+        // Appliquer le viewport
+        runOnUiThread {
+            retroView.viewport = viewport
+            Log.i(TAG, "[ASPECT_RATIO] Applied $aspectRatioString (${targetAspectRatio}): viewport=(${viewport.left}, ${viewport.top}, ${viewport.right}, ${viewport.bottom})")
+        }
+    }
+    
+      // Quick Win #4: Shader Cycle (Next shader)
     private fun cycleShader() {
         currentShader.value = com.retroplay.shader.ShaderManager.getNextShader(currentShader.value)
         val shaderConfig = com.retroplay.shader.ShaderManager.getShaderConfig(currentShader.value)
@@ -3099,7 +3180,8 @@ internal fun ComposeEmulatorScreen(
     onAudioVolumeChanged: (Float) -> Unit = {},
     onAudioMuteChanged: (Boolean) -> Unit = {},
     onVsyncChanged: (Boolean) -> Unit = {},
-    onRewindEnabledChanged: (Boolean) -> Unit = {}
+    onRewindEnabledChanged: (Boolean) -> Unit = {},
+    onAspectRatioChanged: (String) -> Unit = {}
 ) {
     // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
@@ -3958,15 +4040,9 @@ internal fun ComposeEmulatorScreen(
                         onAudioVolumeChanged = onAudioVolumeChanged,
                         onAudioMuteChanged = onAudioMuteChanged,
                         onVsyncChanged = onVsyncChanged,
-                onRewindEnabledChanged = onRewindEnabledChanged,
-                onAspectRatioChanged = { aspectRatio ->
-                    // L'aspect ratio est géré via le viewport dans LibretroDroid
-                    // Pour l'instant, on sauvegarde juste la préférence
-                    // L'application réelle nécessiterait de recalculer le viewport
-                    android.util.Log.i("RetroArchEmulator", "[ASPECT_RATIO] Changed to: $aspectRatio")
-                    // TODO: Appliquer l'aspect ratio via viewport si nécessaire
-                },
-                onOpenAdvancedOverlaySettings = {
+                        onRewindEnabledChanged = onRewindEnabledChanged,
+                        onAspectRatioChanged = onAspectRatioChanged,
+                        onOpenAdvancedOverlaySettings = {
                     showGamePadSettings.value = false
                     showAdvancedOverlaySettings.value = true
                 }

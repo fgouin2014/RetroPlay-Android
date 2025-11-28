@@ -207,7 +207,7 @@ object GamelistScanner {
                     
                     // Ajouter seulement les nouvelles ROMs
                     val newRomsCount = GamelistManager.addNewRomsToGamelist(consoleDir, dirName)
-                    
+                
                     if (newRomsCount > 0) {
                         scannedConsoles.add(dirName)
                         totalGames += newRomsCount

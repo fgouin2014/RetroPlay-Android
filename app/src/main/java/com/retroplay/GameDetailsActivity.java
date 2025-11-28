@@ -250,7 +250,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         String releaseDate = formatReleaseDate(game.getReleasedate());
         if (game.getDeveloper() != null && !game.getDeveloper().isEmpty()) {
             releaseDate += " • 🏢 " + game.getDeveloper();
-        }
+                                }
         if (game.getPublisher() != null && !game.getPublisher().isEmpty() && 
             !game.getPublisher().equals(game.getDeveloper())) {
             releaseDate += " • 📦 " + game.getPublisher();
@@ -420,7 +420,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             if (fallbackFile.exists()) {
                 Log.d(TAG, "[DB] Using fallback path: " + fallbackPath);
                 return fallbackPath;
-            }
+        }
             Log.e(TAG, "[DB] Neither localPath nor fallbackPath exist");
             return localPath; // Retourner quand même pour que calculateCRC32() gère l'erreur
         }
@@ -2404,7 +2404,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Appliquer le fond au dialog
         dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
     }
-    
+
     private void showSettingsMenu(View anchor) {
         PopupMenu popupMenu = new PopupMenu(this, anchor);
         popupMenu.inflate(R.menu.menu_game_details_settings);
@@ -2544,7 +2544,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         if (rawPath != null && !rawPath.isEmpty()) {
             // Nettoyer le chemin (enlever "./" si présent)
             String cleanPath = rawPath.startsWith("./") ? rawPath.substring(2) : rawPath;
-            
+
             // Essayer avec le chemin complet
             File candidate = new File(baseDir + cleanPath);
             if (candidate.exists()) {
@@ -2566,7 +2566,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             }
             
             // Dernier recours: retourner le chemin même s'il n'existe pas
-            return baseDir + consoleDir + "/" + fileName;
+        return baseDir + consoleDir + "/" + fileName;
         }
 
         // Si tout échoue, retourner un chemin par défaut

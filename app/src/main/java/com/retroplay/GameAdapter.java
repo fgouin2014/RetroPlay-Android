@@ -272,8 +272,8 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         try {
             if (releaseDate != null && !releaseDate.isEmpty()) {
                 // Support format YYYY-MM-DD ou YYYY
-                if (releaseDate.length() >= 4) {
-                    return releaseDate.substring(0, 4);
+            if (releaseDate.length() >= 4) {
+                return releaseDate.substring(0, 4);
                 }
             }
         } catch (Exception e) {

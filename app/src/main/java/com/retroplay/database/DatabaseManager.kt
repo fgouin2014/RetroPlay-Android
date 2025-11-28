@@ -29,7 +29,7 @@ object DatabaseManager {
      */
     @Deprecated("Use HashCalculator.calculateHash() instead", ReplaceWith("HashCalculator.calculateHash(File(filePath))"))
     fun calculateCRC32(filePath: String): String? {
-        val file = File(filePath)
+            val file = File(filePath)
         val hash = com.retroplay.scraper.HashCalculator.calculateHash(file)
         return hash?.crc32
     }

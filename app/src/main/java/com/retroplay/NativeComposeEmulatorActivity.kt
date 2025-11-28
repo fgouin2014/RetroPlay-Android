@@ -372,7 +372,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             retroView.updateVariables(*nesVariables)
             Log.i(TAG, "[CROSSHAIR] Updated fceumm_show_crosshair = ${config["fceumm_show_crosshair"]}")
         }
-        
+
         runOnUiThread {
             Toast.makeText(
                 this,
@@ -1190,13 +1190,13 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
                     Log.i(TAG, "[NES] FCEUmm will call get_mouse_input() which reads RETRO_DEVICE_POINTER in RetroPointer mode")
                     
-                    runOnUiThread {
-                        Toast.makeText(
-                            this@NativeComposeEmulatorActivity,
+                runOnUiThread {
+                    Toast.makeText(
+                        this@NativeComposeEmulatorActivity,
                             "Zapper detected! Touch game area to shoot",
                             Toast.LENGTH_SHORT
-                        ).show()
-                    }
+                    ).show()
+                }
                 } catch (e: Exception) {
                     Log.e(TAG, "[NES] Failed to configure Zapper: ${e.message}")
                 }
@@ -2677,17 +2677,17 @@ private fun ComposeEmulatorScreen(
             
             // Afficher la barre si visible et activée - Positionnée de manière absolue au top
             if (isBarVisible && quickActionsBarVisible.value) {
-                QuickActionsBar(
-                    isFastForwardActive = isFastForwardActive,
-                    audioMuted = audioMuted,
-                    isRewindSupported = isRewindAvailable,
-                    isRewinding = isRewindActive,
-                    rewindDurationSeconds = if (isRewindAvailable) rewindSeconds else 0f,
+                    QuickActionsBar(
+                        isFastForwardActive = isFastForwardActive,
+                        audioMuted = audioMuted,
+                        isRewindSupported = isRewindAvailable,
+                        isRewinding = isRewindActive,
+                        rewindDurationSeconds = if (isRewindAvailable) rewindSeconds else 0f,
                     onRewindPress = { 
                         quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()
                         onRewindPress() 
                     },
-                    onRewindRelease = { onRewindRelease() },
+                        onRewindRelease = { onRewindRelease() },
                     onToggleFastForward = { 
                         quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()
                         toggleFastForwardAction()

@@ -43,6 +43,11 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.Variable
@@ -131,6 +136,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     
     // Zapper support (NES light gun)
     private var isZapperGame: Boolean = false
+    private var zapperPort: Int = 1  // Port par défaut: 1 (index) = Port 2 NES. 0 = Port 1 pour Chiller
     
     // États des menus
     private val showMainMenu = mutableStateOf(false)
@@ -542,7 +548,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             return
         }
         
-        val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+        // Get orientation from context
+        val isLandscapeForSettings = this@RetroArchEmulatorActivity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val orientationForSettings = if (isLandscapeForSettings) "landscape" else "portrait"
+        val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, orientationForSettings)
         val fingerCount = event.pointerCount
         
         // Support multi-touch (2/3/4 doigts) - Compatible RetroArch overlay_lightgun_action enum
@@ -1076,6 +1085,16 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         if (isZapperGame) {
             Log.i(TAG, "[ZAPPER] Zapper game detected EARLY: $gameName")
             
+            // Chiller utilise le port 0 (Port 1 NES), les autres jeux utilisent le port 1 (Port 2 NES)
+            val normalizedName = gameName.lowercase().replace(Regex("[^a-z0-9]"), "")
+            if (normalizedName.contains("chiller")) {
+                zapperPort = 0  // Port 1 NES
+                Log.i(TAG, "[ZAPPER] Chiller detected - using port 0 (Port 1 NES)")
+            } else {
+                zapperPort = 1  // Port 2 NES (défaut)
+                Log.i(TAG, "[ZAPPER] Standard Zapper game - using port 1 (Port 2 NES)")
+            }
+            
             // Recommandation mode panoramique pour meilleure précision
             val configuration = resources.configuration
             val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
@@ -1141,7 +1160,12 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         // QuickActionsBar visibility: Charger état
         quickActionsBarVisible.value = prefs.getBoolean("emulation_quick_actions_bar_visible", true)
         quickActionsBarAutoHideEnabled.value = prefs.getBoolean("emulation_quick_actions_bar_auto_hide", true)
-        quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()  // Initialiser au démarrage
+        // Ne PAS initialiser le timer au démarrage si auto-hide est activé
+        // Le timer sera mis à jour SEULEMENT quand on clique sur le chevron
+        // Les touches sur l'écran ne réaffichent PAS la barre automatiquement
+        if (!quickActionsBarAutoHideEnabled.value) {
+            quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()  // Initialiser seulement si auto-hide désactivé
+        }
         
         // Crosshair Mode: Charger mode d'affichage du crosshair Zapper
         val savedCrosshairMode = prefs.getString("emulation_crosshair_mode", "RETROPLAY_ONLY") ?: "RETROPLAY_ONLY"
@@ -1519,9 +1543,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     // Configurer le port comme RETRO_DEVICE_ZAPPER (258)
                     // CRITICAL: FCEUmm lit RETRO_DEVICE_POINTER seulement si nes_input.type[port] == RETRO_DEVICE_ZAPPER!
                     // get_mouse_input() n'est appelé que pour ZAPPER/ARKANOID (ligne 2686-2693 libretro.c)
-                    // Port 2 (index 1) = Position traditionnelle du Zapper NES
-                    retroView.setControllerType(1, 258)  // Port 2 (index 1) = RETRO_DEVICE_ZAPPER
-                    Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_ZAPPER (258) on port 2 (index 1)")
+                    // Chiller utilise le port 0 (Port 1), les autres jeux utilisent le port 1 (Port 2)
+                    retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
+                    Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
                     
                     runOnUiThread {
                         Toast.makeText(
@@ -1708,7 +1732,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 isZapperGame = isZapperGame,
                 gameViewBounds = gameViewBounds,  // Passer le state pour capture
                 onZapperTouch = { event ->
-                    val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+                    // Get orientation from context
+                    val isLandscapeForSettings = this@RetroArchEmulatorActivity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    val orientationForSettings = if (isLandscapeForSettings) "landscape" else "portrait"
+                    val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, orientationForSettings)
                     handleZapperTouch(
                         event, 
                         gameViewBounds.value, 
@@ -1785,6 +1812,41 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 onLoadCustomCfg = {
                     // Lancer le file picker pour sélectionner un .cfg
                     pickCustomCfgLauncher.launch(arrayOf("*/*"))
+                },
+                // Callbacks pour RetroArchSettingsDialog
+                onShaderChanged = { shaderName ->
+                    currentShader.value = com.retroplay.shader.ShaderManager.fromString(shaderName)
+                    val shaderConfig = com.retroplay.shader.ShaderManager.getShaderConfig(currentShader.value)
+                    // Note: Shader est appliqué au prochain chargement de ROM
+                    // Pour appliquer immédiatement, il faudrait recharger la ROM
+                    Log.i(TAG, "[SHADER] Changed to: ${currentShader.value.displayName}")
+                },
+                onFastForwardRatioChanged = { ratio: Float ->
+                    fastForwardRatio = ratio.toInt()
+                    // Note: Fast forward ratio est appliqué via toggleFastForward() quand actif
+                    // La valeur est sauvegardée et sera utilisée au prochain toggle
+                    Log.i(TAG, "[FAST_FORWARD] Ratio changed to: ${fastForwardRatio}x")
+                },
+                onAudioVolumeChanged = { volume: Float ->
+                    // Audio volume est géré via retroView.audioEnabled et système Android
+                    Log.i(TAG, "[AUDIO] Volume changed to: ${(volume * 100).toInt()}%")
+                },
+                onAudioMuteChanged = { muted: Boolean ->
+                    audioMuted.value = muted
+                    retroView.audioEnabled = !muted
+                    Log.i(TAG, "[AUDIO] Mute changed to: $muted")
+                },
+                onVsyncChanged = { enabled: Boolean ->
+                    val config = RetroPlayConfigManager.loadConfig()
+                    RetroPlayConfigManager.saveConfig(config.copy(videoVsync = enabled))
+                    // Note: VSync est appliqué au prochain chargement de ROM
+                    Log.i(TAG, "[VIDEO] VSync changed to: $enabled")
+                },
+                onRewindEnabledChanged = { enabled: Boolean ->
+                    val config = RetroPlayConfigManager.loadConfig()
+                    RetroPlayConfigManager.saveConfig(config.copy(rewindEnable = enabled))
+                    applyRewindSettings()
+                    Log.i(TAG, "[REWIND] Enabled changed to: $enabled")
                 },
                 rewindManager = rewindManager
             )
@@ -2578,8 +2640,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * Convertit le nom de l'action en ID numérique et envoie l'action au port lightgun configuré
      */
     fun handleLightgunAction(action: String) {
-        // Charger les settings lightgun pour obtenir le port
-        val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+        // Charger les settings lightgun pour obtenir le port (selon orientation)
+        val isLandscapeForSettings = this.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val orientationForSettings = if (isLandscapeForSettings) "landscape" else "portrait"
+        val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, orientationForSettings)
         val port = lightgunSettings.lightgunPort
         
         // Convertir le nom de l'action en ID numérique RetroArch
@@ -3022,7 +3086,14 @@ internal fun ComposeEmulatorScreen(
     n64ExtensionsInfo: MutableState<List<Pair<Int, String>>> = mutableStateOf(emptyList()),
     onRewindPress: () -> Unit = {},
     onRewindRelease: () -> Unit = {},
-    rewindManager: RewindManager? = null
+    rewindManager: RewindManager? = null,
+    // Callbacks pour RetroArchSettingsDialog
+    onShaderChanged: (String) -> Unit = {},
+    onFastForwardRatioChanged: (Float) -> Unit = {},
+    onAudioVolumeChanged: (Float) -> Unit = {},
+    onAudioMuteChanged: (Boolean) -> Unit = {},
+    onVsyncChanged: (Boolean) -> Unit = {},
+    onRewindEnabledChanged: (Boolean) -> Unit = {}
 ) {
     // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
@@ -3171,13 +3242,6 @@ internal fun ComposeEmulatorScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInteropFilter { event ->
-                        // Détecter tous les touches pour réafficher la barre (auto-hide)
-                        if (quickActionsBarAutoHideEnabled?.value == true && event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-                            quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
-                        }
-                        false  // Ne pas consommer l'événement, laisser passer
-                    }
                     .background(Color.Black)
             ) {
                 if (layoutVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
@@ -3229,10 +3293,8 @@ internal fun ComposeEmulatorScreen(
                                     gameViewBounds.value = realBounds
                                 }
                                 .pointerInteropFilter { event ->
-                                    // Réafficher la barre si auto-hide activé
-                                    if (quickActionsBarAutoHideEnabled?.value == true && event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-                                        quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
-                                    }
+                                    // NE PAS réafficher la barre automatiquement sur les touches
+                                    // La barre ne doit s'afficher QUE quand on clique sur le chevron
                                     
                                     // Gérer Zapper en background (seulement pour touch hors overlay)
                                     // L'overlay au-dessus intercepte les touch sur boutons AVANT que ceci soit appelé
@@ -3256,13 +3318,15 @@ internal fun ComposeEmulatorScreen(
                                 }
                         )
                         
-                        // ZapperCrosshair: Réticule personnalisé RetroPlay (si jeu Zapper et mode actif)
-                        if (isZapperGame && crosshairMode.showRetroPlayCrosshair()) {
+                        // ZapperCrosshair: Réticule personnalisé RetroPlay (si jeu Zapper)
+                        // IMPORTANT: Toujours afficher le ZapperCrosshair pour capturer les touches,
+                        // mais le rendre invisible si le mode ne l'affiche pas
+                        if (isZapperGame) {
                             ZapperCrosshair(
                                 onTouch = { event ->
                                     onZapperTouch(event)
                                 },
-                                visible = crosshairMode.showRetroPlayCrosshair()
+                                visible = crosshairMode.showRetroPlayCrosshair()  // Visible seulement si mode RetroPlay
                             )
                         }
                         
@@ -3270,8 +3334,9 @@ internal fun ComposeEmulatorScreen(
                         // Utiliser State pour recharger dynamiquement quand les prefs changent
                         val overlayPreferenceState = remember { mutableStateOf(com.retroplay.overlay.models.OverlayPreferenceManager.load(prefs, console)) }
                         
-                        // Utiliser State pour recharger dynamiquement les advanced settings
-                        val advancedSettingsState = remember { mutableStateOf(com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)) }
+                        // Utiliser State pour recharger dynamiquement les advanced settings (selon orientation)
+                        val currentOrientation = if (isLandscape) "landscape" else "portrait"
+                        val advancedSettingsState = remember { mutableStateOf(com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, currentOrientation)) }
                         
                         // CRITIQUE: Garder une référence forte au listener pour éviter le garbage collection
                         val preferenceListener = remember {
@@ -3310,9 +3375,10 @@ internal fun ComposeEmulatorScreen(
                                 }
                                 
                                 if (matchesAdvanced) {
-                                    val newAdvanced = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console)
+                                    val currentOrientation = if (isLandscape) "landscape" else "portrait"
+                                    val newAdvanced = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, currentOrientation)
                                     advancedSettingsState.value = newAdvanced
-                                    android.util.Log.i("ComposeEmulator", "🔄 Advanced settings reloaded: dpadSens=${newAdvanced.dpadDiagonalSensitivity} abxySens=${newAdvanced.abxyDiagonalSensitivity} recenter=${newAdvanced.analogRecenterZone} opacity=${newAdvanced.opacity}")
+                                    android.util.Log.i("ComposeEmulator", "🔄 Advanced settings reloaded ($currentOrientation): dpadSens=${newAdvanced.dpadDiagonalSensitivity} abxySens=${newAdvanced.abxyDiagonalSensitivity} recenter=${newAdvanced.analogRecenterZone} opacity=${newAdvanced.opacity}")
                                 }
                             }
                         }
@@ -3530,35 +3596,112 @@ internal fun ComposeEmulatorScreen(
                 }
                 // NO ELSE - RetroArch mode ONLY in this activity!
                 
-                // Auto-hide: Calculer si la barre doit être visible
-                val shouldShowBar = remember(quickActionsBarVisible, quickActionsBarAutoHideEnabled, quickActionsBarAutoHideTimer) {
-                    if (!quickActionsBarVisible) {
-                        false  // Barre désactivée manuellement
-                    } else if (quickActionsBarAutoHideEnabled == null || !quickActionsBarAutoHideEnabled.value) {
-                        true  // Auto-hide désactivé ou non disponible
-                    } else {
-                        // Auto-hide activé: vérifier si le timer est récent (< 3 secondes)
-                        val currentTime = android.os.SystemClock.elapsedRealtime()
-                        val timeSinceLastTouch = currentTime - (quickActionsBarAutoHideTimer?.value ?: 0L)
-                        timeSinceLastTouch < 3000L  // 3 secondes
+                // Auto-hide: État de visibilité avec vérification périodique
+                // Si auto-hide est activé, la barre doit être cachée au démarrage
+                var isBarVisible by remember { 
+                    mutableStateOf(quickActionsBarAutoHideEnabled?.value != true) 
+                }
+                
+                // Initialiser le timer au démarrage seulement si auto-hide est désactivé
+                // Sinon, laisser le timer à 0 pour que la barre reste cachée
+                LaunchedEffect(Unit) {
+                    if (quickActionsBarVisible && (quickActionsBarAutoHideEnabled?.value != true) && quickActionsBarAutoHideTimer != null) {
+                        // Auto-hide désactivé: afficher la barre et initialiser le timer
+                        quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()
+                        isBarVisible = true
+                    } else if (quickActionsBarVisible && quickActionsBarAutoHideEnabled?.value == true) {
+                        // Auto-hide activé: cacher la barre au démarrage
+                        isBarVisible = false
                     }
                 }
                 
-                // LaunchedEffect pour mettre à jour la visibilité après le délai
+                // LaunchedEffect pour gérer l'auto-hide avec vérification périodique
                 LaunchedEffect(quickActionsBarAutoHideTimer?.value, quickActionsBarAutoHideEnabled?.value, quickActionsBarVisible) {
-                    if (quickActionsBarVisible && quickActionsBarAutoHideEnabled?.value == true && quickActionsBarAutoHideTimer != null) {
-                        // Initialiser le timer au démarrage
+                    if (!quickActionsBarVisible) {
+                        isBarVisible = false
+                        return@LaunchedEffect
+                    }
+                    
+                    if (quickActionsBarAutoHideEnabled == null || !quickActionsBarAutoHideEnabled.value) {
+                        isBarVisible = true
+                        return@LaunchedEffect
+                    }
+                    
+                    if (quickActionsBarAutoHideTimer == null) {
+                        isBarVisible = true
+                        return@LaunchedEffect
+                    }
+                    
+                    // Auto-hide activé: vérifier périodiquement
+                    // IMPORTANT: Si le timer est à 0, la barre doit rester cachée
+                    // Le timer n'est mis à jour QUE quand on clique sur le chevron
+                    // Les touches sur l'écran ne réaffichent PAS la barre automatiquement
+                    while (true) {
+                        val currentTime = android.os.SystemClock.elapsedRealtime()
+                        val timeSinceLastTouch = currentTime - quickActionsBarAutoHideTimer.value
+                        
+                        // Si le timer est à 0 (démarrage), la barre reste cachée
+                        // Sinon, vérifier si 3 secondes se sont écoulées
                         if (quickActionsBarAutoHideTimer.value == 0L) {
-                            quickActionsBarAutoHideTimer.value = android.os.SystemClock.elapsedRealtime()
+                            isBarVisible = false
+                            delay(500)  // Vérifier toutes les 500ms si le timer change
+                        } else {
+                            isBarVisible = timeSinceLastTouch < 3000L  // 3 secondes
+                            
+                            if (isBarVisible) {
+                                // Attendre jusqu'à ce que le timer expire
+                                val remainingTime = 3000L - timeSinceLastTouch
+                                if (remainingTime > 0) {
+                                    delay(remainingTime.coerceAtLeast(100))  // Minimum 100ms
+                                } else {
+                                    delay(100)  // Vérifier toutes les 100ms si le timer a changé
+                                }
+                            } else {
+                                // Barre cachée, vérifier toutes les 500ms si une touche arrive
+                                delay(500)
+                            }
                         }
-                        // Attendre 3 secondes puis vérifier
-                        delay(3000)
-                        // La recomposition se fera automatiquement via shouldShowBar
+                    }
+                }
+                
+                // Chevron pour réafficher la barre si elle est cachée
+                if (!isBarVisible && quickActionsBarVisible && quickActionsBarAutoHideEnabled?.value == true) {
+                    val view = androidx.compose.ui.platform.LocalView.current
+                    val density = androidx.compose.ui.platform.LocalDensity.current
+                    val statusBarHeight = remember {
+                        derivedStateOf {
+                            val insets = androidx.core.view.ViewCompat.getRootWindowInsets(view)
+                            val topInset = insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())?.top ?: 0
+                            val heightDp = with(density) { topInset.toDp() }
+                            if (heightDp.value < 5f) 40.dp else heightDp
+                        }
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = 8.dp, top = statusBarHeight.value + 8.dp)
+                            .clickable {
+                                // Réafficher la barre en réinitialisant le timer
+                                quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
+                            }
+                            .background(
+                                Color(0xB3000000),
+                                androidx.compose.foundation.shape.CircleShape
+                            )
+                            .padding(8.dp)
+                    ) {
+                        androidx.compose.material3.Icon(
+                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_chevron_right_24),
+                            contentDescription = "Show Quick Actions",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
                 
                 // Quick Actions Bar (Hybrid mode - variante F)
-                if (shouldShowBar) {
+                if (isBarVisible && quickActionsBarVisible) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -3571,17 +3714,36 @@ internal fun ComposeEmulatorScreen(
                             isRewinding = rewindActive,
                             rewindDurationSeconds = if (canUseRewind) rewindSeconds else 0f,
                             onRewindPress = {
+                                quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
                                 onRewindPress()
                             },
                             onRewindRelease = {
                                 onRewindRelease()
                             },
-                            onToggleFastForward = onToggleFastForward,
-                            onToggleAudioMute = onToggleAudioMute,
-                            onQuickSave = { onSaveState(1) },  // Quick save slot 1
-                            onQuickLoad = { onLoadState(1) },  // Quick load slot 1
-                            onOpenSettings = { showMainMenu.value = true },
-                            onCycleShader = onCycleShader,  // Quick Win #4
+                            onToggleFastForward = {
+                                quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
+                                onToggleFastForward()
+                            },
+                            onToggleAudioMute = {
+                                quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
+                                onToggleAudioMute()
+                            },
+                            onQuickSave = {
+                                quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
+                                onSaveState(1)
+                            },
+                            onQuickLoad = {
+                                quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
+                                onLoadState(1)
+                            },
+                            onOpenSettings = {
+                                quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
+                                showMainMenu.value = true
+                            },
+                            onCycleShader = {
+                                quickActionsBarAutoHideTimer?.value = android.os.SystemClock.elapsedRealtime()
+                                onCycleShader()
+                            },
                             currentShaderName = currentShaderName
                         )
                     }
@@ -3776,7 +3938,7 @@ internal fun ComposeEmulatorScreen(
                     )
                 }
                 
-                // RetroArch Settings Dialog (simplified - NO Radial gamepad settings)
+                // RetroArch Settings Dialog (complete - Overlays + Advanced + General avec onglets)
                 if (showGamePadSettings.value) {
                     RetroArchSettingsDialog(
                         console = console,
@@ -3784,17 +3946,31 @@ internal fun ComposeEmulatorScreen(
                         context = retroView.context,
                         prefs = prefs,
                         onLoadCustomCfg = onLoadCustomCfg,
-                        debugModeState = debugModeState
+                        debugModeState = debugModeState,
+                        onShaderChanged = onShaderChanged,
+                        onFastForwardRatioChanged = onFastForwardRatioChanged,
+                        onAudioVolumeChanged = onAudioVolumeChanged,
+                        onAudioMuteChanged = onAudioMuteChanged,
+                        onVsyncChanged = onVsyncChanged,
+                        onRewindEnabledChanged = onRewindEnabledChanged,
+                        onOpenAdvancedOverlaySettings = {
+                            showGamePadSettings.value = false
+                            showAdvancedOverlaySettings.value = true
+                        }
                     )
                 }
                 
                 // Advanced Overlay Settings Dialog
                 if (showAdvancedOverlaySettings.value) {
+                    val dialogConfiguration = androidx.compose.ui.platform.LocalConfiguration.current
+                    val isLandscapeForDialog = dialogConfiguration.screenWidthDp > dialogConfiguration.screenHeightDp
+                    val orientationForDialog = if (isLandscapeForDialog) "landscape" else "portrait"
                     AdvancedOverlaySettingsDialog(
                         console = console,
                         onDismiss = { showAdvancedOverlaySettings.value = false },
                         context = retroView.context,
-                        prefs = prefs
+                        prefs = prefs,
+                        currentOrientation = orientationForDialog
                     )
                 }
                 

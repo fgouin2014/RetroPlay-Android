@@ -60,6 +60,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     private MaterialButton viewGalleryButton;
     private MaterialButton headerBackButton;
     private MaterialButton headerSettingsButton;
+    private MaterialButton headerEditButton;
     private MaterialButton gameInfoButton;
     private TextView headerTitle;
     private FrameLayout pillWasm;
@@ -143,6 +144,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     private void setupHeader() {
         headerBackButton = findViewById(R.id.headerBackButton);
         headerSettingsButton = findViewById(R.id.headerSettingsButton);
+        headerEditButton = findViewById(R.id.headerEditButton);
         gameInfoButton = findViewById(R.id.game_info_button);
         favoriteButton = findViewById(R.id.favorite_button);
         headerTitle = findViewById(R.id.headerTitle);
@@ -150,6 +152,10 @@ public class GameDetailsActivity extends AppCompatActivity {
         headerTitle.setText(game.getName());
         headerBackButton.setOnClickListener(v -> finish());
         headerSettingsButton.setOnClickListener(this::showSettingsMenu);
+        
+        if (headerEditButton != null) {
+            headerEditButton.setOnClickListener(v -> showEditGameMetadataDialog());
+        }
         
         if (gameInfoButton != null) {
             gameInfoButton.setCheckable(true);
@@ -1439,6 +1445,13 @@ public class GameDetailsActivity extends AppCompatActivity {
             headerBackButton.setAlpha(1.0f);
         }
         
+        if (headerEditButton != null) {
+            headerEditButton.setIconTint(ColorStateList.valueOf(primaryColor));
+            headerEditButton.setBackgroundTintList(ColorStateList.valueOf(headerBackgroundColor));
+            headerEditButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
+            headerEditButton.setAlpha(1.0f);
+        }
+        
         if (headerSettingsButton != null) {
             headerSettingsButton.setIconTint(ColorStateList.valueOf(primaryColor));
             headerSettingsButton.setBackgroundTintList(ColorStateList.valueOf(headerBackgroundColor));
@@ -1463,16 +1476,17 @@ public class GameDetailsActivity extends AppCompatActivity {
             gameDescription.setTextColor(textSecondaryColor);
             gameDescription.setAlpha(1.0f);
         }
+        // Les TextViews dans les cards (genre, players, release date) utilisent primaryColor pour être visibles
         if (gameGenre != null) {
-            gameGenre.setTextColor(textSecondaryColor);
+            gameGenre.setTextColor(primaryColor);
             gameGenre.setAlpha(1.0f);
         }
         if (gamePlayers != null) {
-            gamePlayers.setTextColor(textSecondaryColor);
+            gamePlayers.setTextColor(primaryColor);
             gamePlayers.setAlpha(1.0f);
         }
         if (gameReleaseDate != null) {
-            gameReleaseDate.setTextColor(textSecondaryColor);
+            gameReleaseDate.setTextColor(primaryColor);
             gameReleaseDate.setAlpha(1.0f);
         }
         
@@ -1527,9 +1541,59 @@ public class GameDetailsActivity extends AppCompatActivity {
             consoleDefaultInfo.setAlpha(1.0f);
         }
         
+        // Header background
+        android.view.View detailsHeader = findViewById(R.id.details_header);
+        if (detailsHeader != null) {
+            detailsHeader.setBackgroundColor(headerBackgroundColor);
+        }
+        
+        // Game Info button
+        if (gameInfoButton != null) {
+            gameInfoButton.setIconTint(ColorStateList.valueOf(primaryColor));
+            gameInfoButton.setBackgroundTintList(ColorStateList.valueOf(headerBackgroundColor));
+            gameInfoButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
+            gameInfoButton.setAlpha(1.0f);
+        }
+        
+        // Emulator Mode Switch
+        if (emulatorModeSwitch != null) {
+            emulatorModeSwitch.setThumbTintList(ColorStateList.valueOf(primaryColor));
+            emulatorModeSwitch.setTrackTintList(ColorStateList.valueOf(headerBackgroundColor));
+        }
+        
+        // MaterialCardView - appliquer le thème aux cards
+        applyThemeToCards(primaryColor, headerBackgroundColor);
+        
         // Favorite and Game Info buttons are handled in their update methods
         updateFavoriteButton();
         updateGameInfoButtonState();
+    }
+    
+    /**
+     * Applique le thème aux MaterialCardView de la page
+     */
+    private void applyThemeToCards(int primaryColor, int headerBackgroundColor) {
+        // Trouver toutes les MaterialCardView dans le layout
+        android.view.View rootView = findViewById(android.R.id.content);
+        if (rootView instanceof android.view.ViewGroup) {
+            applyThemeToCardsRecursive((android.view.ViewGroup) rootView, primaryColor, headerBackgroundColor);
+        }
+    }
+    
+    private void applyThemeToCardsRecursive(android.view.ViewGroup parent, int primaryColor, int headerBackgroundColor) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            android.view.View child = parent.getChildAt(i);
+            
+            if (child instanceof com.google.android.material.card.MaterialCardView) {
+                com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) child;
+                card.setStrokeColor(primaryColor);
+                card.setCardBackgroundColor(headerBackgroundColor);
+            }
+            
+            if (child instanceof android.view.ViewGroup) {
+                applyThemeToCardsRecursive((android.view.ViewGroup) child, primaryColor, headerBackgroundColor);
+            }
+        }
     }
     
     private void updateFavoriteButton() {
@@ -2158,6 +2222,189 @@ public class GameDetailsActivity extends AppCompatActivity {
         }).start();
     }
 
+    private void showEditGameMetadataDialog() {
+        // Obtenir le répertoire de la console
+        String consoleDirName = getRealConsoleDirectory(game.getConsole());
+        java.io.File consoleDir = new java.io.File("/storage/emulated/0/GameLibrary-Data/" + consoleDirName);
+        
+        if (!consoleDir.exists()) {
+            android.widget.Toast.makeText(this, "Console directory not found: " + consoleDirName, android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        // Créer le dialog
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        android.view.View dialogView = android.view.LayoutInflater.from(this).inflate(R.layout.dialog_edit_game_metadata, null);
+        
+        // Récupérer les champs
+        android.widget.EditText titleInput = dialogView.findViewById(R.id.gameTitleInput);
+        android.widget.EditText descriptionInput = dialogView.findViewById(R.id.gameDescriptionInput);
+        android.widget.EditText genreInput = dialogView.findViewById(R.id.gameGenreInput);
+        android.widget.EditText playersInput = dialogView.findViewById(R.id.gamePlayersInput);
+        android.widget.EditText releaseDateInput = dialogView.findViewById(R.id.gameReleaseDateInput);
+        android.widget.EditText developerInput = dialogView.findViewById(R.id.gameDeveloperInput);
+        android.widget.EditText publisherInput = dialogView.findViewById(R.id.gamePublisherInput);
+        
+        // Pré-remplir avec les valeurs actuelles
+        titleInput.setText(game.getName() != null ? game.getName() : "");
+        descriptionInput.setText(game.getDesc() != null ? game.getDesc() : "");
+        genreInput.setText(game.getGenre() != null ? game.getGenre() : "");
+        playersInput.setText(game.getPlayers() != null ? game.getPlayers() : "");
+        
+        // Formater la date (YYYYMMDD)
+        String releaseDate = game.getReleasedate();
+        if (releaseDate != null && !releaseDate.isEmpty()) {
+            // Si la date contient "T", extraire juste la partie YYYYMMDD
+            if (releaseDate.contains("T")) {
+                releaseDate = releaseDate.substring(0, 8);
+            }
+            releaseDateInput.setText(releaseDate);
+        } else {
+            releaseDateInput.setText("");
+        }
+        
+        developerInput.setText(game.getDeveloper() != null ? game.getDeveloper() : "");
+        publisherInput.setText(game.getPublisher() != null ? game.getPublisher() : "");
+        
+        // Appliquer le thème
+        ThemeManager themeManager = ThemeManager.getInstance(this);
+        int primaryColor = themeManager.getPrimaryColor(this);
+        int headerBackgroundColor = themeManager.getHeaderBackgroundColor(this);
+        
+        builder.setView(dialogView);
+        builder.setTitle(null);  // Pas de titre par défaut, on utilise notre header
+        
+        android.app.AlertDialog dialog = builder.create();
+        dialog.show();
+        
+        // Récupérer les boutons du footer après création du dialog
+        com.google.android.material.button.MaterialButton saveButton = dialogView.findViewById(R.id.saveButton);
+        com.google.android.material.button.MaterialButton cancelButton = dialogView.findViewById(R.id.cancelButton);
+        com.google.android.material.button.MaterialButton deleteButton = dialogView.findViewById(R.id.deleteButton);
+        
+        // Configurer les boutons
+        saveButton.setOnClickListener(v -> {
+            // Récupérer les nouvelles valeurs
+            String newTitle = titleInput.getText().toString().trim();
+            String newDescription = descriptionInput.getText().toString().trim();
+            String newGenre = genreInput.getText().toString().trim();
+            String newPlayers = playersInput.getText().toString().trim();
+            String newReleaseDate = releaseDateInput.getText().toString().trim();
+            String newDeveloper = developerInput.getText().toString().trim();
+            String newPublisher = publisherInput.getText().toString().trim();
+            
+            // Valider le titre (obligatoire)
+            if (newTitle.isEmpty()) {
+                android.widget.Toast.makeText(this, "Title cannot be empty", android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            // Formater la date si nécessaire (ajouter T000000 si juste YYYYMMDD)
+            if (!newReleaseDate.isEmpty() && newReleaseDate.length() == 8) {
+                newReleaseDate = newReleaseDate + "T000000";
+            }
+            
+            // Créer un GameEntry mis à jour via la fonction helper Kotlin
+            com.retroplay.GamelistManager.GameEntry updatedEntry = com.retroplay.GamelistManager.createGameEntry(
+                game.getId(),
+                newTitle,
+                game.getPath(),
+                newDescription.isEmpty() ? null : newDescription,
+                game.getImagePath(),
+                newReleaseDate.isEmpty() ? null : newReleaseDate,
+                newDeveloper.isEmpty() ? null : newDeveloper,
+                newPublisher.isEmpty() ? null : newPublisher,
+                newGenre.isEmpty() ? null : newGenre,
+                newPlayers.isEmpty() ? null : newPlayers,
+                game.getHash(),
+                game.getRating()
+            );
+            
+            // Mettre à jour dans le gamelist.json
+            boolean success = com.retroplay.GamelistManager.updateGameInGamelist(
+                consoleDir,
+                game.getId(),
+                game.getPath(),
+                updatedEntry
+            );
+            
+            if (success) {
+                // Mettre à jour l'objet Game local
+                game.name = newTitle;
+                game.desc = newDescription.isEmpty() ? null : newDescription;
+                game.genre = newGenre.isEmpty() ? null : newGenre;
+                game.players = newPlayers.isEmpty() ? null : newPlayers;
+                game.releasedate = newReleaseDate.isEmpty() ? null : newReleaseDate;
+                game.developer = newDeveloper.isEmpty() ? null : newDeveloper;
+                game.publisher = newPublisher.isEmpty() ? null : newPublisher;
+                
+                // Rafraîchir l'affichage
+                updateGameDetailsFromGamelist();
+                headerTitle.setText(game.getName());
+                
+                dialog.dismiss();
+                android.widget.Toast.makeText(this, "Game metadata saved", android.widget.Toast.LENGTH_SHORT).show();
+            } else {
+                android.widget.Toast.makeText(this, "Failed to save metadata", android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
+        
+        cancelButton.setOnClickListener(v -> {
+            dialog.dismiss();
+        });
+        
+        // Bouton DELETE: Supprimer l'entrée du gamelist (pas le fichier ROM ni les images)
+        deleteButton.setOnClickListener(v -> {
+            // Confirmation avant suppression
+            new android.app.AlertDialog.Builder(this)
+                .setTitle("Delete Game Entry")
+                .setMessage("Remove this game from the gamelist?\n\n" +
+                           "The ROM file and images will NOT be deleted.\n" +
+                           "Only the entry in gamelist.json will be removed.")
+                .setPositiveButton("DELETE", (d, w) -> {
+                    // Supprimer l'entrée du gamelist
+                    boolean success = com.retroplay.GamelistManager.removeGameFromGamelist(
+                        consoleDir,
+                        game.getId(),
+                        game.getPath()
+                    );
+                    
+                    if (success) {
+                        dialog.dismiss();
+                        android.widget.Toast.makeText(this, "Game removed from gamelist", android.widget.Toast.LENGTH_SHORT).show();
+                        // Retourner un résultat pour rafraîchir la liste
+                        Intent resultIntent = new Intent();
+                        resultIntent.putExtra("gameDeleted", true);
+                        setResult(RESULT_OK, resultIntent);
+                        // Fermer l'activité
+                        finish();
+                    } else {
+                        android.widget.Toast.makeText(this, "Failed to remove game from gamelist", android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
+        });
+        
+        // Appliquer le thème au dialog complet (header, footer)
+        android.view.ViewGroup dialogViewGroup = (android.view.ViewGroup) dialog.getWindow().getDecorView();
+        applyThemeToDialogViews(dialogViewGroup, primaryColor, headerBackgroundColor);
+        
+        // Appliquer le thème aux boutons du footer
+        saveButton.setIconTint(android.content.res.ColorStateList.valueOf(android.graphics.Color.BLACK));
+        saveButton.setTextColor(android.content.res.ColorStateList.valueOf(android.graphics.Color.BLACK));
+        saveButton.setTypeface(android.graphics.Typeface.MONOSPACE);
+        cancelButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+        cancelButton.setTextColor(android.content.res.ColorStateList.valueOf(primaryColor));
+        cancelButton.setTypeface(android.graphics.Typeface.MONOSPACE);
+        deleteButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
+        deleteButton.setTextColor(android.content.res.ColorStateList.valueOf(primaryColor));
+        deleteButton.setTypeface(android.graphics.Typeface.MONOSPACE);
+        
+        // Appliquer le fond au dialog
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+    }
+    
     private void showSettingsMenu(View anchor) {
         PopupMenu popupMenu = new PopupMenu(this, anchor);
         popupMenu.inflate(R.menu.menu_game_details_settings);

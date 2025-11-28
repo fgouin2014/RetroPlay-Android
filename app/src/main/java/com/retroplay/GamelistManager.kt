@@ -361,6 +361,142 @@ object GamelistManager {
     }
     
     /**
+     * Helper function pour créer un GameEntry depuis Java
+     * @JvmStatic permet d'appeler directement depuis Java
+     */
+    @JvmStatic
+    fun createGameEntry(
+        id: String,
+        name: String,
+        path: String,
+        desc: String?,
+        image: String?,
+        releasedate: String?,
+        developer: String?,
+        publisher: String?,
+        genre: String?,
+        players: String?,
+        hash: String?,
+        rating: String?
+    ): GameEntry {
+        return GameEntry(
+            id = id,
+            name = name,
+            path = path,
+            desc = desc,
+            image = image,
+            releasedate = releasedate,
+            developer = developer,
+            publisher = publisher,
+            genre = genre,
+            players = players,
+            hash = hash,
+            rating = rating
+        )
+    }
+    
+    /**
+     * Met à jour un jeu spécifique dans le gamelist.json
+     * @param consoleDir Répertoire de la console
+     * @param gameId ID du jeu à mettre à jour (ou path si id n'est pas disponible)
+     * @param updatedGame GameEntry avec les nouvelles valeurs
+     * @return true si la mise à jour a réussi, false sinon
+     * @JvmStatic permet d'appeler directement depuis Java
+     */
+    @JvmStatic
+    fun updateGameInGamelist(consoleDir: File, gameId: String?, gamePath: String?, updatedGame: GameEntry): Boolean {
+        try {
+            val gamelist = loadGamelist(consoleDir) ?: run {
+                Log.e(TAG, "Cannot update game: gamelist.json not found for ${consoleDir.name}")
+                return false
+            }
+            
+            // Trouver le jeu à mettre à jour (par ID ou par path)
+            val gameIndex = gamelist.games.indexOfFirst { game ->
+                (gameId != null && game.id == gameId) || 
+                (gamePath != null && game.path == gamePath)
+            }
+            
+            if (gameIndex == -1) {
+                Log.e(TAG, "Game not found in gamelist (id: $gameId, path: $gamePath)")
+                return false
+            }
+            
+            // Mettre à jour le jeu en conservant l'ID et le path originaux
+            val existingGame = gamelist.games[gameIndex]
+            val finalUpdatedGame = updatedGame.copy(
+                id = existingGame.id,
+                path = existingGame.path
+            )
+            
+            // Remplacer le jeu dans la liste
+            val updatedGames = gamelist.games.toMutableList()
+            updatedGames[gameIndex] = finalUpdatedGame
+            
+            // Créer un nouveau gamelist avec les jeux mis à jour
+            val updatedGamelist = gamelist.copy(games = updatedGames)
+            
+            // Sauvegarder
+            val success = saveGamelist(updatedGamelist, consoleDir)
+            if (success) {
+                Log.i(TAG, "Updated game in gamelist: ${finalUpdatedGame.name} (id: ${finalUpdatedGame.id})")
+            }
+            return success
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating game in gamelist: ${e.message}", e)
+            return false
+        }
+    }
+    
+    /**
+     * Supprime un jeu du gamelist.json (sans supprimer le fichier ROM ni les images)
+     * @param consoleDir Répertoire de la console
+     * @param gameId ID du jeu à supprimer (ou path si id n'est pas disponible)
+     * @param gamePath Chemin du jeu à supprimer
+     * @return true si la suppression a réussi, false sinon
+     * @JvmStatic permet d'appeler directement depuis Java
+     */
+    @JvmStatic
+    fun removeGameFromGamelist(consoleDir: File, gameId: String?, gamePath: String?): Boolean {
+        try {
+            val gamelist = loadGamelist(consoleDir) ?: run {
+                Log.e(TAG, "Cannot remove game: gamelist.json not found for ${consoleDir.name}")
+                return false
+            }
+            
+            // Trouver le jeu à supprimer (par ID ou par path)
+            val gameIndex = gamelist.games.indexOfFirst { game ->
+                (gameId != null && game.id == gameId) || 
+                (gamePath != null && game.path == gamePath)
+            }
+            
+            if (gameIndex == -1) {
+                Log.e(TAG, "Game not found in gamelist (id: $gameId, path: $gamePath)")
+                return false
+            }
+            
+            // Supprimer le jeu de la liste
+            val updatedGames = gamelist.games.toMutableList()
+            val removedGame = updatedGames.removeAt(gameIndex)
+            
+            // Créer un nouveau gamelist sans le jeu supprimé
+            val updatedGamelist = gamelist.copy(games = updatedGames)
+            
+            // Sauvegarder
+            val success = saveGamelist(updatedGamelist, consoleDir)
+            if (success) {
+                Log.i(TAG, "Removed game from gamelist: ${removedGame.name} (id: ${removedGame.id})")
+            }
+            return success
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error removing game from gamelist: ${e.message}", e)
+            return false
+        }
+    }
+    
+    /**
      * Convertit un GameEntry en JSONObject
      * Format standardisé: description, releaseDate (camelCase)
      * Compatible avec parsing qui supporte les deux formats (legacy et nouveau)

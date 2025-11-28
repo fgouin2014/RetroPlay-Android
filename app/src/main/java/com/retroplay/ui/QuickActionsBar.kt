@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -75,8 +77,17 @@ fun QuickActionsBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .wrapContentHeight()  // Ne prendre que la hauteur nécessaire, pas toute la hauteur
             .padding(top = statusBarHeight.value)
             .background(BarBackground)
+            .pointerInteropFilter { event ->
+                // Détecter les touches sur la barre pour réafficher (auto-hide)
+                if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                    // Le timer sera réinitialisé par l'activité parente
+                    // On retourne false pour laisser passer les touches aux boutons
+                }
+                false  // Ne pas consommer l'événement
+            }
     ) {
         Row(
             modifier = Modifier

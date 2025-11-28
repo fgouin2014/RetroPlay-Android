@@ -525,55 +525,231 @@ object OverlayPreferenceManager {
     /**
      * Load advanced settings for a console
      * 
-     * TODO P3: Configuration per-orientation - Les settings avancés (dpadDiagonalSensitivity, opacity, etc.)
-     * devraient être séparés par orientation (landscape/portrait) pour permettre des configurations différentes.
-     * Actuellement, les layouts sont déjà séparés (landscapeLayout/portraitLayout), mais les settings avancés
-     * sont globaux. Pour implémenter: ajouter paramètre `orientation: String?` et utiliser clés comme
-     * `overlay_${console}_dpad_diagonal_sensitivity_${orientation}`.
+     * @param orientation Optional orientation ("landscape" or "portrait"). If null, uses global settings (backward compatibility).
+     *                    If orientation-specific key doesn't exist, falls back to global key, then to default value.
      */
     fun loadAdvancedSettings(
         prefs: android.content.SharedPreferences,
-        console: String
+        console: String,
+        orientation: String? = null  // null = global (backward compat), "landscape", "portrait"
     ): AdvancedOverlaySettings {
-        val showInputsString = prefs.getString("overlay_${console}_show_inputs", "NONE") ?: "NONE"
+        val suffix = if (orientation != null) "_$orientation" else ""
+        
+        // Helper functions to read with fallback: per-orientation → global → default
+        fun getInt(key: String, default: Int): Int {
+            val perOrientationKey = "overlay_${console}_${key}$suffix"
+            val globalKey = "overlay_${console}_${key}"
+            
+            return when {
+                prefs.contains(perOrientationKey) -> prefs.getInt(perOrientationKey, default)
+                prefs.contains(globalKey) -> prefs.getInt(globalKey, default)  // Fallback to global
+                else -> default
+            }
+        }
+        
+        fun getFloat(key: String, default: Float): Float {
+            val perOrientationKey = "overlay_${console}_${key}$suffix"
+            val globalKey = "overlay_${console}_${key}"
+            
+            return when {
+                prefs.contains(perOrientationKey) -> prefs.getFloat(perOrientationKey, default)
+                prefs.contains(globalKey) -> prefs.getFloat(globalKey, default)  // Fallback to global
+                else -> default
+            }
+        }
+        
+        fun getBoolean(key: String, default: Boolean): Boolean {
+            val perOrientationKey = "overlay_${console}_${key}$suffix"
+            val globalKey = "overlay_${console}_${key}"
+            
+            return when {
+                prefs.contains(perOrientationKey) -> prefs.getBoolean(perOrientationKey, default)
+                prefs.contains(globalKey) -> prefs.getBoolean(globalKey, default)  // Fallback to global
+                else -> default
+            }
+        }
+        
+        fun getString(key: String, default: String): String {
+            val perOrientationKey = "overlay_${console}_${key}$suffix"
+            val globalKey = "overlay_${console}_${key}"
+            
+            return when {
+                prefs.contains(perOrientationKey) -> prefs.getString(perOrientationKey, default) ?: default
+                prefs.contains(globalKey) -> prefs.getString(globalKey, default) ?: default  // Fallback to global
+                else -> default
+            }
+        }
+        
+        val showInputsString = getString("show_inputs", "NONE")
         val showInputsMode = try {
             ShowInputsMode.valueOf(showInputsString)
         } catch (e: IllegalArgumentException) {
             ShowInputsMode.NONE
         }
         
+        // Handle mouseSwipeThreshold migration (Int → Float) with fallback
+        val mouseSwipeThreshold = try {
+            val perOrientationKey = "overlay_${console}_mouse_swipe_threshold$suffix"
+            val globalKey = "overlay_${console}_mouse_swipe_threshold"
+            
+            when {
+                prefs.contains(perOrientationKey) -> {
+                    try {
+                        prefs.getFloat(perOrientationKey, 1.0f)
+                    } catch (e: ClassCastException) {
+                        prefs.getInt(perOrientationKey, 1).toFloat()
+                    }
+                }
+                prefs.contains(globalKey) -> {
+                    try {
+                        prefs.getFloat(globalKey, 1.0f)
+                    } catch (e: ClassCastException) {
+                        prefs.getInt(globalKey, 1).toFloat()
+                    }
+                }
+                else -> 1.0f
+            }
+        } catch (e: Exception) {
+            1.0f
+        }
+        
         return AdvancedOverlaySettings(
             // DEFAULT VALUES from RetroArch config.def.h (c:\repos\RetroArch-master\config.def.h)
-            dpadDiagonalSensitivity = prefs.getInt("overlay_${console}_dpad_diagonal_sensitivity", 80),  // DEFAULT_OVERLAY_DPAD_DIAGONAL_SENSITIVITY
-            abxyDiagonalSensitivity = prefs.getInt("overlay_${console}_abxy_diagonal_sensitivity", 50),  // DEFAULT_OVERLAY_ABXY_DIAGONAL_SENSITIVITY
-            analogRecenterZone = prefs.getInt("overlay_${console}_analog_recenter_zone", 0),  // DEFAULT_INPUT_OVERLAY_ANALOG_RECENTER_ZONE
-            opacity = prefs.getFloat("overlay_${console}_opacity", 0.7f),  // DEFAULT_INPUT_OVERLAY_OPACITY
-            aspectAdjust = prefs.getFloat("overlay_${console}_aspect_adjust", 0.0f),  // DEFAULT_INPUT_OVERLAY_ASPECT_ADJUST_*
-            hideInMenu = prefs.getBoolean("overlay_${console}_hide_in_menu", true),  // DEFAULT_OVERLAY_HIDE_IN_MENU
-            behindMenu = prefs.getBoolean("overlay_${console}_behind_menu", false),  // DEFAULT_OVERLAY_BEHIND_MENU
-            hideWhenGamepadConnected = prefs.getBoolean("overlay_${console}_hide_when_gamepad", false),  // DEFAULT_OVERLAY_HIDE_WHEN_GAMEPAD_CONNECTED
+            dpadDiagonalSensitivity = getInt("dpad_diagonal_sensitivity", 80),  // DEFAULT_OVERLAY_DPAD_DIAGONAL_SENSITIVITY
+            abxyDiagonalSensitivity = getInt("abxy_diagonal_sensitivity", 50),  // DEFAULT_OVERLAY_ABXY_DIAGONAL_SENSITIVITY
+            analogRecenterZone = getInt("analog_recenter_zone", 0),  // DEFAULT_INPUT_OVERLAY_ANALOG_RECENTER_ZONE
+            opacity = getFloat("opacity", 0.7f),  // DEFAULT_INPUT_OVERLAY_OPACITY
+            aspectAdjust = getFloat("aspect_adjust", 0.0f),  // DEFAULT_INPUT_OVERLAY_ASPECT_ADJUST_*
+            hideInMenu = getBoolean("hide_in_menu", true),  // DEFAULT_OVERLAY_HIDE_IN_MENU
+            behindMenu = getBoolean("behind_menu", false),  // DEFAULT_OVERLAY_BEHIND_MENU
+            hideWhenGamepadConnected = getBoolean("hide_when_gamepad", false),  // DEFAULT_OVERLAY_HIDE_WHEN_GAMEPAD_CONNECTED
             showInputs = showInputsMode,
-            showInputsPort = prefs.getInt("overlay_${console}_show_inputs_port", 0),  // DEFAULT_OVERLAY_SHOW_INPUTS_PORT
-            lightgunPort = prefs.getInt("overlay_${console}_lightgun_port", -1),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_PORT (-1 = all ports)
-            lightgunTriggerOnTouch = prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", true),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_TRIGGER_ON_TOUCH
-            lightgunTriggerDelay = prefs.getInt("overlay_${console}_lightgun_trigger_delay", 1),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_TRIGGER_DELAY
-            lightgunAllowOffscreen = prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_ALLOW_OFFSCREEN
-            lightgunTwoTouchInput = prefs.getInt("overlay_${console}_lightgun_two_touch", 0),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_MULTI_TOUCH_INPUT
-            lightgunThreeTouchInput = prefs.getInt("overlay_${console}_lightgun_three_touch", 0),
-            lightgunFourTouchInput = prefs.getInt("overlay_${console}_lightgun_four_touch", 0),
-            mouseSpeed = prefs.getFloat("overlay_${console}_mouse_speed", 1.0f),  // DEFAULT_INPUT_OVERLAY_MOUSE_SPEED
-            mouseSwipeThreshold = try {
-                prefs.getFloat("overlay_${console}_mouse_swipe_threshold", 1.0f)
-            } catch (e: ClassCastException) {
-                // Migration: old value was Int, convert to Float
-                prefs.getInt("overlay_${console}_mouse_swipe_threshold", 1).toFloat()
-            },  // DEFAULT_INPUT_OVERLAY_MOUSE_SWIPE_THRESHOLD
-            mouseHoldToDrag = prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", true),  // DEFAULT_INPUT_OVERLAY_MOUSE_HOLD_TO_DRAG
-            mouseHoldMsec = prefs.getInt("overlay_${console}_mouse_hold_msec", 200),  // DEFAULT_INPUT_OVERLAY_MOUSE_HOLD_MSEC
-            mouseDoubleTapToDrag = prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false),  // DEFAULT_INPUT_OVERLAY_MOUSE_DTAP_TO_DRAG
-            mouseDtapMsec = prefs.getInt("overlay_${console}_mouse_dtap_msec", 200),  // DEFAULT_INPUT_OVERLAY_MOUSE_DTAP_MSEC
-            showMouseCursor = prefs.getBoolean("overlay_${console}_show_mouse_cursor", false)  // DEFAULT_OVERLAY_SHOW_MOUSE_CURSOR
+            showInputsPort = getInt("show_inputs_port", 0),  // DEFAULT_OVERLAY_SHOW_INPUTS_PORT
+            lightgunPort = getInt("lightgun_port", -1),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_PORT (-1 = all ports)
+            lightgunTriggerOnTouch = getBoolean("lightgun_trigger_on_touch", true),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_TRIGGER_ON_TOUCH
+            lightgunTriggerDelay = getInt("lightgun_trigger_delay", 1),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_TRIGGER_DELAY
+            lightgunAllowOffscreen = getBoolean("lightgun_allow_offscreen", true),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_ALLOW_OFFSCREEN
+            lightgunTwoTouchInput = getInt("lightgun_two_touch", 0),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_MULTI_TOUCH_INPUT
+            lightgunThreeTouchInput = getInt("lightgun_three_touch", 0),
+            lightgunFourTouchInput = getInt("lightgun_four_touch", 0),
+            mouseSpeed = getFloat("mouse_speed", 1.0f),  // DEFAULT_INPUT_OVERLAY_MOUSE_SPEED
+            mouseSwipeThreshold = mouseSwipeThreshold,  // DEFAULT_INPUT_OVERLAY_MOUSE_SWIPE_THRESHOLD
+            mouseHoldToDrag = getBoolean("mouse_hold_to_drag", true),  // DEFAULT_INPUT_OVERLAY_MOUSE_HOLD_TO_DRAG
+            mouseHoldMsec = getInt("mouse_hold_msec", 200),  // DEFAULT_INPUT_OVERLAY_MOUSE_HOLD_MSEC
+            mouseDoubleTapToDrag = getBoolean("mouse_dtap_to_drag", false),  // DEFAULT_INPUT_OVERLAY_MOUSE_DTAP_TO_DRAG
+            mouseDtapMsec = getInt("mouse_dtap_msec", 200),  // DEFAULT_INPUT_OVERLAY_MOUSE_DTAP_MSEC
+            showMouseCursor = getBoolean("show_mouse_cursor", false)  // DEFAULT_OVERLAY_SHOW_MOUSE_CURSOR
         )
+    }
+    
+    /**
+     * Save advanced settings for a console
+     * 
+     * @param orientation Optional orientation ("landscape" or "portrait"). If null, saves as global (backward compatibility).
+     */
+    @JvmStatic
+    fun saveAdvancedSettings(
+        prefs: android.content.SharedPreferences,
+        console: String,
+        orientation: String?,
+        settings: AdvancedOverlaySettings
+    ) {
+        val suffix = if (orientation != null) "_$orientation" else ""
+        val editor = prefs.edit()
+        
+        editor.putInt("overlay_${console}_dpad_diagonal_sensitivity$suffix", settings.dpadDiagonalSensitivity)
+        editor.putInt("overlay_${console}_abxy_diagonal_sensitivity$suffix", settings.abxyDiagonalSensitivity)
+        editor.putInt("overlay_${console}_analog_recenter_zone$suffix", settings.analogRecenterZone)
+        editor.putFloat("overlay_${console}_opacity$suffix", settings.opacity)
+        editor.putFloat("overlay_${console}_aspect_adjust$suffix", settings.aspectAdjust)
+        editor.putBoolean("overlay_${console}_hide_in_menu$suffix", settings.hideInMenu)
+        editor.putBoolean("overlay_${console}_behind_menu$suffix", settings.behindMenu)
+        editor.putBoolean("overlay_${console}_hide_when_gamepad$suffix", settings.hideWhenGamepadConnected)
+        editor.putString("overlay_${console}_show_inputs$suffix", settings.showInputs.name)
+        editor.putInt("overlay_${console}_show_inputs_port$suffix", settings.showInputsPort)
+        editor.putInt("overlay_${console}_lightgun_port$suffix", settings.lightgunPort)
+        editor.putBoolean("overlay_${console}_lightgun_trigger_on_touch$suffix", settings.lightgunTriggerOnTouch)
+        editor.putInt("overlay_${console}_lightgun_trigger_delay$suffix", settings.lightgunTriggerDelay)
+        editor.putBoolean("overlay_${console}_lightgun_allow_offscreen$suffix", settings.lightgunAllowOffscreen)
+        editor.putInt("overlay_${console}_lightgun_two_touch$suffix", settings.lightgunTwoTouchInput)
+        editor.putInt("overlay_${console}_lightgun_three_touch$suffix", settings.lightgunThreeTouchInput)
+        editor.putInt("overlay_${console}_lightgun_four_touch$suffix", settings.lightgunFourTouchInput)
+        editor.putFloat("overlay_${console}_mouse_speed$suffix", settings.mouseSpeed)
+        editor.putFloat("overlay_${console}_mouse_swipe_threshold$suffix", settings.mouseSwipeThreshold)
+        editor.putBoolean("overlay_${console}_mouse_hold_to_drag$suffix", settings.mouseHoldToDrag)
+        editor.putInt("overlay_${console}_mouse_hold_msec$suffix", settings.mouseHoldMsec)
+        editor.putBoolean("overlay_${console}_mouse_dtap_to_drag$suffix", settings.mouseDoubleTapToDrag)
+        editor.putInt("overlay_${console}_mouse_dtap_msec$suffix", settings.mouseDtapMsec)
+        editor.putBoolean("overlay_${console}_show_mouse_cursor$suffix", settings.showMouseCursor)
+        
+        editor.commit()
+    }
+    
+    /**
+     * Check if landscape and portrait settings are identical
+     */
+    fun checkIfSettingsAreSame(
+        prefs: android.content.SharedPreferences,
+        console: String
+    ): Boolean {
+        val landscape = loadAdvancedSettings(prefs, console, "landscape")
+        val portrait = loadAdvancedSettings(prefs, console, "portrait")
+        
+        // Compare all fields
+        return landscape.dpadDiagonalSensitivity == portrait.dpadDiagonalSensitivity &&
+                landscape.abxyDiagonalSensitivity == portrait.abxyDiagonalSensitivity &&
+                landscape.analogRecenterZone == portrait.analogRecenterZone &&
+                kotlin.math.abs(landscape.opacity - portrait.opacity) < 0.001f &&
+                kotlin.math.abs(landscape.aspectAdjust - portrait.aspectAdjust) < 0.001f &&
+                landscape.hideInMenu == portrait.hideInMenu &&
+                landscape.behindMenu == portrait.behindMenu &&
+                landscape.hideWhenGamepadConnected == portrait.hideWhenGamepadConnected &&
+                landscape.showInputs == portrait.showInputs &&
+                landscape.showInputsPort == portrait.showInputsPort &&
+                landscape.lightgunPort == portrait.lightgunPort &&
+                landscape.lightgunTriggerOnTouch == portrait.lightgunTriggerOnTouch &&
+                landscape.lightgunTriggerDelay == portrait.lightgunTriggerDelay &&
+                landscape.lightgunAllowOffscreen == portrait.lightgunAllowOffscreen &&
+                landscape.lightgunTwoTouchInput == portrait.lightgunTwoTouchInput &&
+                landscape.lightgunThreeTouchInput == portrait.lightgunThreeTouchInput &&
+                landscape.lightgunFourTouchInput == portrait.lightgunFourTouchInput &&
+                kotlin.math.abs(landscape.mouseSpeed - portrait.mouseSpeed) < 0.001f &&
+                kotlin.math.abs(landscape.mouseSwipeThreshold - portrait.mouseSwipeThreshold) < 0.001f &&
+                landscape.mouseHoldToDrag == portrait.mouseHoldToDrag &&
+                landscape.mouseHoldMsec == portrait.mouseHoldMsec &&
+                landscape.mouseDoubleTapToDrag == portrait.mouseDoubleTapToDrag &&
+                landscape.mouseDtapMsec == portrait.mouseDtapMsec &&
+                landscape.showMouseCursor == portrait.showMouseCursor
+    }
+    
+    /**
+     * Migrate global settings to per-orientation (one-time migration)
+     * Copies global settings to both landscape and portrait if per-orientation keys don't exist
+     */
+    fun migrateAdvancedSettingsToPerOrientation(
+        prefs: android.content.SharedPreferences,
+        console: String
+    ) {
+        // Check if migration already done (per-orientation keys exist)
+        if (prefs.contains("overlay_${console}_dpad_diagonal_sensitivity_landscape") ||
+            prefs.contains("overlay_${console}_dpad_diagonal_sensitivity_portrait")) {
+            return  // Already migrated
+        }
+        
+        // Check if global settings exist
+        if (!prefs.contains("overlay_${console}_dpad_diagonal_sensitivity") &&
+            !prefs.contains("overlay_${console}_opacity")) {
+            return  // No settings to migrate
+        }
+        
+        // Load global settings
+        val globalSettings = loadAdvancedSettings(prefs, console, null)
+        
+        // Copy to both orientations
+        saveAdvancedSettings(prefs, console, "landscape", globalSettings)
+        saveAdvancedSettings(prefs, console, "portrait", globalSettings)
+        
+        android.util.Log.i("OverlayPreferenceManager", "Migrated global settings to per-orientation for $console")
     }
     
     /**

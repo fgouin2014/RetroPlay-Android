@@ -96,6 +96,27 @@
             style="@style/Widget.Material3.Button.IconButton" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/headerEditButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="32dp"
+            android:minHeight="32dp"
+            android:layout_marginEnd="8dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:padding="4dp"
+            android:text=""
+            app:backgroundTint="@color/kitt_medium_red"
+            app:cornerRadius="8dp"
+            app:icon="@drawable/ic_edit_24"
+            app:iconPadding="0dp"
+            app:iconSize="20dp"
+            app:iconTint="@color/kitt_red"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="1dp"
+            style="@style/Widget.Material3.Button.IconButton" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/headerSettingsButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -431,29 +452,29 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/play_button"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:minHeight="0dp"
-                    android:layout_weight="1"
                     android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:fontFamily="monospace"
+                    android:gravity="center"
+                    android:minHeight="0dp"
                     android:paddingTop="12dp"
                     android:paddingBottom="12dp"
-                    android:text="Play"
+                    android:text="Play WASM"
                     android:textAllCaps="false"
-                    android:textSize="12sp"
-                    android:gravity="center"
-                    app:backgroundTint="@color/kitt_red_alpha"
-                    app:strokeColor="@color/kitt_red"
-                    app:strokeWidth="2dp"
                     android:textColor="@color/kitt_red"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/kitt_red_alpha"
                     app:cornerRadius="16dp"
                     app:icon="@drawable/ic_play_arrow_24"
                     app:iconGravity="top"
                     app:iconPadding="2dp"
                     app:iconTint="@color/kitt_red"
-                    android:fontFamily="monospace"
-                    android:textStyle="bold"
-                    style="@style/Widget.Material3.Button.OutlinedButton" />
+                    app:strokeColor="@color/kitt_red"
+                    app:strokeWidth="2dp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/view_gallery_button"

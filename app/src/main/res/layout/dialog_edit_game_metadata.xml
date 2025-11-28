@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@color/kitt_black">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/kitt_dark_red"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="EDIT GAME METADATA"
+            android:textSize="18sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Modify game information. Changes will be saved to gamelist.json"
+            android:textSize="10sp"
+            android:textColor="#FFA500"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="2dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center" />
+
+    </LinearLayout>
+
+    <!-- Content -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:maxHeight="500dp"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+        <!-- Game Title -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Title:"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/gameTitleInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="Game title"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Description -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Description:"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/gameDescriptionInput"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:hint="Game description"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:gravity="top|start"
+            android:inputType="textMultiLine|textCapSentences"
+            android:maxLines="5"
+            android:scrollbars="vertical"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Genre -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Genre:"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/gameGenreInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="Action, Adventure, RPG, etc."
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Players -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Players:"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/gamePlayersInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="1, 1-2, 1-4, etc."
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:inputType="text"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Release Date -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Release Date (YYYYMMDD):"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/gameReleaseDateInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="19851201"
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:inputType="number"
+            android:maxLength="8"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Developer -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Developer:"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/gameDeveloperInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="Nintendo, Capcom, etc."
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Publisher -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Publisher:"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/gamePublisherInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="Nintendo, Capcom, etc."
+            android:textSize="14sp"
+            android:textColor="@color/kitt_red"
+            android:textColorHint="#666666"
+            android:fontFamily="monospace"
+            android:background="@color/kitt_dark_red"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Footer -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@color/kitt_dark_red"
+        android:padding="12dp"
+        android:gravity="end"
+        android:divider="?android:attr/dividerHorizontal"
+        android:showDividers="middle"
+        android:dividerPadding="8dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/deleteButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="DELETE"
+            android:textSize="12sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            app:backgroundTint="@color/kitt_medium_red"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="1dp"
+            app:cornerRadius="8dp"
+            android:layout_marginEnd="8dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/cancelButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CANCEL"
+            android:textSize="12sp"
+            android:textColor="@color/kitt_red"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            app:backgroundTint="@color/kitt_medium_red"
+            app:strokeColor="@color/kitt_red"
+            app:strokeWidth="1dp"
+            app:cornerRadius="8dp"
+            android:layout_marginEnd="8dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/saveButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SAVE"
+            android:textSize="12sp"
+            android:textColor="@color/kitt_black"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            app:backgroundTint="@color/kitt_red"
+            app:cornerRadius="8dp"
+            style="@style/Widget.Material3.Button" />
+
+    </LinearLayout>
+
+</LinearLayout>
+

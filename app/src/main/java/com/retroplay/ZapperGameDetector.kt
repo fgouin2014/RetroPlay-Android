@@ -58,8 +58,10 @@ object ZapperGameDetector {
      * @return true si le jeu nécessite le Zapper
      */
     fun isZapperGame(romName: String, console: String): Boolean {
-        // Le Zapper n'existe que sur NES
-        if (!console.lowercase().contains("nes")) {
+        // Le Zapper n'existe que sur NES/Famicom
+        val consoleLower = console.lowercase()
+        if (!consoleLower.contains("nes") && !consoleLower.contains("famicom")) {
+            Log.d(TAG, "Not a NES/Famicom console: $console")
             return false
         }
         
@@ -70,7 +72,9 @@ object ZapperGameDetector {
         val isZapper = ZAPPER_GAMES.any { normalizedName.contains(it) }
         
         if (isZapper) {
-            Log.i(TAG, "Zapper game detected: $romName (normalized: $normalizedName)")
+            Log.i(TAG, "Zapper game detected: $romName (normalized: $normalizedName, console: $console)")
+        } else {
+            Log.d(TAG, "Not a Zapper game: $romName (normalized: $normalizedName, console: $console)")
         }
         
         return isZapper

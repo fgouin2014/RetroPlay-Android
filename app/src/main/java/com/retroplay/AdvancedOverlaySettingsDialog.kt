@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,81 +25,144 @@ import androidx.compose.ui.window.Dialog
  * - Behavior (hide in menu, behind menu, etc.)
  * - Lightgun options
  * - Mouse options
+ * 
+ * Supports per-orientation settings (landscape/portrait) with toggle to use same settings for both.
  */
 @Composable
 fun AdvancedOverlaySettingsDialog(
     console: String,
     onDismiss: () -> Unit,
     context: Context,
-    prefs: SharedPreferences
+    prefs: SharedPreferences,
+    currentOrientation: String? = null  // "landscape" or "portrait", null = auto-detect
 ) {
-    // Load current advanced settings (avec valeurs par défaut RetroArch officielles)
-    var dpadDiagonalSensitivity by remember { mutableStateOf(prefs.getInt("overlay_${console}_dpad_diagonal_sensitivity", 80)) }  // DEFAULT: 80 (RetroArch officiel)
-    var abxyDiagonalSensitivity by remember { mutableStateOf(prefs.getInt("overlay_${console}_abxy_diagonal_sensitivity", 50)) }
-    var analogRecenterZone by remember { mutableStateOf(prefs.getInt("overlay_${console}_analog_recenter_zone", 0)) }
+    // Detect current orientation
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
+    val orientation = currentOrientation ?: if (isLandscape) "landscape" else "portrait"
     
-    var opacity by remember { mutableStateOf(prefs.getFloat("overlay_${console}_opacity", 0.7f)) }  // DEFAULT: 0.7 (RetroArch officiel)
-    var aspectAdjust by remember { mutableStateOf(prefs.getFloat("overlay_${console}_aspect_adjust", 0.0f)) }
+    // Migrate global settings to per-orientation (one-time, on first load)
+    LaunchedEffect(console) {
+        com.retroplay.overlay.models.OverlayPreferenceManager.migrateAdvancedSettingsToPerOrientation(prefs, console)
+    }
     
-    var hideInMenu by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_hide_in_menu", true)) }  // DEFAULT: true (RetroArch officiel)
-    var behindMenu by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_behind_menu", false)) }
-    var hideWhenGamepad by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_hide_when_gamepad", false)) }
+    // Check if settings are the same for both orientations
+    var useSameSettings by remember { 
+        mutableStateOf(
+            com.retroplay.overlay.models.OverlayPreferenceManager.checkIfSettingsAreSame(prefs, console)
+        )
+    }
     
-    val showInputsString = remember { prefs.getString("overlay_${console}_show_inputs", "NONE") ?: "NONE" }
-    var showInputs by remember { mutableStateOf(com.retroplay.overlay.models.ShowInputsMode.valueOf(showInputsString)) }
-    var showInputsPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_show_inputs_port", 0)) }
+    // Load settings according to orientation (or global if useSameSettings)
+    var settings by remember(orientation, useSameSettings) { 
+        mutableStateOf(
+            if (useSameSettings) {
+                // If "same settings", try to load global first, then fallback to landscape
+                com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, null)
+                    ?: com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, "landscape")
+            } else {
+                com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, orientation)
+            }
+        )
+    }
     
-    // Lightgun options (valeurs par défaut RetroArch officielles)
-    var lightgunPort by remember { mutableStateOf(prefs.getInt("overlay_${console}_lightgun_port", -1)) }  // DEFAULT: -1 (all ports)
-    var lightgunTriggerOnTouch by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_trigger_on_touch", true)) }
-    var lightgunTriggerDelay by remember { mutableStateOf(prefs.getInt("overlay_${console}_lightgun_trigger_delay", 1)) }  // DEFAULT: 1 frame (RetroArch officiel)
-    var lightgunAllowOffscreen by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_lightgun_allow_offscreen", true)) }
+    // State variables from loaded settings
+    var dpadDiagonalSensitivity by remember { mutableStateOf(settings.dpadDiagonalSensitivity) }
+    var abxyDiagonalSensitivity by remember { mutableStateOf(settings.abxyDiagonalSensitivity) }
+    var analogRecenterZone by remember { mutableStateOf(settings.analogRecenterZone) }
+    var opacity by remember { mutableStateOf(settings.opacity) }
+    var aspectAdjust by remember { mutableStateOf(settings.aspectAdjust) }
+    var hideInMenu by remember { mutableStateOf(settings.hideInMenu) }
+    var behindMenu by remember { mutableStateOf(settings.behindMenu) }
+    var hideWhenGamepad by remember { mutableStateOf(settings.hideWhenGamepadConnected) }
+    var showInputs by remember { mutableStateOf(settings.showInputs) }
+    var showInputsPort by remember { mutableStateOf(settings.showInputsPort) }
+    var lightgunPort by remember { mutableStateOf(settings.lightgunPort) }
+    var lightgunTriggerOnTouch by remember { mutableStateOf(settings.lightgunTriggerOnTouch) }
+    var lightgunTriggerDelay by remember { mutableStateOf(settings.lightgunTriggerDelay) }
+    var lightgunAllowOffscreen by remember { mutableStateOf(settings.lightgunAllowOffscreen) }
+    var mouseSpeed by remember { mutableStateOf(settings.mouseSpeed) }
+    var mouseSwipeThreshold by remember { mutableStateOf(settings.mouseSwipeThreshold) }
+    var mouseHoldToDrag by remember { mutableStateOf(settings.mouseHoldToDrag) }
+    var mouseHoldMsec by remember { mutableStateOf(settings.mouseHoldMsec) }
+    var mouseDoubleTapToDrag by remember { mutableStateOf(settings.mouseDoubleTapToDrag) }
+    var mouseDtapMsec by remember { mutableStateOf(settings.mouseDtapMsec) }
+    var showMouseCursor by remember { mutableStateOf(settings.showMouseCursor) }
     
-    // Mouse options (valeurs par défaut RetroArch officielles)
-    var mouseSpeed by remember { mutableStateOf(prefs.getFloat("overlay_${console}_mouse_speed", 1.0f)) }
-    var mouseSwipeThreshold by remember { mutableStateOf(
-        try {
-            prefs.getFloat("overlay_${console}_mouse_swipe_threshold", 1.0f)
-        } catch (e: ClassCastException) {
-            // Migration: old value was Int, convert to Float
-            prefs.getInt("overlay_${console}_mouse_swipe_threshold", 1).toFloat()
+    // Reload settings when orientation or toggle changes
+    LaunchedEffect(orientation, useSameSettings) {
+        val newSettings = if (useSameSettings) {
+            com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, null)
+                ?: com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, "landscape")
+        } else {
+            com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, orientation)
         }
-    ) }  // DEFAULT: 1.0 pixels (RetroArch officiel)
-    var mouseHoldToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_hold_to_drag", true)) }  // DEFAULT: true (RetroArch officiel)
-    var mouseHoldMsec by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_hold_msec", 200)) }  // DEFAULT: 200ms (RetroArch officiel)
-    var mouseDoubleTapToDrag by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_mouse_dtap_to_drag", false)) }
-    var mouseDtapMsec by remember { mutableStateOf(prefs.getInt("overlay_${console}_mouse_dtap_msec", 200)) }  // DEFAULT: 200ms (RetroArch officiel)
-    var showMouseCursor by remember { mutableStateOf(prefs.getBoolean("overlay_${console}_show_mouse_cursor", false)) }  // DEFAULT: false (RetroArch officiel)
+        settings = newSettings
+        dpadDiagonalSensitivity = newSettings.dpadDiagonalSensitivity
+        abxyDiagonalSensitivity = newSettings.abxyDiagonalSensitivity
+        analogRecenterZone = newSettings.analogRecenterZone
+        opacity = newSettings.opacity
+        aspectAdjust = newSettings.aspectAdjust
+        hideInMenu = newSettings.hideInMenu
+        behindMenu = newSettings.behindMenu
+        hideWhenGamepad = newSettings.hideWhenGamepadConnected
+        showInputs = newSettings.showInputs
+        showInputsPort = newSettings.showInputsPort
+        lightgunPort = newSettings.lightgunPort
+        lightgunTriggerOnTouch = newSettings.lightgunTriggerOnTouch
+        lightgunTriggerDelay = newSettings.lightgunTriggerDelay
+        lightgunAllowOffscreen = newSettings.lightgunAllowOffscreen
+        mouseSpeed = newSettings.mouseSpeed
+        mouseSwipeThreshold = newSettings.mouseSwipeThreshold
+        mouseHoldToDrag = newSettings.mouseHoldToDrag
+        mouseHoldMsec = newSettings.mouseHoldMsec
+        mouseDoubleTapToDrag = newSettings.mouseDoubleTapToDrag
+        mouseDtapMsec = newSettings.mouseDtapMsec
+        showMouseCursor = newSettings.showMouseCursor
+    }
     
     // Preview transparency state
     var isTransparent by remember { mutableStateOf(false) }
     
     // Save when changed + trigger preview transparency
-    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort, lightgunPort, lightgunTriggerOnTouch, lightgunTriggerDelay, lightgunAllowOffscreen, mouseSpeed, mouseSwipeThreshold, mouseHoldToDrag, mouseHoldMsec, mouseDoubleTapToDrag, mouseDtapMsec, showMouseCursor) {
-        prefs.edit()
-            .putInt("overlay_${console}_dpad_diagonal_sensitivity", dpadDiagonalSensitivity)
-            .putInt("overlay_${console}_abxy_diagonal_sensitivity", abxyDiagonalSensitivity)
-            .putInt("overlay_${console}_analog_recenter_zone", analogRecenterZone)
-            .putFloat("overlay_${console}_opacity", opacity)
-            .putFloat("overlay_${console}_aspect_adjust", aspectAdjust)
-            .putBoolean("overlay_${console}_hide_in_menu", hideInMenu)
-            .putBoolean("overlay_${console}_behind_menu", behindMenu)
-            .putBoolean("overlay_${console}_hide_when_gamepad", hideWhenGamepad)
-            .putString("overlay_${console}_show_inputs", showInputs.name)
-            .putInt("overlay_${console}_show_inputs_port", showInputsPort)
-            .putInt("overlay_${console}_lightgun_port", lightgunPort)
-            .putBoolean("overlay_${console}_lightgun_trigger_on_touch", lightgunTriggerOnTouch)
-            .putInt("overlay_${console}_lightgun_trigger_delay", lightgunTriggerDelay)
-            .putBoolean("overlay_${console}_lightgun_allow_offscreen", lightgunAllowOffscreen)
-            .putFloat("overlay_${console}_mouse_speed", mouseSpeed)
-            .putFloat("overlay_${console}_mouse_swipe_threshold", mouseSwipeThreshold)
-            .putBoolean("overlay_${console}_mouse_hold_to_drag", mouseHoldToDrag)
-            .putInt("overlay_${console}_mouse_hold_msec", mouseHoldMsec)
-            .putBoolean("overlay_${console}_mouse_dtap_to_drag", mouseDoubleTapToDrag)
-            .putInt("overlay_${console}_mouse_dtap_msec", mouseDtapMsec)
-            .putBoolean("overlay_${console}_show_mouse_cursor", showMouseCursor)
-            .commit()
-        android.util.Log.i("AdvancedOverlaySettings", "Saved for $console: dpadSens=$dpadDiagonalSensitivity abxySens=$abxyDiagonalSensitivity recenter=$analogRecenterZone opacity=$opacity")
+    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort, lightgunPort, lightgunTriggerOnTouch, lightgunTriggerDelay, lightgunAllowOffscreen, mouseSpeed, mouseSwipeThreshold, mouseHoldToDrag, mouseHoldMsec, mouseDoubleTapToDrag, mouseDtapMsec, showMouseCursor, useSameSettings) {
+        val newSettings = com.retroplay.overlay.models.AdvancedOverlaySettings(
+            dpadDiagonalSensitivity = dpadDiagonalSensitivity,
+            abxyDiagonalSensitivity = abxyDiagonalSensitivity,
+            analogRecenterZone = analogRecenterZone,
+            opacity = opacity,
+            aspectAdjust = aspectAdjust,
+            hideInMenu = hideInMenu,
+            behindMenu = behindMenu,
+            hideWhenGamepadConnected = hideWhenGamepad,
+            showInputs = showInputs,
+            showInputsPort = showInputsPort,
+            lightgunPort = lightgunPort,
+            lightgunTriggerOnTouch = lightgunTriggerOnTouch,
+            lightgunTriggerDelay = lightgunTriggerDelay,
+            lightgunAllowOffscreen = lightgunAllowOffscreen,
+            lightgunTwoTouchInput = settings.lightgunTwoTouchInput,
+            lightgunThreeTouchInput = settings.lightgunThreeTouchInput,
+            lightgunFourTouchInput = settings.lightgunFourTouchInput,
+            mouseSpeed = mouseSpeed,
+            mouseSwipeThreshold = mouseSwipeThreshold,
+            mouseHoldToDrag = mouseHoldToDrag,
+            mouseHoldMsec = mouseHoldMsec,
+            mouseDoubleTapToDrag = mouseDoubleTapToDrag,
+            mouseDtapMsec = mouseDtapMsec,
+            showMouseCursor = showMouseCursor
+        )
+        
+        if (useSameSettings) {
+            // Save to both orientations
+            com.retroplay.overlay.models.OverlayPreferenceManager.saveAdvancedSettings(prefs, console, "landscape", newSettings)
+            com.retroplay.overlay.models.OverlayPreferenceManager.saveAdvancedSettings(prefs, console, "portrait", newSettings)
+        } else {
+            // Save to current orientation
+            com.retroplay.overlay.models.OverlayPreferenceManager.saveAdvancedSettings(prefs, console, orientation, newSettings)
+        }
+        
+        android.util.Log.i("AdvancedOverlaySettings", "Saved for $console ($orientation, useSame=$useSameSettings): dpadSens=$dpadDiagonalSensitivity abxySens=$abxyDiagonalSensitivity recenter=$analogRecenterZone opacity=$opacity")
         
         // Trigger preview transparency for 2 seconds
         isTransparent = true
@@ -134,8 +198,85 @@ fun AdvancedOverlaySettingsDialog(
                         color = Color.White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
+                    
+                    // Current orientation indicator
+                    Text(
+                        "Current: ${orientation.replaceFirstChar { it.uppercaseChar() }}",
+                        color = Color(0xFF888888),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    // Toggle: Use same settings for both orientations
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Use Same Settings for Both Orientations",
+                                color = Color.White,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                "When enabled, landscape and portrait share the same settings",
+                                color = Color(0xFF888888),
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = useSameSettings,
+                            onCheckedChange = { 
+                                useSameSettings = it
+                                if (it) {
+                                    // Copy current settings to both orientations
+                                    val current = com.retroplay.overlay.models.AdvancedOverlaySettings(
+                                        dpadDiagonalSensitivity = dpadDiagonalSensitivity,
+                                        abxyDiagonalSensitivity = abxyDiagonalSensitivity,
+                                        analogRecenterZone = analogRecenterZone,
+                                        opacity = opacity,
+                                        aspectAdjust = aspectAdjust,
+                                        hideInMenu = hideInMenu,
+                                        behindMenu = behindMenu,
+                                        hideWhenGamepadConnected = hideWhenGamepad,
+                                        showInputs = showInputs,
+                                        showInputsPort = showInputsPort,
+                                        lightgunPort = lightgunPort,
+                                        lightgunTriggerOnTouch = lightgunTriggerOnTouch,
+                                        lightgunTriggerDelay = lightgunTriggerDelay,
+                                        lightgunAllowOffscreen = lightgunAllowOffscreen,
+                                        lightgunTwoTouchInput = settings.lightgunTwoTouchInput,
+                                        lightgunThreeTouchInput = settings.lightgunThreeTouchInput,
+                                        lightgunFourTouchInput = settings.lightgunFourTouchInput,
+                                        mouseSpeed = mouseSpeed,
+                                        mouseSwipeThreshold = mouseSwipeThreshold,
+                                        mouseHoldToDrag = mouseHoldToDrag,
+                                        mouseHoldMsec = mouseHoldMsec,
+                                        mouseDoubleTapToDrag = mouseDoubleTapToDrag,
+                                        mouseDtapMsec = mouseDtapMsec,
+                                        showMouseCursor = showMouseCursor
+                                    )
+                                    com.retroplay.overlay.models.OverlayPreferenceManager.saveAdvancedSettings(prefs, console, "landscape", current)
+                                    com.retroplay.overlay.models.OverlayPreferenceManager.saveAdvancedSettings(prefs, console, "portrait", current)
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF4CAF50),
+                                checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
+                                uncheckedThumbColor = Color(0xFF888888),
+                                uncheckedTrackColor = Color(0xFF444444)
+                            )
+                        )
+                    }
+                    
+                    Spacer(Modifier.height(8.dp))
+                    HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
+                    Spacer(Modifier.height(8.dp))
                     
                     // === SENSITIVITY ===
                     Text(

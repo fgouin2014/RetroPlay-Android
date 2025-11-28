@@ -840,7 +840,7 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         
         Intent intent = new Intent(this, GameDetailsActivity.class);
         intent.putExtra("game", game);
-        startActivity(intent);
+        startActivityForResult(intent, 200); // Request code 200 pour GameDetailsActivity
     }
     
     /**

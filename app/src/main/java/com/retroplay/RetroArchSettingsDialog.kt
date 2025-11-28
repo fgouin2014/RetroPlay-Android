@@ -758,6 +758,7 @@ fun RetroArchSettingsDialog(
                             activeColor = Color(0xFF9C27B0)
                         )
                     }
+                    }
                         1 -> {
                             // ========== ONGLET 2: ADVANCED OVERLAY SETTINGS ==========
                             // (Contenu complet intégré depuis AdvancedOverlaySettingsDialog)
@@ -1499,6 +1500,7 @@ fun RetroArchSettingsDialog(
                                 )
                             }
                         }
+                    }
                         2 -> {
                             // ========== ONGLET 3: RETROARCH GENERAL SETTINGS ==========
                             
@@ -1763,6 +1765,7 @@ fun RetroArchSettingsDialog(
                         fontStyle = FontStyle.Italic
                     )
                         }
+                    }
                     }
 
                     HorizontalDivider(color = Color(0xFF444444))

@@ -391,3 +391,4 @@ Après cette implémentation:
 
 **Note:** Cette implémentation est backward compatible. Les anciennes installations continueront de fonctionner avec des settings globaux jusqu'à ce qu'elles soient migrées automatiquement.
 
+

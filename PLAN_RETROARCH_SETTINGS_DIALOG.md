@@ -347,3 +347,4 @@ Après cette implémentation:
 
 **Note:** Ce dialog devient le hub centralisé pour TOUTES les options RetroArch, complémentant `EmulationSettingsDialog` qui gère les Core Options spécifiques au core.
 
+

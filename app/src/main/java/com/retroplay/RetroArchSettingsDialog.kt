@@ -78,6 +78,7 @@ fun RetroArchSettingsDialog(
     onAudioMuteChanged: (Boolean) -> Unit = {},
     onVsyncChanged: (Boolean) -> Unit = {},
     onRewindEnabledChanged: (Boolean) -> Unit = {},
+    onAspectRatioChanged: (String) -> Unit = {},
     onOpenAdvancedOverlaySettings: (() -> Unit)? = null  // Callback pour ouvrir Advanced Overlay Settings
 ) {
     val assetManager = remember { OverlayAssetManager(context) }
@@ -1692,6 +1693,7 @@ fun RetroArchSettingsDialog(
                                                 selectedAspectRatio = ratio
                                                 expandedAspectRatioMenu = false
                                                 prefs.edit().putString("emulation_video_aspect_ratio", ratio).apply()
+                                                onAspectRatioChanged(ratio)
                                             }
                                         )
                                     }

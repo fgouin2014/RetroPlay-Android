@@ -1817,9 +1817,15 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 onShaderChanged = { shaderName ->
                     currentShader.value = com.retroplay.shader.ShaderManager.fromString(shaderName)
                     val shaderConfig = com.retroplay.shader.ShaderManager.getShaderConfig(currentShader.value)
-                    // Note: Shader est appliqué au prochain chargement de ROM
-                    // Pour appliquer immédiatement, il faudrait recharger la ROM
-                    Log.i(TAG, "[SHADER] Changed to: ${currentShader.value.displayName}")
+                    // Appliquer le shader immédiatement au retroView
+                    runOnUiThread {
+                        try {
+                            retroView.shader = shaderConfig
+                            Log.i(TAG, "[SHADER] Applied: ${currentShader.value.displayName}")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[SHADER] Error applying shader: ${e.message}", e)
+                        }
+                    }
                 },
                 onFastForwardRatioChanged = { ratio: Float ->
                     fastForwardRatio = ratio.toInt()
@@ -3952,11 +3958,18 @@ internal fun ComposeEmulatorScreen(
                         onAudioVolumeChanged = onAudioVolumeChanged,
                         onAudioMuteChanged = onAudioMuteChanged,
                         onVsyncChanged = onVsyncChanged,
-                        onRewindEnabledChanged = onRewindEnabledChanged,
-                        onOpenAdvancedOverlaySettings = {
-                            showGamePadSettings.value = false
-                            showAdvancedOverlaySettings.value = true
-                        }
+                onRewindEnabledChanged = onRewindEnabledChanged,
+                onAspectRatioChanged = { aspectRatio ->
+                    // L'aspect ratio est géré via le viewport dans LibretroDroid
+                    // Pour l'instant, on sauvegarde juste la préférence
+                    // L'application réelle nécessiterait de recalculer le viewport
+                    android.util.Log.i("RetroArchEmulator", "[ASPECT_RATIO] Changed to: $aspectRatio")
+                    // TODO: Appliquer l'aspect ratio via viewport si nécessaire
+                },
+                onOpenAdvancedOverlaySettings = {
+                    showGamePadSettings.value = false
+                    showAdvancedOverlaySettings.value = true
+                }
                     )
                 }
                 

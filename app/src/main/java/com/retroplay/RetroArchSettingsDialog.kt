@@ -1840,6 +1840,53 @@ fun RetroArchSettingsDialog(
                                 checked = debugModeState.value,
                                 onCheckedChange = { debugModeState.value = it }
                             )
+                            
+                            HorizontalDivider(color = Color(0xFF444444))
+                            
+                            // Run-Ahead Settings
+                            var runAheadEnabled by remember { 
+                                mutableStateOf(
+                                    com.retroplay.config.RetroPlayConfigManager.loadConfig().runAheadEnabled
+                                )
+                            }
+                            var runAheadFrames by remember { 
+                                mutableStateOf(
+                                    com.retroplay.config.RetroPlayConfigManager.loadConfig().runAheadFrames.toFloat()
+                                )
+                            }
+                            
+                            SwitchRow(
+                                title = "Run-Ahead",
+                                subtitle = "Reduce input lag by running N frames ahead (requires save state support)",
+                                checked = runAheadEnabled,
+                                onCheckedChange = { 
+                                    runAheadEnabled = it
+                                    val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+                                    com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(runAheadEnabled = it))
+                                }
+                            )
+                            
+                            if (runAheadEnabled) {
+                                SliderWithLabel(
+                                    label = "Run-Ahead Frames",
+                                    value = runAheadFrames,
+                                    onValueChange = { 
+                                        runAheadFrames = it
+                                        val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+                                        com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(runAheadFrames = it.toInt()))
+                                    },
+                                    valueRange = 1.0f..4.0f,
+                                    displayValue = "${runAheadFrames.toInt()} frames",
+                                    activeColor = Color(0xFF4CAF50)
+                                )
+                                
+                                Text(
+                                    text = "Recommended: 1-2 frames for most games, 3-4 for fighting games",
+                                    color = Color(0xFF888888),
+                                    fontSize = 11.sp,
+                                    fontStyle = FontStyle.Italic
+                                )
+                            }
 
                             HorizontalDivider(color = Color(0xFF444444))
 

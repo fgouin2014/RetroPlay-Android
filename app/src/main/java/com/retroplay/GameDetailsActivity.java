@@ -2537,6 +2537,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Utiliser directement le chemin local retourné par getFile()
         String localPath = game.getFile();
         if (localPath != null && !localPath.isEmpty()) {
+            // Les chemins de fichiers locaux supportent les caractères spéciaux (!, +, etc.) directement
             File directFile = new File(localPath);
             if (directFile.exists()) {
                 return directFile.getAbsolutePath();
@@ -2548,6 +2549,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         if (rawPath != null && !rawPath.isEmpty()) {
             // Nettoyer le chemin (enlever "./" si présent)
             String cleanPath = rawPath.startsWith("./") ? rawPath.substring(2) : rawPath;
+            // Note: Les caractères spéciaux (!, +, etc.) sont supportés directement dans les chemins de fichiers Android
 
             // Essayer avec le chemin complet
             File candidate = new File(baseDir + cleanPath);
@@ -2564,6 +2566,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             // Extraire juste le nom du fichier et essayer dans le répertoire de console
             int lastSlash = cleanPath.lastIndexOf('/');
             String fileName = lastSlash >= 0 ? cleanPath.substring(lastSlash + 1) : cleanPath;
+            // Les noms de fichiers avec caractères spéciaux (!, +, etc.) sont supportés directement
             File finalCandidate = new File(baseDir + consoleDir + "/" + fileName);
             if (finalCandidate.exists()) {
                 return finalCandidate.getAbsolutePath();

@@ -179,10 +179,32 @@ public class Game implements java.io.Serializable {
     /**
      * Retourne l'URL HTTP pour le WebServer (pour EmulatorJS/WebView)
      * Format: http://localhost:7777/gamedata/{console}/{filename}
+     * Note: Encode les caractères spéciaux (!, +, &, etc.) dans le nom de fichier pour les URLs
      */
     public String getFileUrl() {
         String fileName = path.startsWith("./") ? path.substring(2) : path;
-        return "http://localhost:7777/gamedata/" + consoleId + "/" + fileName;
+        
+        // Encoder le nom de fichier pour les URLs (gérer !, +, &, espaces, etc.)
+        // Séparer le chemin en parties pour encoder seulement le nom de fichier final
+        try {
+            int lastSlash = fileName.lastIndexOf('/');
+            if (lastSlash >= 0) {
+                String dirPath = fileName.substring(0, lastSlash + 1); // Garder le "/" final
+                String fileNameOnly = fileName.substring(lastSlash + 1);
+                // Encoder seulement le nom de fichier, pas le chemin de répertoire
+                String encodedFileName = java.net.URLEncoder.encode(fileNameOnly, "UTF-8")
+                    .replace("+", "%20"); // Remplacer + par %20 pour les espaces dans les URLs
+                return "http://localhost:7777/gamedata/" + consoleId + "/" + dirPath + encodedFileName;
+            } else {
+                // Pas de répertoire, encoder directement le nom de fichier
+                String encodedFileName = java.net.URLEncoder.encode(fileName, "UTF-8")
+                    .replace("+", "%20");
+                return "http://localhost:7777/gamedata/" + consoleId + "/" + encodedFileName;
+            }
+        } catch (java.io.UnsupportedEncodingException e) {
+            // Fallback: utiliser le nom de fichier tel quel si l'encodage échoue
+            return "http://localhost:7777/gamedata/" + consoleId + "/" + fileName;
+        }
     }
     
     /**

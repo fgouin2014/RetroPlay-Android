@@ -1550,11 +1550,26 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         // 1. Vérifier d'abord s'il y a une configuration manuelle (override détection auto)
         // 2. Sinon, utiliser la détection automatique (Zapper, etc.)
         // CRITICAL: Ne configurer les contrôleurs QUE si le jeu est chargé avec succès
+        // Utiliser un délai plus long (2 secondes) pour laisser le temps au Flow d'erreur de détecter les problèmes
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             try {
                 // Vérifier si le jeu a échoué à charger (dialog d'erreur affiché)
                 if (showCoreErrorDialog.value) {
                     Log.w(TAG, "[CONTROLLER] Game failed to load, skipping controller configuration")
+                    return@postDelayed
+                }
+                
+                // Vérifier également si retroView est dans un état valide avant d'appeler setControllerType
+                // Si le jeu n'est pas chargé, setControllerType() peut crasher
+                try {
+                    // Tester si on peut accéder aux contrôleurs (indique que le core est initialisé)
+                    val testControllers = retroView.getControllers()
+                    if (testControllers.isEmpty()) {
+                        Log.w(TAG, "[CONTROLLER] No controllers available, game may not be loaded yet")
+                        return@postDelayed
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "[CONTROLLER] Cannot access controllers, game not loaded: ${e.message}")
                     return@postDelayed
                 }
                 
@@ -1623,7 +1638,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "[CONTROLLER] Failed to configure controller ports: ${e.message}", e)
             }
-        }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
+        }, 2000)  // Attendre 2 secondes pour laisser le temps au Flow d'erreur de détecter les problèmes
 
         // Configurer les extensions contrôleur pour N64
         if (console.equals("n64", ignoreCase = true)) {
@@ -1632,6 +1647,18 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     // Vérifier si le jeu a échoué à charger (dialog d'erreur affiché)
                     if (showCoreErrorDialog.value) {
                         Log.w(TAG, "[N64] Game failed to load, skipping extension configuration")
+                        return@postDelayed
+                    }
+                    
+                    // Vérifier que retroView est dans un état valide
+                    try {
+                        val testControllers = retroView.getControllers()
+                        if (testControllers.isEmpty()) {
+                            Log.w(TAG, "[N64] No controllers available, game may not be loaded yet")
+                            return@postDelayed
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[N64] Cannot access controllers, game not loaded: ${e.message}")
                         return@postDelayed
                     }
                     

@@ -387,13 +387,49 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         try {
             Log.i(TAG, "[ZAPPER] Manual configuration triggered (hot config)!")
             
+            // Vérifier que le jeu est chargé avant de configurer
+            try {
+                val testControllers = retroView.getControllers()
+                if (testControllers.isEmpty()) {
+                    Log.w(TAG, "[ZAPPER] No controllers available, game may not be loaded")
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@NativeComposeEmulatorActivity,
+                            "Game not loaded. Cannot configure Zapper.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    return
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "[ZAPPER] Cannot access controllers, game not loaded: ${e.message}")
+                runOnUiThread {
+                    Toast.makeText(
+                        this@NativeComposeEmulatorActivity,
+                        "Game not loaded. Cannot configure Zapper.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                return
+            }
+            
             // Configurer Port 1 (index 0) = Gamepad explicitement
-            retroView.setControllerType(0, 1)  // RETRO_DEVICE_JOYPAD = 1
-            Log.i(TAG, "[ZAPPER] Port 1 configured as GAMEPAD (1)")
+            try {
+                retroView.setControllerType(0, 1)  // RETRO_DEVICE_JOYPAD = 1
+                Log.i(TAG, "[ZAPPER] Port 1 configured as GAMEPAD (1)")
+            } catch (e: Exception) {
+                Log.e(TAG, "[ZAPPER] Failed to set Port 1 as GAMEPAD: ${e.message}")
+                throw e
+            }
             
             // Configurer Port 2 (index 1) = Zapper
-            retroView.setControllerType(1, 258)  // RETRO_DEVICE_ZAPPER = 258
-            Log.i(TAG, "[ZAPPER] Port 2 configured as ZAPPER (258)")
+            try {
+                retroView.setControllerType(1, 258)  // RETRO_DEVICE_ZAPPER = 258
+                Log.i(TAG, "[ZAPPER] Port 2 configured as ZAPPER (258)")
+            } catch (e: Exception) {
+                Log.e(TAG, "[ZAPPER] Failed to set Port 2 as ZAPPER: ${e.message}")
+                throw e
+            }
             
             // Afficher confirmation
             android.widget.Toast.makeText(

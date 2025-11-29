@@ -1221,15 +1221,20 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                         hasManualConfig = true
                         try {
                             retroView.setControllerType(port, manualControllerType)
-                        val controllerName = when (manualControllerType) {
-                            0 -> "None"
-                            1 -> "Joypad"
-                            4 -> "Lightgun"
-                            6 -> "Pointer"
-                            258 -> "Zapper"
-                            else -> "Type $manualControllerType"
+                            val controllerName = when (manualControllerType) {
+                                0 -> "None"
+                                1 -> "Joypad"
+                                4 -> "Lightgun"
+                                6 -> "Pointer"
+                                258 -> "Zapper"
+                                else -> "Type $manualControllerType"
+                            }
+                            Log.i(TAG, "[CONTROLLER] Port ${port + 1} manually configured as: $controllerName (id=$manualControllerType)")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[CONTROLLER] Failed to set controller type for port ${port + 1}: ${e.message}")
+                            // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
+                            return@postDelayed
                         }
-                        Log.i(TAG, "[CONTROLLER] Port ${port + 1} manually configured as: $controllerName (id=$manualControllerType)")
                     }
                 }
                 

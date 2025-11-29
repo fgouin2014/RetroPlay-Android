@@ -400,6 +400,12 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         boolean threads = threadsSwitch.isChecked();
         editor.putBoolean(prefix + "threads", threads);
         
+        // Save ROM extraction setting
+        if (extractRomsSwitch != null) {
+            boolean extractRoms = extractRomsSwitch.isChecked();
+            editor.putBoolean(prefix + "extract_roms", extractRoms);
+        }
+        
         // Save PSX D-Pad setting
         if (psxDpadSwitch != null) {
             boolean useDpad = psxDpadSwitch.isChecked();

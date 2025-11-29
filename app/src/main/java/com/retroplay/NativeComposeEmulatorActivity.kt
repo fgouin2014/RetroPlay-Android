@@ -1245,16 +1245,22 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     // Mais ensuite, en mode RetroPointer (touchscreen), get_mouse_input() lit RETRO_DEVICE_POINTER
                     // Donc on DOIT configurer RETRO_DEVICE_ZAPPER (258) pour que get_mouse_input() soit appelé!
                     // Chiller utilise le port 0 (Port 1), les autres jeux utilisent le port 1 (Port 2)
-                    retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
-                    Log.i(TAG, "[ZAPPER] Auto-detected: Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
-                    Log.i(TAG, "[ZAPPER] FCEUmm will call get_mouse_input() which reads RETRO_DEVICE_POINTER in RetroPointer mode")
-                    
-                    runOnUiThread {
-                        Toast.makeText(
-                            this@NativeComposeEmulatorActivity,
-                            "Zapper detected! Port ${zapperPort + 1} (index $zapperPort)\nTouch game area to shoot",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                    try {
+                        retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
+                        Log.i(TAG, "[ZAPPER] Auto-detected: Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
+                        Log.i(TAG, "[ZAPPER] FCEUmm will call get_mouse_input() which reads RETRO_DEVICE_POINTER in RetroPointer mode")
+                        
+                        runOnUiThread {
+                            Toast.makeText(
+                                this@NativeComposeEmulatorActivity,
+                                "Zapper detected! Port ${zapperPort + 1} (index $zapperPort)\nTouch game area to shoot",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[ZAPPER] Failed to set Zapper controller type: ${e.message}")
+                        // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
+                        return@postDelayed
                     }
                 } else if (hasManualConfig) {
                     Log.i(TAG, "[CONTROLLER] Manual port configuration applied (auto-detection overridden)")

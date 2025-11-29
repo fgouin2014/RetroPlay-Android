@@ -1429,12 +1429,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             
             // Gérer l'extraction des ROMs depuis les archives (.zip, .7z)
             // FCEUmm (NES) et la plupart des cores ne peuvent pas charger directement les ZIP
-            // Si extractRoms est désactivé, on extrait quand même en mémoire (gameFileBytes)
-            val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
-            val composePrefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
-            val extractRoms = consoleConfigPrefs.getBoolean("${console}_extract_roms", false) ||
-                             composePrefs.getBoolean("cache_enabled_${console}", false)
-            
+            // Toujours extraire en mémoire (gameFileBytes) pour les archives non-arcade
             val isArchive = romPath.endsWith(".zip", ignoreCase = true) || romPath.endsWith(".7z", ignoreCase = true)
             val isArcadeZip = (console.equals("fbneo", ignoreCase = true) || 
                               console.equals("arcade", ignoreCase = true) || 

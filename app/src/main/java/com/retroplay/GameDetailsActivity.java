@@ -663,21 +663,10 @@ public class GameDetailsActivity extends AppCompatActivity {
             Log.i(TAG, console + ": Arcade ROM .zip detected, loading directly (core reads .zip natively)");
             // Charger directement (les ROMs arcade sont en .zip et ne doivent PAS être extraites)
         } else if (isArchive) {
-            // Lire depuis console_config (ConsoleConfigActivity) OU compose_gamepad_settings (RetroArchSettingsDialog)
-            // Priorité: console_config puis compose_gamepad_settings
-            boolean extractRoms = consoleConfigPrefs.getBoolean(consolePrefix + "extract_roms", false);
-            if (!extractRoms) {
-                extractRoms = composePrefs.getBoolean("cache_enabled_" + console, false);  // FALSE par défaut (changé de true)
-            }
-            
-            if (extractRoms) {
-                Log.i(TAG, console + ": Archive detected (" + fileName + "), extracting to cache...");
-                extractToCacheAsync(romPath, fileName, slot, console);
-                return;  // L'extraction lancera l'Activity une fois terminee
-            } else {
-                Log.i(TAG, console + ": ROM extraction disabled by user, trying archive directly");
-                // Continuer avec le fichier archive directement (certains cores peuvent le supporter)
-            }
+            // Toujours extraire les archives vers le cache (les cores ne peuvent pas charger les ZIP directement)
+            Log.i(TAG, console + ": Archive detected (" + fileName + "), extracting to cache...");
+            extractToCacheAsync(romPath, fileName, slot, console);
+            return;  // L'extraction lancera l'Activity une fois terminee
         }
         
         Log.i(TAG, "ROM path: " + romPath);

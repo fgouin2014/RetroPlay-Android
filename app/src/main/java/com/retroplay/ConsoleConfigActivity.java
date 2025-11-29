@@ -371,12 +371,15 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         if (n64AntiAliasingSpinner != null) n64AntiAliasingSpinner.setSelection(prefs.getInt(prefix + "antialiasing", 0));
         if (n64BilinearSwitch != null) n64BilinearSwitch.setChecked(prefs.getBoolean(prefix + "bilinear", false));
 
-        if (psxResolutionSpinner != null) psxResolutionSpinner.setSelection(prefs.getInt(prefix + "psx_resolution", 0));
-        if (psxTextureFilteringSwitch != null) psxTextureFilteringSwitch.setChecked(prefs.getBoolean(prefix + "psx_texture_filtering", true));
-        if (psxDitheringSwitch != null) psxDitheringSwitch.setChecked(prefs.getBoolean(prefix + "psx_dithering", true));
+        // Load core specific settings
+        // Clés: psx_resolution, psx_texture_filtering, psx_dithering (sans redondance)
+        if (psxResolutionSpinner != null) psxResolutionSpinner.setSelection(prefs.getInt(prefix + "resolution", 0));
+        if (psxTextureFilteringSwitch != null) psxTextureFilteringSwitch.setChecked(prefs.getBoolean(prefix + "texture_filtering", true));
+        if (psxDitheringSwitch != null) psxDitheringSwitch.setChecked(prefs.getBoolean(prefix + "dithering", true));
 
-        if (snesBlendModeSpinner != null) snesBlendModeSpinner.setSelection(prefs.getInt(prefix + "snes_blend_mode", 0));
-        if (snesHiResSwitch != null) snesHiResSwitch.setChecked(prefs.getBoolean(prefix + "snes_hires", false));
+        // Clés: snes_blend_mode, snes_hires (sans redondance)
+        if (snesBlendModeSpinner != null) snesBlendModeSpinner.setSelection(prefs.getInt(prefix + "blend_mode", 0));
+        if (snesHiResSwitch != null) snesHiResSwitch.setChecked(prefs.getBoolean(prefix + "hires", false));
         
         // Load control settings
         float touchScale = prefs.getFloat(prefix + "touch_scale", 1.0f);

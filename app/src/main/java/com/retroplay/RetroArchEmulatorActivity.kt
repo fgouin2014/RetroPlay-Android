@@ -1426,7 +1426,96 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             }
             
             coreFilePath = selectedCore
-            gameFilePath = romPath
+            
+            // Gérer l'extraction des ROMs depuis les archives (.zip, .7z)
+            // FCEUmm (NES) et la plupart des cores ne peuvent pas charger directement les ZIP
+            // Si extractRoms est désactivé, on extrait quand même en mémoire (gameFileBytes)
+            val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+            val composePrefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
+            val extractRoms = consoleConfigPrefs.getBoolean("${console}_extract_roms", false) ||
+                             composePrefs.getBoolean("cache_enabled_${console}", false)
+            
+            val isArchive = romPath.endsWith(".zip", ignoreCase = true) || romPath.endsWith(".7z", ignoreCase = true)
+            val isArcadeZip = (console.equals("fbneo", ignoreCase = true) || 
+                              console.equals("arcade", ignoreCase = true) || 
+                              console.equals("mame", ignoreCase = true) || 
+                              console.equals("neogeo", ignoreCase = true)) && 
+                             romPath.endsWith(".zip", ignoreCase = true)
+            
+            if (isArchive && !isArcadeZip) {
+                // Archive non-arcade: extraire la ROM
+                try {
+                    val romFile = java.io.File(romPath)
+                    if (!romFile.exists()) {
+                        Log.e(TAG, "❌ Archive file does not exist: $romPath")
+                        gameFilePath = romPath  // Fallback
+                    } else {
+                        Log.i(TAG, "🔍 Extracting ROM from archive: $romPath")
+                        
+                        val validExtensions = when (console.lowercase()) {
+                            "nes" -> listOf(".nes", ".fds")
+                            "snes" -> listOf(".smc", ".sfc", ".fig")
+                            "gb" -> listOf(".gb")
+                            "gbc" -> listOf(".gbc")
+                            "gba" -> listOf(".gba")
+                            "genesis" -> listOf(".gen", ".md", ".smd")
+                            "mastersystem" -> listOf(".sms")
+                            "gamegear" -> listOf(".gg")
+                            "32x" -> listOf(".32x")
+                            "ngp" -> listOf(".ngp")
+                            "wonderswancolor" -> listOf(".ws", ".wsc")
+                            "pce" -> listOf(".pce")
+                            else -> emptyList()
+                        }
+                        
+                        if (romPath.endsWith(".zip", ignoreCase = true)) {
+                            val zipFile = java.util.zip.ZipFile(romPath)
+                            val entries = zipFile.entries()
+                            var romBytes: ByteArray? = null
+                            
+                            // Trouver le premier fichier ROM valide dans le zip
+                            while (entries.hasMoreElements()) {
+                                val entry = entries.nextElement()
+                                val entryName = entry.name.lowercase()
+                                
+                                if (validExtensions.any { entryName.endsWith(it) }) {
+                                    Log.i(TAG, "✅ Found valid ROM in zip: ${entry.name}")
+                                    val inputStream = zipFile.getInputStream(entry)
+                                    romBytes = inputStream.readBytes()
+                                    inputStream.close()
+                                    Log.i(TAG, "📦 Extracted ROM from zip: ${entry.name} (${romBytes.size} bytes)")
+                                    break
+                                }
+                            }
+                            
+                            zipFile.close()
+                            
+                            if (romBytes != null) {
+                                // Passer le fichier via gameFileBytes au lieu de gameFilePath
+                                gameFileBytes = romBytes
+                                gameFilePath = null
+                                Log.i(TAG, "✅ Using gameFileBytes for extracted ROM")
+                            } else {
+                                // Fallback: utiliser le chemin du zip directement
+                                gameFilePath = romPath
+                                Log.w(TAG, "⚠️ No valid ROM found in zip, trying zip directly: $romPath")
+                            }
+                        } else {
+                            // .7z non supporté pour l'instant, utiliser le chemin directement
+                            gameFilePath = romPath
+                            Log.w(TAG, "⚠️ .7z extraction not implemented, using path directly: $romPath")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Error extracting ROM from archive: ${e.message}", e)
+                    // Fallback: utiliser le chemin directement
+                    gameFilePath = romPath
+                }
+            } else {
+                // Fichier normal ou arcade zip: utiliser le chemin directement
+                gameFilePath = romPath
+                Log.i(TAG, "📁 Using gameFilePath directly: $romPath")
+            }
             
             // Sauvegarder le core actuel pour le cleanup
             this@RetroArchEmulatorActivity.currentCoreFilePath = selectedCore
@@ -1761,8 +1850,208 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
         }
         
-        // Configuration des contrôleurs sera faite après le premier frame rendu (dans configureControllersAfterGameLoaded)
-        // Cela garantit que le jeu est complètement chargé avant de configurer les contrôleurs
+        // Configuration des ports contrôleurs
+        // 1. Vérifier d'abord s'il y a une configuration manuelle (override détection auto)
+        // 2. Sinon, utiliser la détection automatique (Zapper, etc.)
+        // CRITICAL: Ne configurer les contrôleurs QUE si le jeu est chargé avec succès
+        // Utiliser un délai plus long (2 secondes) pour laisser le temps au Flow d'erreur de détecter les problèmes
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            try {
+                // Vérifier si le jeu a échoué à charger (dialog d'erreur affiché)
+                if (showCoreErrorDialog.value) {
+                    Log.w(TAG, "[CONTROLLER] Game failed to load, skipping controller configuration")
+                    return@postDelayed
+                }
+                
+                // Vérifier également si retroView est dans un état valide avant d'appeler setControllerType
+                // Si le jeu n'est pas chargé, setControllerType() peut crasher
+                try {
+                    // Tester si on peut accéder aux contrôleurs (indique que le core est initialisé)
+                    val testControllers = retroView.getControllers()
+                    if (testControllers.isEmpty()) {
+                        Log.w(TAG, "[CONTROLLER] No controllers available, game may not be loaded yet")
+                        return@postDelayed
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "[CONTROLLER] Cannot access controllers, game not loaded: ${e.message}")
+                    return@postDelayed
+                }
+                
+                var hasManualConfig = false
+                
+                // Lire depuis console_config (comme ConsoleConfigActivity) OU compose_gamepad_settings (comme RetroArchSettingsDialog)
+                val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+                val composePrefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
+                
+                // Vérifier chaque port (0-3) pour une configuration manuelle
+                for (port in 0..3) {
+                    // Priorité: console_config (ConsoleConfigActivity) puis compose_gamepad_settings (RetroArchSettingsDialog)
+                    var manualControllerType = consoleConfigPrefs.getInt("controller_port_${console}_port${port}", -1)
+                    if (manualControllerType == -1) {
+                        manualControllerType = composePrefs.getInt("controller_port_${console}_port${port}", -1)
+                    }
+                    
+                    if (manualControllerType != -1) {
+                        // Configuration manuelle trouvée pour ce port
+                        hasManualConfig = true
+                        try {
+                            retroView.setControllerType(port, manualControllerType)
+                            val controllerName = when (manualControllerType) {
+                                0 -> "None"
+                                1 -> "Joypad"
+                                4 -> "Lightgun"
+                                6 -> "Pointer"
+                                258 -> "Zapper"
+                                else -> "Type $manualControllerType"
+                            }
+                            Log.i(TAG, "[CONTROLLER] Port ${port + 1} manually configured as: $controllerName (id=$manualControllerType)")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[CONTROLLER] Failed to set controller type for port ${port + 1}: ${e.message}")
+                            // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
+                            return@postDelayed
+                        }
+                    }
+                }
+                
+                // Si pas de configuration manuelle, utiliser la détection automatique
+                if (!hasManualConfig && isZapperGame) {
+                    // Configuration automatique pour les jeux Zapper
+                    // Port 1 = Gamepad (Start/Select), Port 2 = Zapper (Touch to shoot)
+                    // CRITICAL: FCEUmm lit RETRO_DEVICE_POINTER seulement si nes_input.type[port] == RETRO_DEVICE_ZAPPER!
+                    // get_mouse_input() n'est appelé que pour ZAPPER/ARKANOID (ligne 2686-2693 libretro.c)
+                    // Chiller utilise le port 0 (Port 1), les autres jeux utilisent le port 1 (Port 2)
+                    try {
+                        retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
+                        Log.i(TAG, "[ZAPPER] Auto-detected: Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
+                        
+                        runOnUiThread {
+                            Toast.makeText(
+                                this@RetroArchEmulatorActivity,
+                                "Zapper detected! Port ${zapperPort + 1} (index $zapperPort)\nTouch game area to shoot",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[ZAPPER] Failed to set Zapper controller type: ${e.message}")
+                        // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
+                        return@postDelayed
+                    }
+                } else if (hasManualConfig) {
+                    Log.i(TAG, "[CONTROLLER] Manual port configuration applied (auto-detection overridden)")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "[CONTROLLER] Failed to configure controller ports: ${e.message}", e)
+            }
+        }, 2000)  // Attendre 2 secondes pour laisser le temps au Flow d'erreur de détecter les problèmes
+
+        // Configurer les extensions contrôleur pour N64
+        if (console.equals("n64", ignoreCase = true)) {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    // Vérifier si le jeu a échoué à charger (dialog d'erreur affiché)
+                    if (showCoreErrorDialog.value) {
+                        Log.w(TAG, "[N64] Game failed to load, skipping extension configuration")
+                        return@postDelayed
+                    }
+                    
+                    // Vérifier que retroView est dans un état valide
+                    try {
+                        val testControllers = retroView.getControllers()
+                        if (testControllers.isEmpty()) {
+                            Log.w(TAG, "[N64] No controllers available, game may not be loaded yet")
+                            return@postDelayed
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[N64] Cannot access controllers, game not loaded: ${e.message}")
+                        return@postDelayed
+                    }
+                    
+                    Log.i(TAG, "[N64] Configuring controller extensions...")
+
+                    // Charger les paramètres depuis SharedPreferences (console_config, comme ConsoleConfigActivity)
+                    val prefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+                    val prefix = "n64_"
+
+                    // Mapping des positions spinner vers les valeurs Libretro :
+                    // Spinner position 0 = "Controller Pak" → Libretro ID 1
+                    // Spinner position 1 = "Rumble Pak" → Libretro ID 2
+                    // Spinner position 2 = "Transfer Pak" → Libretro ID 5
+                    // Note: Le spinner n'a PAS d'option "None", donc pakPosition 0-2 correspond directement aux IDs
+                    val pakValues = intArrayOf(1, 2, 5)  // Controller Pak, Rumble Pak, Transfer Pak
+                    // Note: Les valeurs peuvent être différentes selon le core, mais ces IDs sont standards
+
+                    // D'abord, essayer de voir quels types de contrôleurs sont disponibles
+                    try {
+                        val controllers = retroView.getControllers()
+                        Log.i(TAG, "[N64] Available controllers for each port:")
+                        controllers.forEachIndexed { portIndex, portControllers ->
+                            Log.i(TAG, "[N64] Port $portIndex: ${portControllers.map { "id=${it.id} desc='${it.description}'" }}")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[N64] Could not query available controllers: ${e.message}")
+                    }
+
+                    // Collecter les extensions configurées pour affichage dans un dialog
+                    val configuredExtensions = mutableListOf<Pair<Int, String>>()
+                    
+                    // Configurer les extensions pour chaque port (0-3)
+                    for (port in 0..3) {  // 4 ports maximum pour N64
+                        try {
+                            // pakPosition: 0 = Controller Pak, 1 = Rumble Pak, 2 = Transfer Pak (positions spinner)
+                            val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: 0 = Controller Pak
+                            // Vérifier que pakPosition est valide (0-2)
+                            if (pakPosition >= 0 && pakPosition < pakValues.size) {
+                                val pakValue = pakValues[pakPosition] // ID Libretro (1, 2, ou 5)
+
+                                val pakName = when (pakPosition) {
+                                    0 -> "Controller Pak"
+                                    1 -> "Rumble Pak"
+                                    2 -> "Transfer Pak"
+                                    else -> "Unknown"
+                                }
+
+                                // Configurer l'extension (pakValue est toujours > 0 car pakValues = [1, 2, 5])
+                                try {
+                                    // Utiliser setControllerType() pour configurer l'extension
+                                    // Pour N64, les extensions sont des types de contrôleurs spécifiques
+                                    // Le port doit avoir d'abord un contrôleur N64 de base configuré
+                                    // Puis l'extension est configurée via retro_set_controller_port_device()
+                                    retroView.setControllerType(port, pakValue)
+                                    Log.i(TAG, "[N64] Extension configured for port ${port + 1}: $pakName (id=$pakValue) via setControllerType()")
+                                    
+                                    // Ajouter à la liste pour affichage dans le dialog
+                                    configuredExtensions.add(Pair(port + 1, pakName))
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "[N64] Failed to set extension for port ${port + 1} via setControllerType(): ${e.message}")
+                                    Log.w(TAG, "[N64] Port ${port + 1}: $pakName (id=$pakValue) - configuration failed")
+                                    // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
+                                    return@postDelayed
+                                }
+                            } else {
+                                Log.d(TAG, "[N64] Port ${port + 1}: Invalid pak position ($pakPosition), skipping")
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "[N64] Could not configure extension for port ${port + 1}: ${e.message}")
+                        }
+                    }
+
+                    // Afficher le dialog avec les extensions configurées (si au moins une extension est configurée)
+                    if (configuredExtensions.isNotEmpty()) {
+                        Log.i(TAG, "[N64] Showing dialog with ${configuredExtensions.size} extensions")
+                        runOnUiThread {
+                            n64ExtensionsInfo.value = configuredExtensions
+                            showN64ExtensionsDialog.value = true
+                            Log.i(TAG, "[N64] Dialog state set to true, extensions: ${n64ExtensionsInfo.value}")
+                        }
+                    } else {
+                        Log.i(TAG, "[N64] No extensions configured, dialog not shown")
+                    }
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "[N64] Error configuring controller extensions", e)
+                }
+            }, 1500)  // Attendre 1.5 secondes pour que le core soit complètement initialisé et que SET_CONTROLLER_INFO soit appelé
+        }
 
         // Initialiser le CheatApplier
         cheatApplier = com.retroplay.cheat.CheatApplier(retroView)

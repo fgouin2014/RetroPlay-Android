@@ -1188,9 +1188,17 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             try {
                 var hasManualConfig = false
                 
+                // Lire depuis console_config (comme ConsoleConfigActivity) OU compose_gamepad_settings (comme RetroArchSettingsDialog)
+                val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+                val composePrefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
+                
                 // Vérifier chaque port (0-3) pour une configuration manuelle
                 for (port in 0..3) {
-                    val manualControllerType = prefs.getInt("controller_port_${console}_port${port}", -1)
+                    // Priorité: console_config (ConsoleConfigActivity) puis compose_gamepad_settings (RetroArchSettingsDialog)
+                    var manualControllerType = consoleConfigPrefs.getInt("controller_port_${console}_port${port}", -1)
+                    if (manualControllerType == -1) {
+                        manualControllerType = composePrefs.getInt("controller_port_${console}_port${port}", -1)
+                    }
                     
                     if (manualControllerType != -1) {
                         // Configuration manuelle trouvée pour ce port

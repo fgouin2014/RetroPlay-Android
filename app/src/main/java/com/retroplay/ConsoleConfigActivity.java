@@ -30,6 +30,13 @@ public class ConsoleConfigActivity extends AppCompatActivity {
     private SwitchCompat customTabsSwitch;
     private android.view.View customTabsContainer;
 
+    // Controller ports configuration (all consoles)
+    private android.widget.Spinner controllerPortSpinner1;
+    private android.widget.Spinner controllerPortSpinner2;
+    private android.widget.Spinner controllerPortSpinner3;
+    private android.widget.Spinner controllerPortSpinner4;
+    private android.view.View controllerPortsContainer;
+
     // N64 controller extension settings
     private android.widget.Spinner n64PakSpinner1;
     private android.widget.Spinner n64PakSpinner2;
@@ -124,6 +131,16 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         // Custom Tabs option (for SharedArrayBuffer support)
         customTabsSwitch = findViewById(R.id.customTabsSwitch);
         customTabsContainer = findViewById(R.id.customTabsContainer);
+
+        // Controller ports configuration (all consoles)
+        controllerPortSpinner1 = findViewById(R.id.controllerPortSpinner1);
+        controllerPortSpinner2 = findViewById(R.id.controllerPortSpinner2);
+        controllerPortSpinner3 = findViewById(R.id.controllerPortSpinner3);
+        controllerPortSpinner4 = findViewById(R.id.controllerPortSpinner4);
+        controllerPortsContainer = findViewById(R.id.controllerPortsContainer);
+        
+        // Setup controller ports spinners
+        setupControllerPortsSpinners();
 
         // N64 Controller Pak settings
         n64PakSpinner1 = findViewById(R.id.n64PakSpinner1);
@@ -310,6 +327,29 @@ public class ConsoleConfigActivity extends AppCompatActivity {
             customTabsSwitch.setChecked(prefs.getBoolean(prefix + "use_custom_tabs", defaultCustomTabs));
         }
 
+        // Load controller ports settings (default: -1 = Auto)
+        // Note: Les valeurs sont sauvegardées comme IDs Libretro, mais on doit trouver la position dans le spinner
+        if (controllerPortSpinner1 != null) {
+            int port1Type = prefs.getInt("controller_port_" + currentConsole + "_port0", -1);
+            int port1Position = getControllerTypePosition(port1Type);
+            controllerPortSpinner1.setSelection(port1Position);
+        }
+        if (controllerPortSpinner2 != null) {
+            int port2Type = prefs.getInt("controller_port_" + currentConsole + "_port1", -1);
+            int port2Position = getControllerTypePosition(port2Type);
+            controllerPortSpinner2.setSelection(port2Position);
+        }
+        if (controllerPortSpinner3 != null) {
+            int port3Type = prefs.getInt("controller_port_" + currentConsole + "_port2", -1);
+            int port3Position = getControllerTypePosition(port3Type);
+            controllerPortSpinner3.setSelection(port3Position);
+        }
+        if (controllerPortSpinner4 != null) {
+            int port4Type = prefs.getInt("controller_port_" + currentConsole + "_port3", -1);
+            int port4Position = getControllerTypePosition(port4Type);
+            controllerPortSpinner4.setSelection(port4Position);
+        }
+
         // Load N64 Pak settings (default: Controller Pak = 0)
         if (n64PakSpinner1 != null) n64PakSpinner1.setSelection(prefs.getInt(prefix + "pak_port1", 0));
         if (n64PakSpinner2 != null) n64PakSpinner2.setSelection(prefs.getInt(prefix + "pak_port2", 0));
@@ -361,6 +401,25 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         if (customTabsSwitch != null) {
             boolean useCustomTabs = customTabsSwitch.isChecked();
             editor.putBoolean(prefix + "use_custom_tabs", useCustomTabs);
+        }
+
+        // Save controller ports settings
+        // Note: Sauvegarder les IDs Libretro, pas les positions spinner
+        if (controllerPortSpinner1 != null) {
+            int port1Id = getControllerTypeId(controllerPortSpinner1.getSelectedItemPosition());
+            editor.putInt("controller_port_" + currentConsole + "_port0", port1Id);
+        }
+        if (controllerPortSpinner2 != null) {
+            int port2Id = getControllerTypeId(controllerPortSpinner2.getSelectedItemPosition());
+            editor.putInt("controller_port_" + currentConsole + "_port1", port2Id);
+        }
+        if (controllerPortSpinner3 != null) {
+            int port3Id = getControllerTypeId(controllerPortSpinner3.getSelectedItemPosition());
+            editor.putInt("controller_port_" + currentConsole + "_port2", port3Id);
+        }
+        if (controllerPortSpinner4 != null) {
+            int port4Id = getControllerTypeId(controllerPortSpinner4.getSelectedItemPosition());
+            editor.putInt("controller_port_" + currentConsole + "_port3", port4Id);
         }
 
         // Save N64 Pak settings
@@ -827,8 +886,83 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         }
     }
 
+    private void setupControllerPortsSpinners() {
+        // Controller types disponibles (IDs Libretro standards)
+        // Position 0 = Auto (-1), 1 = None (0), 2 = Joypad (1), 3 = Lightgun (4), 4 = Pointer (6), 5 = Zapper (258)
+        String[] controllerTypes = {
+            "Auto (Default)",
+            "None",
+            "Joypad",
+            "Lightgun",
+            "Pointer",
+            "Zapper (NES)"
+        };
+        
+        ThemeManager themeManager = ThemeManager.getInstance(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, controllerTypes) {
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                TextView view = (TextView) super.getView(position, convertView, parent);
+                view.setTextColor(themeManager.getPrimaryColor(ConsoleConfigActivity.this));
+                view.setTextSize(12);
+                view.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+                return view;
+            }
+
+            @Override
+            public View getDropDownView(int position, View convertView, ViewGroup parent) {
+                TextView view = (TextView) super.getDropDownView(position, convertView, parent);
+                view.setTextColor(android.graphics.Color.WHITE);
+                view.setBackgroundColor(themeManager.getHeaderBackgroundColor(ConsoleConfigActivity.this));
+                view.setTextSize(12);
+                view.setTypeface(android.graphics.Typeface.MONOSPACE);
+                view.setPadding(16, 12, 16, 12);
+                return view;
+            }
+        };
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        if (controllerPortSpinner1 != null) controllerPortSpinner1.setAdapter(adapter);
+        if (controllerPortSpinner2 != null) controllerPortSpinner2.setAdapter(adapter);
+        if (controllerPortSpinner3 != null) controllerPortSpinner3.setAdapter(adapter);
+        if (controllerPortSpinner4 != null) controllerPortSpinner4.setAdapter(adapter);
+    }
+    
+    /**
+     * Convertir position spinner vers ID Libretro
+     */
+    private int getControllerTypeId(int spinnerPosition) {
+        // Position 0 = Auto (-1), 1 = None (0), 2 = Joypad (1), 3 = Lightgun (4), 4 = Pointer (6), 5 = Zapper (258)
+        switch (spinnerPosition) {
+            case 0: return -1;  // Auto
+            case 1: return 0;   // None
+            case 2: return 1;   // Joypad
+            case 3: return 4;   // Lightgun
+            case 4: return 6;   // Pointer
+            case 5: return 258; // Zapper (FCEUmm)
+            default: return -1; // Auto par défaut
+        }
+    }
+    
+    /**
+     * Convertir ID Libretro vers position spinner
+     */
+    private int getControllerTypePosition(int controllerId) {
+        // Position 0 = Auto (-1), 1 = None (0), 2 = Joypad (1), 3 = Lightgun (4), 4 = Pointer (6), 5 = Zapper (258)
+        switch (controllerId) {
+            case -1: return 0;  // Auto
+            case 0: return 1;   // None
+            case 1: return 2;   // Joypad
+            case 4: return 3;   // Lightgun
+            case 6: return 4;   // Pointer
+            case 258: return 5; // Zapper
+            default: return 0;  // Auto par défaut
+        }
+    }
+    
     private void setupCoreOptionsVisibility() {
         // Hide all native options by default
+        if (controllerPortsContainer != null) controllerPortsContainer.setVisibility(android.view.View.VISIBLE); // Toujours visible
         if (n64PakContainer != null) n64PakContainer.setVisibility(android.view.View.GONE);
         if (psxDpadContainer != null) psxDpadContainer.setVisibility(android.view.View.GONE);
         if (n64CoreOptions != null) n64CoreOptions.setVisibility(android.view.View.GONE);

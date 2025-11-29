@@ -334,6 +334,183 @@
                         app:strokeWidth="1dp" />
                 </LinearLayout>
 
+                <!-- Controller Ports Configuration (All Consoles) -->
+                <LinearLayout
+                    android:id="@+id/controllerPortsContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="12dp"
+                    android:background="@color/kitt_dark_red"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🎮 CONTROLLER PORTS"
+                        android:textSize="14sp"
+                        android:textColor="@color/kitt_red"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp"
+                        android:gravity="center" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Configure controller type for each port. Manual configuration overrides auto-detection."
+                        android:textSize="12sp"
+                        android:textColor="#ff6666"
+                        android:fontFamily="monospace"
+                        android:layout_marginBottom="12dp" />
+
+                    <!-- Port 1 & 2 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:layout_marginEnd="8dp">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="PORT 1"
+                                android:textSize="12sp"
+                                android:textColor="@color/kitt_red"
+                                android:fontFamily="monospace"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="8dp"
+                                android:gravity="center" />
+
+                            <Spinner
+                                android:id="@+id/controllerPortSpinner1"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@color/kitt_black"
+                                android:popupBackground="@color/kitt_dark_red"
+                                android:textColor="@android:color/white"
+                                android:padding="8dp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="PORT 2"
+                                android:textSize="12sp"
+                                android:textColor="@color/kitt_red"
+                                android:fontFamily="monospace"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="8dp"
+                                android:gravity="center" />
+
+                            <Spinner
+                                android:id="@+id/controllerPortSpinner2"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@color/kitt_black"
+                                android:popupBackground="@color/kitt_dark_red"
+                                android:textColor="@android:color/white"
+                                android:padding="8dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Port 3 & 4 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:layout_marginEnd="8dp">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="PORT 3"
+                                android:textSize="12sp"
+                                android:textColor="@color/kitt_red"
+                                android:fontFamily="monospace"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="8dp"
+                                android:gravity="center" />
+
+                            <Spinner
+                                android:id="@+id/controllerPortSpinner3"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@color/kitt_black"
+                                android:popupBackground="@color/kitt_dark_red"
+                                android:textColor="@android:color/white"
+                                android:padding="8dp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="PORT 4"
+                                android:textSize="12sp"
+                                android:textColor="@color/kitt_red"
+                                android:fontFamily="monospace"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="8dp"
+                                android:gravity="center" />
+
+                            <Spinner
+                                android:id="@+id/controllerPortSpinner4"
+                                android:layout_width="match_parent"
+                                android:layout_height="48dp"
+                                android:background="@color/kitt_black"
+                                android:popupBackground="@color/kitt_dark_red"
+                                android:textColor="@android:color/white"
+                                android:padding="8dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Legend -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:cardBackgroundColor="@color/kitt_black"
+                        app:cardElevation="2dp"
+                        app:cardCornerRadius="4dp"
+                        android:layout_marginTop="4dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Auto: Uses automatic detection\nJoypad: Standard controller\nLightgun: Lightgun device\nPointer: Pointer device\nZapper: NES Zapper (FCEUmm)"
+                            android:textSize="11sp"
+                            android:textColor="@android:color/white"
+                            android:fontFamily="monospace"
+                            android:padding="12dp"
+                            android:lineSpacingExtra="4dp" />
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+
                 <!-- PSX D-Pad Option (only visible for PSX) -->
                 <LinearLayout
                     android:id="@+id/psxDpadContainer"

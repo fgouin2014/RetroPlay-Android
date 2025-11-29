@@ -318,11 +318,6 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         boolean defaultThreads = currentConsole.equals("psp") || currentConsole.equals("n64");
         threadsSwitch.setChecked(prefs.getBoolean(prefix + "threads", defaultThreads));
         
-        // Load ROM extraction setting (default: false = OFF for all consoles)
-        if (extractRomsSwitch != null) {
-            extractRomsSwitch.setChecked(prefs.getBoolean(prefix + "extract_roms", false));
-        }
-        
         // Load PSX D-Pad setting
         if (psxDpadSwitch != null) {
             psxDpadSwitch.setChecked(prefs.getBoolean(prefix + "use_dpad", false));
@@ -401,12 +396,6 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         // Save performance settings
         boolean threads = threadsSwitch.isChecked();
         editor.putBoolean(prefix + "threads", threads);
-        
-        // Save ROM extraction setting
-        if (extractRomsSwitch != null) {
-            boolean extractRoms = extractRomsSwitch.isChecked();
-            editor.putBoolean(prefix + "extract_roms", extractRoms);
-        }
         
         // Save PSX D-Pad setting
         if (psxDpadSwitch != null) {

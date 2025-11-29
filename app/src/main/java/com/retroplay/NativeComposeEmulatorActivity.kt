@@ -1178,30 +1178,58 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
         }
         
-        // Configuration Zapper APRÈS le chargement du core (1 seconde de délai)
-        if (isZapperGame) {
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try {
+        // Configuration des ports contrôleurs
+        // 1. Vérifier d'abord s'il y a une configuration manuelle (override détection auto)
+        // 2. Sinon, utiliser la détection automatique (Zapper, etc.)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            try {
+                var hasManualConfig = false
+                
+                // Vérifier chaque port (0-3) pour une configuration manuelle
+                for (port in 0..3) {
+                    val manualControllerType = prefs.getInt("controller_port_${console}_port${port}", -1)
+                    
+                    if (manualControllerType != -1) {
+                        // Configuration manuelle trouvée pour ce port
+                        hasManualConfig = true
+                        retroView.setControllerType(port, manualControllerType)
+                        val controllerName = when (manualControllerType) {
+                            0 -> "None"
+                            1 -> "Joypad"
+                            4 -> "Lightgun"
+                            6 -> "Pointer"
+                            258 -> "Zapper"
+                            else -> "Type $manualControllerType"
+                        }
+                        Log.i(TAG, "[CONTROLLER] Port ${port + 1} manually configured as: $controllerName (id=$manualControllerType)")
+                    }
+                }
+                
+                // Si pas de configuration manuelle, utiliser la détection automatique
+                if (!hasManualConfig && isZapperGame) {
+                    // Configuration automatique pour les jeux Zapper
                     // CRITIQUE: FCEUmm nécessite RETRO_DEVICE_ZAPPER (258) pour appeler get_mouse_input()
                     // Mais ensuite, en mode RetroPointer (touchscreen), get_mouse_input() lit RETRO_DEVICE_POINTER
                     // Donc on DOIT configurer RETRO_DEVICE_ZAPPER (258) pour que get_mouse_input() soit appelé!
                     // Chiller utilise le port 0 (Port 1), les autres jeux utilisent le port 1 (Port 2)
                     retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
-                    Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
-                    Log.i(TAG, "[NES] FCEUmm will call get_mouse_input() which reads RETRO_DEVICE_POINTER in RetroPointer mode")
+                    Log.i(TAG, "[ZAPPER] Auto-detected: Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
+                    Log.i(TAG, "[ZAPPER] FCEUmm will call get_mouse_input() which reads RETRO_DEVICE_POINTER in RetroPointer mode")
                     
-                runOnUiThread {
-                    Toast.makeText(
-                        this@NativeComposeEmulatorActivity,
-                            "Zapper detected! Touch game area to shoot",
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@NativeComposeEmulatorActivity,
+                            "Zapper detected! Port ${zapperPort + 1} (index $zapperPort)\nTouch game area to shoot",
                             Toast.LENGTH_SHORT
-                    ).show()
+                        ).show()
+                    }
+                } else if (hasManualConfig) {
+                    Log.i(TAG, "[CONTROLLER] Manual port configuration applied (auto-detection overridden)")
                 }
-                } catch (e: Exception) {
-                    Log.e(TAG, "[NES] Failed to configure Zapper: ${e.message}")
-                }
-            }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
-        }
+            } catch (e: Exception) {
+                Log.e(TAG, "[CONTROLLER] Failed to configure controller ports: ${e.message}", e)
+            }
+        }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
 
         // Configurer les extensions contrôleur pour N64
         if (console.equals("n64", ignoreCase = true)) {

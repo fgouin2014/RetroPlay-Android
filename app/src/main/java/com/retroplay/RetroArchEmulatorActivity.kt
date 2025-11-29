@@ -1693,6 +1693,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                                 } catch (e: Exception) {
                                     Log.e(TAG, "[N64] Failed to set extension for port ${port + 1} via setControllerType(): ${e.message}")
                                     Log.w(TAG, "[N64] Port ${port + 1}: $pakName (id=$pakValue) - configuration failed")
+                                    // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
+                                    return@postDelayed
                                 }
                             } else {
                                 Log.d(TAG, "[N64] Port ${port + 1}: Invalid pak position ($pakPosition), skipping")

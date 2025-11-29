@@ -450,12 +450,15 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         if (n64AntiAliasingSpinner != null) editor.putInt(prefix + "antialiasing", n64AntiAliasingSpinner.getSelectedItemPosition());
         if (n64BilinearSwitch != null) editor.putBoolean(prefix + "bilinear", n64BilinearSwitch.isChecked());
 
-        if (psxResolutionSpinner != null) editor.putInt(prefix + "psx_resolution", psxResolutionSpinner.getSelectedItemPosition());
-        if (psxTextureFilteringSwitch != null) editor.putBoolean(prefix + "psx_texture_filtering", psxTextureFilteringSwitch.isChecked());
-        if (psxDitheringSwitch != null) editor.putBoolean(prefix + "psx_dithering", psxDitheringSwitch.isChecked());
+        // Save core specific settings
+        // Clés: psx_resolution, psx_texture_filtering, psx_dithering (sans redondance)
+        if (psxResolutionSpinner != null) editor.putInt(prefix + "resolution", psxResolutionSpinner.getSelectedItemPosition());
+        if (psxTextureFilteringSwitch != null) editor.putBoolean(prefix + "texture_filtering", psxTextureFilteringSwitch.isChecked());
+        if (psxDitheringSwitch != null) editor.putBoolean(prefix + "dithering", psxDitheringSwitch.isChecked());
 
-        if (snesBlendModeSpinner != null) editor.putInt(prefix + "snes_blend_mode", snesBlendModeSpinner.getSelectedItemPosition());
-        if (snesHiResSwitch != null) editor.putBoolean(prefix + "snes_hires", snesHiResSwitch.isChecked());
+        // Clés: snes_blend_mode, snes_hires (sans redondance)
+        if (snesBlendModeSpinner != null) editor.putInt(prefix + "blend_mode", snesBlendModeSpinner.getSelectedItemPosition());
+        if (snesHiResSwitch != null) editor.putBoolean(prefix + "hires", snesHiResSwitch.isChecked());
         
         // Save control settings
         float touchScale = 0.5f + (touchScaleSeekBar.getProgress() / 20.0f) * 1.5f;

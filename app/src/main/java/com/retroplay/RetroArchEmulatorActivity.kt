@@ -1320,9 +1320,13 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     }
                 }
                 "psx", "ps1", "playstation" -> {
-                    val resolution = corePrefs.getInt("${prefix}psx_resolution", 0)
-                    val textureFiltering = corePrefs.getBoolean("${prefix}psx_texture_filtering", true)
-                    val dithering = corePrefs.getBoolean("${prefix}psx_dithering", true)
+                    // Lire depuis console_config (comme ConsoleConfigActivity)
+                    val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+                    val consolePrefix = "psx_"
+                    // Clés: psx_resolution, psx_texture_filtering, psx_dithering (sans redondance)
+                    val resolution = consoleConfigPrefs.getInt("${consolePrefix}resolution", 0)
+                    val textureFiltering = consoleConfigPrefs.getBoolean("${consolePrefix}texture_filtering", true)
+                    val dithering = consoleConfigPrefs.getBoolean("${consolePrefix}dithering", true)
                     Log.i(TAG, "[PSX] Core options loaded - Resolution: $resolution, Filter: $textureFiltering, Dither: $dithering")
 
                     // Créer les variables PSX (Array<Variable>)
@@ -1375,8 +1379,12 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     }
                 }
                 "snes" -> {
-                    val blendMode = corePrefs.getInt("${prefix}snes_blend_mode", 0)
-                    val hires = corePrefs.getBoolean("${prefix}snes_hires", false)
+                    // Lire depuis console_config (comme ConsoleConfigActivity)
+                    val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+                    val consolePrefix = "snes_"
+                    // Clés: snes_blend_mode, snes_hires (sans redondance)
+                    val blendMode = consoleConfigPrefs.getInt("${consolePrefix}blend_mode", 0)
+                    val hires = consoleConfigPrefs.getBoolean("${consolePrefix}hires", false)
                     Log.i(TAG, "[SNES] Core options loaded - Blend: $blendMode, HiRes: $hires")
 
                     // Créer les variables SNES (Array<Variable>)

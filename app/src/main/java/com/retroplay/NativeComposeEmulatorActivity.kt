@@ -1193,8 +1193,15 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         // Configuration des ports contrôleurs
         // 1. Vérifier d'abord s'il y a une configuration manuelle (override détection auto)
         // 2. Sinon, utiliser la détection automatique (Zapper, etc.)
+        // CRITICAL: Ne configurer les contrôleurs QUE si le jeu est chargé avec succès
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             try {
+                // Vérifier si le jeu a échoué à charger (dialog d'erreur affiché)
+                if (showCoreErrorDialog.value) {
+                    Log.w(TAG, "[CONTROLLER] Game failed to load, skipping controller configuration")
+                    return@postDelayed
+                }
+                
                 var hasManualConfig = false
                 
                 // Lire depuis console_config (comme ConsoleConfigActivity) OU compose_gamepad_settings (comme RetroArchSettingsDialog)
@@ -1212,7 +1219,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     if (manualControllerType != -1) {
                         // Configuration manuelle trouvée pour ce port
                         hasManualConfig = true
-                        retroView.setControllerType(port, manualControllerType)
+                        try {
+                            retroView.setControllerType(port, manualControllerType)
                         val controllerName = when (manualControllerType) {
                             0 -> "None"
                             1 -> "Joypad"
@@ -1295,6 +1303,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                                 } catch (e: Exception) {
                                     Log.e(TAG, "[N64] Failed to set extension for port ${port + 1} via setControllerType(): ${e.message}")
                                     Log.w(TAG, "[N64] Port ${port + 1}: $pakName (id=$pakValue) - configuration failed")
+                                    // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
+                                    return@postDelayed
                                 }
                             } else {
                                 Log.d(TAG, "[N64] Port ${port + 1}: Invalid pak position ($pakPosition), skipping")

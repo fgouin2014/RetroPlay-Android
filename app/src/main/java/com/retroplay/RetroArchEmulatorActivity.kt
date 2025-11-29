@@ -1549,8 +1549,15 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         // Configuration des ports contrôleurs
         // 1. Vérifier d'abord s'il y a une configuration manuelle (override détection auto)
         // 2. Sinon, utiliser la détection automatique (Zapper, etc.)
+        // CRITICAL: Ne configurer les contrôleurs QUE si le jeu est chargé avec succès
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             try {
+                // Vérifier si le jeu a échoué à charger (dialog d'erreur affiché)
+                if (showCoreErrorDialog.value) {
+                    Log.w(TAG, "[CONTROLLER] Game failed to load, skipping controller configuration")
+                    return@postDelayed
+                }
+                
                 var hasManualConfig = false
                 
                 // Lire depuis console_config (comme ConsoleConfigActivity) OU compose_gamepad_settings (comme RetroArchSettingsDialog)
@@ -1568,16 +1575,22 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     if (manualControllerType != -1) {
                         // Configuration manuelle trouvée pour ce port
                         hasManualConfig = true
-                        retroView.setControllerType(port, manualControllerType)
-                        val controllerName = when (manualControllerType) {
-                            0 -> "None"
-                            1 -> "Joypad"
-                            4 -> "Lightgun"
-                            6 -> "Pointer"
-                            258 -> "Zapper"
-                            else -> "Type $manualControllerType"
+                        try {
+                            retroView.setControllerType(port, manualControllerType)
+                            val controllerName = when (manualControllerType) {
+                                0 -> "None"
+                                1 -> "Joypad"
+                                4 -> "Lightgun"
+                                6 -> "Pointer"
+                                258 -> "Zapper"
+                                else -> "Type $manualControllerType"
+                            }
+                            Log.i(TAG, "[CONTROLLER] Port ${port + 1} manually configured as: $controllerName (id=$manualControllerType)")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[CONTROLLER] Failed to set controller type for port ${port + 1}: ${e.message}")
+                            // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
+                            return@postDelayed
                         }
-                        Log.i(TAG, "[CONTROLLER] Port ${port + 1} manually configured as: $controllerName (id=$manualControllerType)")
                     }
                 }
                 
@@ -1588,15 +1601,21 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     // CRITICAL: FCEUmm lit RETRO_DEVICE_POINTER seulement si nes_input.type[port] == RETRO_DEVICE_ZAPPER!
                     // get_mouse_input() n'est appelé que pour ZAPPER/ARKANOID (ligne 2686-2693 libretro.c)
                     // Chiller utilise le port 0 (Port 1), les autres jeux utilisent le port 1 (Port 2)
-                    retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
-                    Log.i(TAG, "[ZAPPER] Auto-detected: Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
-                    
-                    runOnUiThread {
-                        Toast.makeText(
-                            this@RetroArchEmulatorActivity,
-                            "Zapper detected! Port ${zapperPort + 1} (index $zapperPort)\nTouch game area to shoot",
-                            Toast.LENGTH_LONG
-                        ).show()
+                    try {
+                        retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
+                        Log.i(TAG, "[ZAPPER] Auto-detected: Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
+                        
+                        runOnUiThread {
+                            Toast.makeText(
+                                this@RetroArchEmulatorActivity,
+                                "Zapper detected! Port ${zapperPort + 1} (index $zapperPort)\nTouch game area to shoot",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[ZAPPER] Failed to set Zapper controller type: ${e.message}")
+                        // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
+                        return@postDelayed
                     }
                 } else if (hasManualConfig) {
                     Log.i(TAG, "[CONTROLLER] Manual port configuration applied (auto-detection overridden)")

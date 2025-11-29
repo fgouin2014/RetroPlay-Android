@@ -651,12 +651,8 @@ public class GameDetailsActivity extends AppCompatActivity {
                               fileName.endsWith(".zip");
         
         // Archives nécessitant éventuellement extraction (.zip, .7z comme Lemuroid)
-        // NOTE:
-        // - NES/Famicom ne nécessitent PAS d'extraction (FCEUmm lit les .zip directement)
-        // - Les autres consoles peuvent utiliser l'extraction en option (cache), désactivée par défaut
-        String canonicalIdForArchive = ConsoleNameMapper.normalizeToCanonical(console);
-        boolean isNesLike = "nes".equals(canonicalIdForArchive);
-        boolean isArchive = (fileName.endsWith(".zip") || fileName.endsWith(".7z")) && !isArcadeZip && !isNesLike;
+        // Toutes les consoles (hors arcade) peuvent utiliser l'extraction en option (cache), désactivée par défaut
+        boolean isArchive = (fileName.endsWith(".zip") || fileName.endsWith(".7z")) && !isArcadeZip;
         
         if (isNativeCompressedFormat) {
             Log.i(TAG, console + ": Native compressed format detected, loading directly: " + fileName);

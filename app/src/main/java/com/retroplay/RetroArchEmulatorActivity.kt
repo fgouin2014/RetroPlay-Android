@@ -1629,6 +1629,12 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         if (console.equals("n64", ignoreCase = true)) {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 try {
+                    // Vérifier si le jeu a échoué à charger (dialog d'erreur affiché)
+                    if (showCoreErrorDialog.value) {
+                        Log.w(TAG, "[N64] Game failed to load, skipping extension configuration")
+                        return@postDelayed
+                    }
+                    
                     Log.i(TAG, "[N64] Configuring controller extensions...")
 
                     // Charger les paramètres depuis SharedPreferences (console_config, comme ConsoleConfigActivity)

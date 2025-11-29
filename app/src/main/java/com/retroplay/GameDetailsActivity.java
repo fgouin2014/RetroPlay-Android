@@ -672,14 +672,11 @@ public class GameDetailsActivity extends AppCompatActivity {
             
             if (extractRoms) {
                 Log.i(TAG, console + ": Archive detected (" + fileName + "), extracting to cache...");
-            
-            if (cacheEnabled) {
-                Log.i(TAG, console + ": Archive detected (" + fileName + "), extracting to cache...");
                 extractToCacheAsync(romPath, fileName, slot, console);
                 return;  // L'extraction lancera l'Activity une fois terminee
             } else {
-                Log.w(TAG, console + ": Cache disabled by user, trying archive directly (WILL NOT WORK)");
-                // Continuer quand même mais ça ne fonctionnera probablement pas
+                Log.i(TAG, console + ": ROM extraction disabled by user, trying archive directly");
+                // Continuer avec le fichier archive directement (certains cores peuvent le supporter)
             }
         }
         

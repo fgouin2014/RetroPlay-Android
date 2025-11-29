@@ -320,6 +320,11 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         boolean defaultThreads = currentConsole.equals("psp") || currentConsole.equals("n64");
         threadsSwitch.setChecked(prefs.getBoolean(prefix + "threads", defaultThreads));
         
+        // Load ROM extraction setting (default: false = OFF for all consoles)
+        if (extractRomsSwitch != null) {
+            extractRomsSwitch.setChecked(prefs.getBoolean(prefix + "extract_roms", false));
+        }
+        
         // Load PSX D-Pad setting
         if (psxDpadSwitch != null) {
             psxDpadSwitch.setChecked(prefs.getBoolean(prefix + "use_dpad", false));

@@ -117,8 +117,6 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         // Performance settings
         threadsSwitch = findViewById(R.id.threadsSwitch);
         
-        // ROM extraction settings
-        
         // PSX-specific settings
         psxDpadSwitch = findViewById(R.id.psxDpadSwitch);
         psxDpadContainer = findViewById(R.id.psxDpadContainer);

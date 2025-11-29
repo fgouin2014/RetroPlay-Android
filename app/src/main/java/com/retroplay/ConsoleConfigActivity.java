@@ -25,6 +25,7 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         // UI Components
         private TextView consoleTitleConfig;
         private SwitchCompat threadsSwitch;
+        private SwitchCompat extractRomsSwitch;
     private SwitchCompat psxDpadSwitch;
     private android.view.View psxDpadContainer;
     private SwitchCompat customTabsSwitch;
@@ -116,6 +117,9 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         
         // Performance settings
         threadsSwitch = findViewById(R.id.threadsSwitch);
+        
+        // ROM extraction settings
+        extractRomsSwitch = findViewById(R.id.extractRomsSwitch);
         
         // PSX-specific settings
         psxDpadSwitch = findViewById(R.id.psxDpadSwitch);

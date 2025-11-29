@@ -631,7 +631,9 @@ public class GameDetailsActivity extends AppCompatActivity {
         
         // DETECTION INTELLIGENTE DES FORMATS (comme PSX)
         String console = game.getConsole().toLowerCase();
-        android.content.SharedPreferences prefs = getSharedPreferences("compose_gamepad_settings", MODE_PRIVATE);
+        android.content.SharedPreferences composePrefs = getSharedPreferences("compose_gamepad_settings", MODE_PRIVATE);
+        android.content.SharedPreferences consoleConfigPrefs = getSharedPreferences("console_config", MODE_PRIVATE);
+        String consolePrefix = console + "_";
         
         // Formats compressés natifs supportés par les cores (comme PSX .pbp, .chd)
         // Ces formats ne nécessitent PAS d'extraction
@@ -651,7 +653,7 @@ public class GameDetailsActivity extends AppCompatActivity {
                               fileName.endsWith(".zip");
         
         // Archives nécessitant extraction (.zip, .7z comme Lemuroid)
-        // TOUTES les consoles sauf arcade doivent extraire les .zip
+        // TOUTES les consoles sauf arcade peuvent extraire les .zip
         boolean isArchive = (fileName.endsWith(".zip") || fileName.endsWith(".7z")) && !isArcadeZip;
         
         if (isNativeCompressedFormat) {
@@ -661,10 +663,15 @@ public class GameDetailsActivity extends AppCompatActivity {
             Log.i(TAG, console + ": Arcade ROM .zip detected, loading directly (core reads .zip natively)");
             // Charger directement (les ROMs arcade sont en .zip et ne doivent PAS être extraites)
         } else if (isArchive) {
-            // TOUTES les consoles (NES, SNES, etc.) nécessitent l'extraction du .zip
-            // Par DEFAUT: cache ACTIVE pour les archives (comme Lemuroid/EmulatorJS)
-            // L'utilisateur peut le desactiver manuellement dans les parametres si besoin
-            boolean cacheEnabled = prefs.getBoolean("cache_enabled_" + console, true);  // TRUE par défaut
+            // Lire depuis console_config (ConsoleConfigActivity) OU compose_gamepad_settings (RetroArchSettingsDialog)
+            // Priorité: console_config puis compose_gamepad_settings
+            boolean extractRoms = consoleConfigPrefs.getBoolean(consolePrefix + "extract_roms", false);
+            if (!extractRoms) {
+                extractRoms = composePrefs.getBoolean("cache_enabled_" + console, false);  // FALSE par défaut (changé de true)
+            }
+            
+            if (extractRoms) {
+                Log.i(TAG, console + ": Archive detected (" + fileName + "), extracting to cache...");
             
             if (cacheEnabled) {
                 Log.i(TAG, console + ": Archive detected (" + fileName + "), extracting to cache...");

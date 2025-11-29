@@ -1534,31 +1534,57 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
         }
         
-        // Configuration pour les jeux Zapper (Duck Hunt, etc.)
-        // Port 1 = Gamepad (Start/Select), Port 2 = Zapper (Touch to shoot)
-        // DOIT ATTENDRE que le core soit complètement chargé (1 seconde)
-        if (isZapperGame) {
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try {
-                    // Configurer le port comme RETRO_DEVICE_ZAPPER (258)
+        // Configuration des ports contrôleurs
+        // 1. Vérifier d'abord s'il y a une configuration manuelle (override détection auto)
+        // 2. Sinon, utiliser la détection automatique (Zapper, etc.)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            try {
+                var hasManualConfig = false
+                
+                // Vérifier chaque port (0-3) pour une configuration manuelle
+                for (port in 0..3) {
+                    val manualControllerType = prefs.getInt("controller_port_${console}_port${port}", -1)
+                    
+                    if (manualControllerType != -1) {
+                        // Configuration manuelle trouvée pour ce port
+                        hasManualConfig = true
+                        retroView.setControllerType(port, manualControllerType)
+                        val controllerName = when (manualControllerType) {
+                            0 -> "None"
+                            1 -> "Joypad"
+                            4 -> "Lightgun"
+                            6 -> "Pointer"
+                            258 -> "Zapper"
+                            else -> "Type $manualControllerType"
+                        }
+                        Log.i(TAG, "[CONTROLLER] Port ${port + 1} manually configured as: $controllerName (id=$manualControllerType)")
+                    }
+                }
+                
+                // Si pas de configuration manuelle, utiliser la détection automatique
+                if (!hasManualConfig && isZapperGame) {
+                    // Configuration automatique pour les jeux Zapper
+                    // Port 1 = Gamepad (Start/Select), Port 2 = Zapper (Touch to shoot)
                     // CRITICAL: FCEUmm lit RETRO_DEVICE_POINTER seulement si nes_input.type[port] == RETRO_DEVICE_ZAPPER!
                     // get_mouse_input() n'est appelé que pour ZAPPER/ARKANOID (ligne 2686-2693 libretro.c)
                     // Chiller utilise le port 0 (Port 1), les autres jeux utilisent le port 1 (Port 2)
                     retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
-                    Log.i(TAG, "[NES] Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
+                    Log.i(TAG, "[ZAPPER] Auto-detected: Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
                     
                     runOnUiThread {
                         Toast.makeText(
                             this@RetroArchEmulatorActivity,
-                            "Zapper detected! Port 2 (index 1)\nTouch game area to shoot",
+                            "Zapper detected! Port ${zapperPort + 1} (index $zapperPort)\nTouch game area to shoot",
                             Toast.LENGTH_LONG
                         ).show()
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "[NES] Failed to configure Zapper: ${e.message}")
+                } else if (hasManualConfig) {
+                    Log.i(TAG, "[CONTROLLER] Manual port configuration applied (auto-detection overridden)")
                 }
-            }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
-        }
+            } catch (e: Exception) {
+                Log.e(TAG, "[CONTROLLER] Failed to configure controller ports: ${e.message}", e)
+            }
+        }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
 
         // Configurer les extensions contrôleur pour N64
         if (console.equals("n64", ignoreCase = true)) {

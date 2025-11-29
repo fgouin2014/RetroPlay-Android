@@ -1966,6 +1966,104 @@ fun RetroArchSettingsDialog(
                                 fontSize = 11.sp,
                                 fontStyle = FontStyle.Italic
                             )
+                            
+                            HorizontalDivider(color = Color(0xFF444444))
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // ========== CONTROLLER PORTS CONFIGURATION ==========
+                            Text(
+                                text = "Controller Ports",
+                                color = Color(0xFFFF9800),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            
+                            Text(
+                                text = "Configure controller type for each port. Manual configuration overrides auto-detection.",
+                                color = Color(0xFF888888),
+                                fontSize = 12.sp
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Ports configuration (0-3)
+                            // Note: getControllers() nécessite retroView, donc on utilise une liste statique pour l'instant
+                            // Les IDs standards Libretro:
+                            // 0 = None, 1 = Joypad, 4 = Lightgun, 6 = Pointer, 258 = Zapper (FCEUmm)
+                            val controllerTypes = listOf(
+                                "Auto (Default)" to -1,
+                                "None" to 0,
+                                "Joypad" to 1,
+                                "Lightgun" to 4,
+                                "Pointer" to 6,
+                                "Zapper (NES)" to 258
+                            )
+                            
+                            // Configuration pour chaque port (0-3)
+                            for (port in 0..3) {
+                                var selectedControllerType by remember { 
+                                    mutableStateOf(
+                                        prefs.getInt("controller_port_${console}_port${port}", -1) // -1 = Auto
+                                    )
+                                }
+                                
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Port ${port + 1}",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    
+                                    var expandedPortMenu by remember { mutableStateOf(false) }
+                                    
+                                    Box {
+                                        TextButton(
+                                            onClick = { expandedPortMenu = true }
+                                        ) {
+                                            Text(
+                                                text = controllerTypes.find { it.second == selectedControllerType }?.first ?: "Auto",
+                                                color = if (selectedControllerType == -1) Color(0xFF888888) else Color(0xFF00BCD4),
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                        
+                                        androidx.compose.material3.DropdownMenu(
+                                            expanded = expandedPortMenu,
+                                            onDismissRequest = { expandedPortMenu = false }
+                                        ) {
+                                            controllerTypes.forEach { (name, id) ->
+                                                androidx.compose.material3.DropdownMenuItem(
+                                                    text = { Text(name, color = Color.White) },
+                                                    onClick = {
+                                                        selectedControllerType = id
+                                                        expandedPortMenu = false
+                                                        // Sauvegarder la configuration
+                                                        prefs.edit().putInt("controller_port_${console}_port${port}", id).apply()
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            Text(
+                                text = "Note: 'Auto' uses automatic detection. Manual settings override auto-detection for this console.",
+                                color = Color(0xFF666666),
+                                fontSize = 11.sp,
+                                fontStyle = FontStyle.Italic
+                            )
                         }
                     }
 

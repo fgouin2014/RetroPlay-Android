@@ -198,30 +198,47 @@ public static ConsoleConfig getConfig(Context context, String console) {
 ## QUESTIONS À RÉSOUDRE
 
 1. **`ConsoleConfigActivity` est-il encore utilisé?**
-   - Si oui, par qui?
-   - Si non, peut-on le supprimer?
+   - ✅ **OUI** - Lancé depuis:
+     - `GameListActivity.java` (ligne 1435): `openConsoleConfig()`
+     - `GameDetailsActivity.java` (ligne 2436): Menu "Advanced Config"
+   - **Impact:** Les utilisateurs peuvent encore accéder à cette activité
 
 2. **Les paramètres EmulatorJS (`touch_scale`, `touch_alpha`) sont-ils encore nécessaires?**
-   - Les activités Compose utilisent-elles EmulatorJS?
-   - Ou sont-elles 100% RetroArch/Native?
+   - ⚠️ **OUI** - Utilisés par `WebViewActivity` (EmulatorJS/WASM)
+   - `GameDetailsActivity` appelle `getConfig()` et passe `touchScale`/`touchAlpha` à `WebViewActivity`
+   - Les activités Compose (RetroArch/Native) n'utilisent PAS ces paramètres
+   - **Conclusion:** `ConsoleConfigActivity` gère les paramètres EmulatorJS, pas RetroArch
 
 3. **La fonction `getConfig()` est-elle appelée ailleurs?**
-   - Chercher: `ConsoleConfig.getConfig()`
-   - Vérifier les dépendances
+   - ✅ **OUI** - Appelée depuis:
+     - `GameDetailsActivity.java` (ligne 509): Avant de lancer un jeu
+     - `WebViewActivity.java` (ligne 140): Pour charger la config console
+   - **Impact CRITIQUE:** Si `getConfig()` ne fonctionne pas, les jeux ne se lancent pas correctement
 
 4. **Les paramètres core-specific (N64, PSX, SNES) sont-ils gérés ailleurs?**
-   - Dans `RetroArchSettingsDialog`?
-   - Dans les activités Compose?
+   - ⚠️ **PARTIELLEMENT** - `RetroArchSettingsDialog` gère certains paramètres RetroArch
+   - Mais `ConsoleConfigActivity` gère les paramètres EmulatorJS (différents!)
+   - **Conclusion:** Deux systèmes parallèles:
+     - `ConsoleConfigActivity` → EmulatorJS (WebView/WASM)
+     - `RetroArchSettingsDialog` → RetroArch/Native (Compose)
 
 ---
 
 ## ACTIONS IMMÉDIATES
 
 1. ✅ **Audit complet** - FAIT (ce document)
-2. ⏳ **Vérifier l'utilisation de `ConsoleConfigActivity`** - À FAIRE
-3. ⏳ **Vérifier les appels à `getConfig()`** - À FAIRE
+2. ✅ **Vérifier l'utilisation de `ConsoleConfigActivity`** - FAIT
+   - Utilisé par `GameListActivity` et `GameDetailsActivity`
+3. ✅ **Vérifier les appels à `getConfig()`** - FAIT
+   - Appelé par `GameDetailsActivity` et `WebViewActivity` (CRITIQUE)
 4. ⏳ **Décider de la stratégie de migration** - À FAIRE
-5. ⏳ **Implémenter la migration** - À FAIRE
+   - **IMPORTANT:** `ConsoleConfigActivity` gère EmulatorJS, pas RetroArch
+   - Les activités Compose utilisent RetroArch/Native
+   - **Conclusion:** Deux systèmes séparés, pas besoin de migration complète
+5. ⏳ **Corriger l'incohérence** - À FAIRE
+   - `resetNativeGamePad()` utilise `compose_gamepad_settings` (correct)
+   - Mais `getConfig()` utilise `console_config` (correct pour EmulatorJS)
+   - **Pas de conflit réel**, mais clarifier la documentation
 
 ---
 
@@ -238,6 +255,17 @@ public static ConsoleConfig getConfig(Context context, String console) {
 ## NOTES
 
 - Les changements récents de l'utilisateur montrent une migration vers `compose_gamepad_settings` et le format `*_{console}`
-- `ConsoleConfigActivity` n'a PAS été mis à jour, créant une incohérence
-- Il faut décider: migrer `ConsoleConfigActivity` OU le déprécier
+- `ConsoleConfigActivity` n'a PAS été mis à jour, mais **c'est normal** car il gère EmulatorJS, pas RetroArch
+- **Découverte importante:** Deux systèmes parallèles:
+  1. **EmulatorJS (WebView/WASM):** `ConsoleConfigActivity` + `console_config` + format `{console}_*`
+  2. **RetroArch/Native (Compose):** `RetroArchSettingsDialog` + `compose_gamepad_settings` + format `*_{console}`
+- **Pas de conflit réel**, mais la documentation doit clarifier cette séparation
+- `resetNativeGamePad()` dans `ConsoleConfigActivity` est correct car il reset les paramètres RetroArch/Native (pas EmulatorJS)
+
+## CONCLUSION
+
+**`ConsoleConfigActivity` est TOUJOURS utilisé et nécessaire pour EmulatorJS.**
+- Ne PAS migrer vers `compose_gamepad_settings` (c'est pour RetroArch/Native)
+- Ne PAS changer le format des clés (c'est pour EmulatorJS)
+- **MAIS:** Clarifier la documentation pour expliquer la séparation des deux systèmes
 

@@ -650,8 +650,8 @@ public class GameDetailsActivity extends AppCompatActivity {
                                console.equals("neogeo")) && 
                               fileName.endsWith(".zip");
         
-        // Archives nécessitant éventuellement extraction (.zip, .7z comme Lemuroid)
-        // Toutes les consoles (hors arcade) peuvent utiliser l'extraction en option (cache), désactivée par défaut
+        // Archives nécessitant extraction (.zip, .7z comme Lemuroid)
+        // TOUTES les consoles sauf arcade doivent extraire les .zip
         boolean isArchive = (fileName.endsWith(".zip") || fileName.endsWith(".7z")) && !isArcadeZip;
         
         if (isNativeCompressedFormat) {
@@ -661,10 +661,10 @@ public class GameDetailsActivity extends AppCompatActivity {
             Log.i(TAG, console + ": Arcade ROM .zip detected, loading directly (core reads .zip natively)");
             // Charger directement (les ROMs arcade sont en .zip et ne doivent PAS être extraites)
         } else if (isArchive) {
-            // Consoles (hors NES/Famicom et Arcade) pouvant utiliser l'extraction du .zip
-            // Par DEFAUT: cache DESACTIVE pour les archives
-            // L'utilisateur peut l'activer manuellement dans les paramètres si besoin
-            boolean cacheEnabled = prefs.getBoolean("cache_enabled_" + console, false);  // FALSE par défaut
+            // TOUTES les consoles (NES, SNES, etc.) nécessitent l'extraction du .zip
+            // Par DEFAUT: cache ACTIVE pour les archives (comme Lemuroid/EmulatorJS)
+            // L'utilisateur peut le desactiver manuellement dans les parametres si besoin
+            boolean cacheEnabled = prefs.getBoolean("cache_enabled_" + console, true);  // TRUE par défaut
             
             if (cacheEnabled) {
                 Log.i(TAG, console + ": Archive detected (" + fileName + "), extracting to cache...");

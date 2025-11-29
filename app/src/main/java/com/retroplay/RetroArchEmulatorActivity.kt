@@ -1260,9 +1260,12 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             Log.i(TAG, "[INIT] Configuring core variables for console: '$console', isZapperGame=$isZapperGame")
             when (console) {
                 "n64" -> {
-                    val resolution = corePrefs.getInt("${prefix}n64_resolution", 0)
-                    val antialiasing = corePrefs.getInt("${prefix}n64_antialiasing", 0)
-                    val bilinear = corePrefs.getBoolean("${prefix}n64_bilinear", false)
+                    // Lire depuis console_config (comme ConsoleConfigActivity)
+                    val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+                    val consolePrefix = "n64_"
+                    val resolution = consoleConfigPrefs.getInt("${consolePrefix}n64_resolution", 0)
+                    val antialiasing = consoleConfigPrefs.getInt("${consolePrefix}n64_antialiasing", 0)
+                    val bilinear = consoleConfigPrefs.getBoolean("${consolePrefix}n64_bilinear", false)
                     Log.i(TAG, "[N64] Core options loaded - Resolution: $resolution, AA: $antialiasing, Bilinear: $bilinear")
                     Log.i(TAG, "[N64] Detected core file: $actualCoreFile (Parallel: $isParallelN64, Mupen64Plus: $isMupen64Plus)")
 
@@ -1592,19 +1595,16 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 try {
                     Log.i(TAG, "[N64] Configuring controller extensions...")
 
-                    // Charger les paramètres depuis SharedPreferences
-                    val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this@RetroArchEmulatorActivity)
+                    // Charger les paramètres depuis SharedPreferences (console_config, comme ConsoleConfigActivity)
+                    val prefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
                     val prefix = "n64_"
 
                     // Mapping des positions spinner vers les valeurs Libretro :
-                    // Pour N64, les extensions sont configurées via retro_set_controller_port_device()
-                    // Les IDs peuvent varier selon le core (Mupen64Plus, ParaLLEl N64)
-                    // Valeurs standard Libretro N64 (basées sur retro_controller_info):
-                    // 0 = None (pas d'extension)
-                    // 1 = Controller Pak (mémoire de sauvegarde)
-                    // 2 = Rumble Pak (vibration)
-                    // 5 = Transfer Pak (transfert Game Boy)
-                    val pakValues = intArrayOf(0, 1, 2, 5)  // 0 = None, 1 = Controller Pak, 2 = Rumble Pak, 5 = Transfer Pak
+                    // Spinner position 0 = "Controller Pak" → Libretro ID 1
+                    // Spinner position 1 = "Rumble Pak" → Libretro ID 2
+                    // Spinner position 2 = "Transfer Pak" → Libretro ID 5
+                    // Note: Le spinner n'a PAS d'option "None", donc pakPosition 0-2 correspond directement aux IDs
+                    val pakValues = intArrayOf(1, 2, 5)  // Controller Pak, Rumble Pak, Transfer Pak
                     // Note: Les valeurs peuvent être différentes selon le core, mais ces IDs sont standards
 
                     // D'abord, essayer de voir quels types de contrôleurs sont disponibles
@@ -1624,20 +1624,20 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     // Configurer les extensions pour chaque port (0-3)
                     for (port in 0..3) {  // 4 ports maximum pour N64
                         try {
-                            val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: 0 = None
-                            // pakPosition: 0 = None, 1 = Controller Pak, 2 = Rumble Pak, 3 = Transfer Pak
-                            val pakValue = pakValues.getOrElse(pakPosition) { 0 } // Fallback to None
+                            // pakPosition: 0 = Controller Pak, 1 = Rumble Pak, 2 = Transfer Pak (positions spinner)
+                            val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: 0 = Controller Pak
+                            // Vérifier que pakPosition est valide (0-2)
+                            if (pakPosition >= 0 && pakPosition < pakValues.size) {
+                                val pakValue = pakValues[pakPosition] // ID Libretro (1, 2, ou 5)
 
-                            val pakName = when (pakPosition) {
-                                0 -> "None"
-                                1 -> "Controller Pak"
-                                2 -> "Rumble Pak"
-                                3 -> "Transfer Pak"
-                                else -> "Unknown"
-                            }
+                                val pakName = when (pakPosition) {
+                                    0 -> "Controller Pak"
+                                    1 -> "Rumble Pak"
+                                    2 -> "Transfer Pak"
+                                    else -> "Unknown"
+                                }
 
-                            // Ne configurer que si une extension est sélectionnée (pakValue > 0)
-                            if (pakValue > 0) {
+                                // Configurer l'extension (pakValue est toujours > 0 car pakValues = [1, 2, 5])
                                 try {
                                     // Utiliser setControllerType() pour configurer l'extension
                                     // Pour N64, les extensions sont des types de contrôleurs spécifiques
@@ -1653,7 +1653,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                                     Log.w(TAG, "[N64] Port ${port + 1}: $pakName (id=$pakValue) - configuration failed")
                                 }
                             } else {
-                                Log.d(TAG, "[N64] Port ${port + 1}: No extension (None)")
+                                Log.d(TAG, "[N64] Port ${port + 1}: Invalid pak position ($pakPosition), skipping")
                             }
                         } catch (e: Exception) {
                             Log.w(TAG, "[N64] Could not configure extension for port ${port + 1}: ${e.message}")

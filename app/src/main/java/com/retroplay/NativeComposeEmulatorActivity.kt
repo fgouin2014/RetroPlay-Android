@@ -893,9 +893,12 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             Log.i(TAG, "[INIT] Configuring core variables for console: '$console', isZapperGame=$isZapperGame")
             when (console) {
                 "n64" -> {
-                    val resolution = corePrefs.getInt("${prefix}n64_resolution", 0)
-                    val antialiasing = corePrefs.getInt("${prefix}n64_antialiasing", 0)
-                    val bilinear = corePrefs.getBoolean("${prefix}n64_bilinear", false)
+                    // Lire depuis console_config (comme ConsoleConfigActivity)
+                    val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+                    val consolePrefix = "n64_"
+                    val resolution = consoleConfigPrefs.getInt("${consolePrefix}n64_resolution", 0)
+                    val antialiasing = consoleConfigPrefs.getInt("${consolePrefix}n64_antialiasing", 0)
+                    val bilinear = consoleConfigPrefs.getBoolean("${consolePrefix}n64_bilinear", false)
                     Log.i(TAG, "[N64] Core options loaded - Resolution: $resolution, AA: $antialiasing, Bilinear: $bilinear")
                     Log.i(TAG, "[N64] Detected core file: $actualCoreFile (Parallel: $isParallelN64, Mupen64Plus: $isMupen64Plus)")
 
@@ -1237,32 +1240,58 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 try {
                     Log.i(TAG, "[N64] Configuring controller extensions...")
 
-                    // Charger les paramètres depuis SharedPreferences
-                    val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this@NativeComposeEmulatorActivity)
+                    // Charger les paramètres depuis SharedPreferences (console_config, comme ConsoleConfigActivity)
+                    val prefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
                     val prefix = "n64_"
 
                     // Mapping des positions spinner vers les valeurs Libretro :
-                    // 0 = Controller Pak (1), 1 = Rumble Pak (2), 2 = Transfer Pak (5)
+                    // Spinner position 0 = "Controller Pak" → Libretro ID 1
+                    // Spinner position 1 = "Rumble Pak" → Libretro ID 2
+                    // Spinner position 2 = "Transfer Pak" → Libretro ID 5
                     val pakValues = intArrayOf(1, 2, 5)
 
-                    // TODO: Configurer les extensions contrôleur N64
-                    // Les valeurs sont sauvegardées dans les préférences mais l'application dans LibretroDroid
-                    // nécessite une investigation supplémentaire pour la méthode correcte
+                    // Collecter les extensions configurées pour logging
+                    val configuredExtensions = mutableListOf<Pair<Int, String>>()
+                    
+                    // Configurer les extensions pour chaque port (0-3)
                     for (port in 0..3) {  // 4 ports maximum pour N64
                         try {
-                            val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: Controller Pak
-                            val pakValue = pakValues.getOrElse(pakPosition) { 1 } // Fallback to Controller Pak
+                            // pakPosition: 0 = Controller Pak, 1 = Rumble Pak, 2 = Transfer Pak (positions spinner)
+                            val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: 0 = Controller Pak
+                            
+                            // Vérifier que pakPosition est valide (0-2)
+                            if (pakPosition >= 0 && pakPosition < pakValues.size) {
+                                val pakValue = pakValues[pakPosition] // ID Libretro (1, 2, ou 5)
 
-                            val pakName = when (pakPosition) {
-                                0 -> "Controller Pak"
-                                1 -> "Rumble Pak"
-                                2 -> "Transfer Pak"
-                                else -> "Unknown"
+                                val pakName = when (pakPosition) {
+                                    0 -> "Controller Pak"
+                                    1 -> "Rumble Pak"
+                                    2 -> "Transfer Pak"
+                                    else -> "Unknown"
+                                }
+                                
+                                // Configurer l'extension via setControllerType()
+                                try {
+                                    retroView.setControllerType(port, pakValue)
+                                    Log.i(TAG, "[N64] Extension configured for port ${port + 1}: $pakName (id=$pakValue) via setControllerType()")
+                                    configuredExtensions.add(Pair(port + 1, pakName))
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "[N64] Failed to set extension for port ${port + 1} via setControllerType(): ${e.message}")
+                                    Log.w(TAG, "[N64] Port ${port + 1}: $pakName (id=$pakValue) - configuration failed")
+                                }
+                            } else {
+                                Log.d(TAG, "[N64] Port ${port + 1}: Invalid pak position ($pakPosition), skipping")
                             }
-                            Log.i(TAG, "[N64] Extension configured for port ${port + 1}: $pakName (value=$pakValue)")
                         } catch (e: Exception) {
                             Log.w(TAG, "[N64] Could not configure extension for port ${port + 1}: ${e.message}")
                         }
+                    }
+                    
+                    // Log récapitulatif
+                    if (configuredExtensions.isNotEmpty()) {
+                        Log.i(TAG, "[N64] Successfully configured ${configuredExtensions.size} extensions: ${configuredExtensions.joinToString { "Port ${it.first}=${it.second}" }}")
+                    } else {
+                        Log.i(TAG, "[N64] No extensions configured")
                     }
 
 

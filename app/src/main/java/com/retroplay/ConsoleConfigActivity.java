@@ -366,9 +366,10 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         if (n64PakSpinner4 != null) n64PakSpinner4.setSelection(prefs.getInt(prefix + "pak_port4", 0));
 
         // Load core specific settings
-        if (n64ResolutionSpinner != null) n64ResolutionSpinner.setSelection(prefs.getInt(prefix + "n64_resolution", 0));
-        if (n64AntiAliasingSpinner != null) n64AntiAliasingSpinner.setSelection(prefs.getInt(prefix + "n64_antialiasing", 0));
-        if (n64BilinearSwitch != null) n64BilinearSwitch.setChecked(prefs.getBoolean(prefix + "n64_bilinear", false));
+        // Clés: n64_resolution, n64_antialiasing, n64_bilinear (sans redondance)
+        if (n64ResolutionSpinner != null) n64ResolutionSpinner.setSelection(prefs.getInt(prefix + "resolution", 0));
+        if (n64AntiAliasingSpinner != null) n64AntiAliasingSpinner.setSelection(prefs.getInt(prefix + "antialiasing", 0));
+        if (n64BilinearSwitch != null) n64BilinearSwitch.setChecked(prefs.getBoolean(prefix + "bilinear", false));
 
         if (psxResolutionSpinner != null) psxResolutionSpinner.setSelection(prefs.getInt(prefix + "psx_resolution", 0));
         if (psxTextureFilteringSwitch != null) psxTextureFilteringSwitch.setChecked(prefs.getBoolean(prefix + "psx_texture_filtering", true));
@@ -444,9 +445,10 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         if (n64PakSpinner4 != null) editor.putInt(prefix + "pak_port4", n64PakSpinner4.getSelectedItemPosition());
 
         // Save core specific settings
-        if (n64ResolutionSpinner != null) editor.putInt(prefix + "n64_resolution", n64ResolutionSpinner.getSelectedItemPosition());
-        if (n64AntiAliasingSpinner != null) editor.putInt(prefix + "n64_antialiasing", n64AntiAliasingSpinner.getSelectedItemPosition());
-        if (n64BilinearSwitch != null) editor.putBoolean(prefix + "n64_bilinear", n64BilinearSwitch.isChecked());
+        // Clés: n64_resolution, n64_antialiasing, n64_bilinear (sans redondance)
+        if (n64ResolutionSpinner != null) editor.putInt(prefix + "resolution", n64ResolutionSpinner.getSelectedItemPosition());
+        if (n64AntiAliasingSpinner != null) editor.putInt(prefix + "antialiasing", n64AntiAliasingSpinner.getSelectedItemPosition());
+        if (n64BilinearSwitch != null) editor.putBoolean(prefix + "bilinear", n64BilinearSwitch.isChecked());
 
         if (psxResolutionSpinner != null) editor.putInt(prefix + "psx_resolution", psxResolutionSpinner.getSelectedItemPosition());
         if (psxTextureFilteringSwitch != null) editor.putBoolean(prefix + "psx_texture_filtering", psxTextureFilteringSwitch.isChecked());

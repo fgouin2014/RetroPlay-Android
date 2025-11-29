@@ -1263,9 +1263,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     // Lire depuis console_config (comme ConsoleConfigActivity)
                     val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
                     val consolePrefix = "n64_"
-                    val resolution = consoleConfigPrefs.getInt("${consolePrefix}n64_resolution", 0)
-                    val antialiasing = consoleConfigPrefs.getInt("${consolePrefix}n64_antialiasing", 0)
-                    val bilinear = consoleConfigPrefs.getBoolean("${consolePrefix}n64_bilinear", false)
+                    // Clés: n64_resolution, n64_antialiasing, n64_bilinear (sans redondance)
+                    val resolution = consoleConfigPrefs.getInt("${consolePrefix}resolution", 0)
+                    val antialiasing = consoleConfigPrefs.getInt("${consolePrefix}antialiasing", 0)
+                    val bilinear = consoleConfigPrefs.getBoolean("${consolePrefix}bilinear", false)
                     Log.i(TAG, "[N64] Core options loaded - Resolution: $resolution, AA: $antialiasing, Bilinear: $bilinear")
                     Log.i(TAG, "[N64] Detected core file: $actualCoreFile (Parallel: $isParallelN64, Mupen64Plus: $isMupen64Plus)")
 

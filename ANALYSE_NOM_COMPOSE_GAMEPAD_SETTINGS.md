@@ -157,3 +157,4 @@ Le nom `compose_gamepad_settings` est un **legacy** de l'époque où ce fichier 
 
 **Recommandation:** Garder le nom actuel et documenter le contenu réel dans les commentaires du code.
 
+

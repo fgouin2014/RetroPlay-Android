@@ -382,3 +382,4 @@ Les paramètres N64 configurés dans `ConsoleConfigActivity` ne sont **JAMAIS** 
 
 **Action immédiate requise:** Corriger l'incohérence SharedPreferences (Priorité 1)
 
+

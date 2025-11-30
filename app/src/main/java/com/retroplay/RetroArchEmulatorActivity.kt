@@ -1277,6 +1277,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             return
         }
         
+        // Log du chemin ROM pour déboguer les caractères spéciaux
+        Log.i(TAG, "ROM path received (handles special chars): $romPath")
+        
         console = intent.getStringExtra("console") ?: "psx"
         gameName = intent.getStringExtra("gameName") ?: "Game"
         gameCRC = intent.getStringExtra("gameCRC")  // Database CRC (may be null)

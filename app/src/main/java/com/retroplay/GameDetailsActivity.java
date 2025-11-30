@@ -613,21 +613,25 @@ public class GameDetailsActivity extends AppCompatActivity {
         String slotInfo = (slot == 0) ? "[NEW GAME]" : "[LOAD SLOT " + slot + "]";
         Log.i(TAG, "Lancement du jeu (NATIVE COMPOSE): " + game.getName() + " " + slotInfo);
         
-        // Extraire le nom du fichier depuis le chemin local
-        String fileName = game.getPath();
-        if (fileName.startsWith("./")) {
-            fileName = fileName.substring(2);
-        }
-        // Extraire juste le nom du fichier (sans le chemin)
-        int lastSlash = fileName.lastIndexOf("/");
-        if (lastSlash >= 0) {
-            fileName = fileName.substring(lastSlash + 1);
+        // Utiliser resolveRomPath() pour gérer correctement les caractères spéciaux (!, +, &, etc.)
+        String romPath = resolveRomPath();
+        Log.i(TAG, "Resolved ROM path (handles special chars): " + romPath);
+        
+        // Vérifier que le fichier existe
+        java.io.File romFile = new java.io.File(romPath);
+        if (!romFile.exists()) {
+            Log.e(TAG, "ROM file does not exist: " + romPath);
+            Toast.makeText(this, "Error: ROM file not found: " + romPath, Toast.LENGTH_LONG).show();
+            return;
         }
         
-        // Construire le chemin complet vers la ROM
-        // Mapper le nom de console au vrai nom de répertoire sur le device
-        String consoleDir = getRealConsoleDirectory(game.getConsole());
-        String romPath = "/storage/emulated/0/GameLibrary-Data/" + consoleDir + "/" + fileName;
+        // Extraire le nom du fichier depuis le chemin résolu pour les vérifications de format
+        String fileName = romPath;
+        int lastSlash = romPath.lastIndexOf("/");
+        if (lastSlash >= 0) {
+            fileName = romPath.substring(lastSlash + 1);
+        }
+        Log.i(TAG, "ROM filename: " + fileName);
         
         // DETECTION INTELLIGENTE DES FORMATS (comme PSX)
         String console = game.getConsole().toLowerCase();

@@ -333,6 +333,7 @@ class RetroArchOverlayParser {
             val shape = when (parts[3].lowercase()) {
                 "radial" -> ButtonShape.RADIAL
                 "rect" -> ButtonShape.RECT
+                "none" -> ButtonShape.NONE  // Compatible RetroArch OVERLAY_HITBOX_NONE
                 else -> {
                     Log.w(TAG, "Unknown shape: ${parts[3]}, defaulting to RADIAL")
                     ButtonShape.RADIAL

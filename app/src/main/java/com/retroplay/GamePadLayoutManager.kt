@@ -7,7 +7,11 @@ import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
@@ -268,6 +272,49 @@ object GamePadLayoutManager {
         // Déterminer l'orientation actuelle
         val configuration = LocalConfiguration.current
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val orientation = if (isLandscape) "landscape" else "portrait"
+        
+        // CRITIQUE: Charger les AdvancedOverlaySettings selon l'orientation
+        // Utiliser un State pour permettre le rafraîchissement en temps réel via listener
+        val advancedSettingsState = remember { 
+            mutableStateOf(
+                com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, orientation)
+                    ?: com.retroplay.overlay.models.AdvancedOverlaySettings()
+            )
+        }
+        
+        // Listener pour rafraîchir les settings quand ils changent dans SharedPreferences
+        DisposableEffect(console, orientation) {
+            val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                // Détecter les changements de advanced settings
+                val matchesAdvanced = key?.startsWith("overlay_${console}_dpad_diagonal_sensitivity") == true ||
+                                    key?.startsWith("overlay_${console}_abxy_diagonal_sensitivity") == true ||
+                                    key?.startsWith("overlay_${console}_analog_recenter_zone") == true ||
+                                    key?.startsWith("overlay_${console}_opacity") == true ||
+                                    key?.startsWith("overlay_${console}_aspect_adjust") == true ||
+                                    key?.startsWith("overlay_${console}_hide_in_menu") == true ||
+                                    key?.startsWith("overlay_${console}_behind_menu") == true ||
+                                    key?.startsWith("overlay_${console}_hide_when_gamepad") == true ||
+                                    key?.startsWith("overlay_${console}_show_inputs") == true ||
+                                    key?.startsWith("overlay_${console}_show_inputs_port") == true ||
+                                    key?.startsWith("overlay_${console}_lightgun") == true ||
+                                    key?.startsWith("overlay_${console}_mouse") == true
+                
+                if (matchesAdvanced) {
+                    val newSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, orientation)
+                    if (newSettings != null) {
+                        advancedSettingsState.value = newSettings
+                        Log.i(TAG, "🔄 Advanced settings reloaded ($orientation): dpadSens=${newSettings.dpadDiagonalSensitivity} abxySens=${newSettings.abxyDiagonalSensitivity} recenter=${newSettings.analogRecenterZone} opacity=${newSettings.opacity}")
+                    }
+                }
+            }
+            prefs.registerOnSharedPreferenceChangeListener(listener)
+            onDispose {
+                prefs.unregisterOnSharedPreferenceChangeListener(listener)
+            }
+        }
+        
+        val advancedSettings = advancedSettingsState.value
         
         // Choisir le layout approprié selon orientation
         val layoutName = if (overlayPreference.autoRotate) {
@@ -298,7 +345,7 @@ object GamePadLayoutManager {
             return
         }
         
-        // Afficher l'overlay
+        // Afficher l'overlay avec TOUTES les options avancées
         RetroArchOverlayScreen(
             layout = layout,
             overlayName = overlayPreference.overlayName,
@@ -329,6 +376,13 @@ object GamePadLayoutManager {
             overlayYOffset = overlayPreference.yOffset,
             overlayXSeparation = overlayPreference.xSeparation,
             overlayYSeparation = overlayPreference.ySeparation,
+            overlayOpacity = advancedSettings.opacity,
+            dpadDiagonalSensitivity = advancedSettings.dpadDiagonalSensitivity,
+            abxyDiagonalSensitivity = advancedSettings.abxyDiagonalSensitivity,
+            showInputsMode = advancedSettings.showInputs,
+            hideWhenGamepadConnected = advancedSettings.hideWhenGamepadConnected,
+            analogRecenterZone = advancedSettings.analogRecenterZone,
+            aspectAdjust = advancedSettings.aspectAdjust,
             modifier = modifier
         )
     }

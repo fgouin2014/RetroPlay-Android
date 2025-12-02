@@ -85,7 +85,10 @@ data class OverlayButton(
     val eightwayDownRight: String? = null,    // overlayN_descM_down_right
     // Hitbox position override (recalculée après scale/offset/separation)
     val xHitboxOverride: Float? = null,
-    val yHitboxOverride: Float? = null
+    val yHitboxOverride: Float? = null,
+    // Hitbox size override (recalculée après scale/offset/separation avec width/height scalés)
+    val rangeXHitboxOverride: Float? = null,
+    val rangeYHitboxOverride: Float? = null
 ) {
     /**
      * Calcul de la POSITION de la hitbox (peut être décalée si reach asymétrique)
@@ -104,14 +107,16 @@ data class OverlayButton(
     /**
      * Calcul de la TAILLE de la hitbox réelle (range_x_hitbox) en appliquant reach_*
      * Identique à RetroArch: range_x_hitbox = (range_x * reach_right + range_x * reach_left) / 2.0
+     * Utilise rangeXHitboxOverride si défini (après transformations scale/offset avec width scalé)
      */
-    val rangeXHitbox: Float = (width * reachRight + width * reachLeft) / 2.0f
+    val rangeXHitbox: Float = rangeXHitboxOverride ?: (width * reachRight + width * reachLeft) / 2.0f
     
     /**
      * Calcul de la TAILLE de la hitbox réelle (range_y_hitbox) en appliquant reach_*
      * Identique à RetroArch: range_y_hitbox = (range_y * reach_down + range_y * reach_up) / 2.0
+     * Utilise rangeYHitboxOverride si défini (après transformations scale/offset avec height scalé)
      */
-    val rangeYHitbox: Float = (height * reachDown + height * reachUp) / 2.0f
+    val rangeYHitbox: Float = rangeYHitboxOverride ?: (height * reachDown + height * reachUp) / 2.0f
 }
 
 /**
@@ -119,7 +124,8 @@ data class OverlayButton(
  */
 enum class ButtonShape {
     RADIAL,   // Circular/elliptical hitbox (default pour la plupart des boutons)
-    RECT      // Rectangular hitbox (utilisé pour les zones combo comme "left|up")
+    RECT,     // Rectangular hitbox (utilisé pour les zones combo comme "left|up")
+    NONE      // Hitbox désactivée (compatible RetroArch OVERLAY_HITBOX_NONE)
 }
 
 /**

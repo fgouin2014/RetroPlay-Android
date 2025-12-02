@@ -140,11 +140,13 @@ class RetroArchOverlayParser {
         }
         
         // Lire les propriétés
+        // CORRECTION: Valeurs par défaut compatibles RetroArch
+        // RetroArch task_overlay.c: default normalized = false, fullScreen = false
         val fullScreen = lines.find { it.trim().startsWith("${prefix}full_screen = ") }
-            ?.substringAfter("= ")?.trim()?.toBoolean() ?: true
+            ?.substringAfter("= ")?.trim()?.toBoolean() ?: false  // DEFAULT = false (compatible RetroArch)
         
         val normalized = lines.find { it.trim().startsWith("${prefix}normalized = ") }
-            ?.substringAfter("= ")?.trim()?.toBoolean() ?: true
+            ?.substringAfter("= ")?.trim()?.toBoolean() ?: false  // DEFAULT = false (compatible RetroArch)
         
         val rangeMod = lines.find { it.trim().startsWith("${prefix}range_mod = ") }
             ?.substringAfter("= ")?.trim()?.toFloatOrNull() ?: 1.0f
@@ -153,10 +155,13 @@ class RetroArchOverlayParser {
             ?.substringAfter("= ")?.trim()?.toFloatOrNull() ?: 1.0f
         
         // Parser overlay0_rect (custom positioning)
+        // Compatible RetroArch task_overlay.c lignes ~850-880: strtok_r(cfg_rect_array_cpy, ", ", &save)
         val rectLine = lines.find { it.trim().startsWith("${prefix}rect = ") }
         val rect = if (rectLine != null) {
             val rectValue = rectLine.substringAfter("\"").substringBefore("\"")
-            val rectParts = rectValue.split(",").map { it.trim().toFloatOrNull() ?: 0f }
+            // CORRECTION: Tokenize par ", " (virgule + espace) comme RetroArch
+            // Compatible RetroArch: strtok_r(cfg_rect_array_cpy, ", ", &save)
+            val rectParts = rectValue.split(", ").map { it.trim().toFloatOrNull() ?: 0f }
             if (rectParts.size >= 4) {
                 com.retroplay.overlay.models.OverlayRect(
                     x = rectParts[0],
@@ -207,14 +212,33 @@ class RetroArchOverlayParser {
         }
         
         // Parser separation flags
+        // CORRECTION: Valeurs par défaut compatibles RetroArch
         val blockXSeparation = lines.find { it.trim().startsWith("${prefix}block_x_separation = ") }
             ?.substringAfter("= ")?.trim()?.toBoolean() ?: false
         val blockYSeparation = lines.find { it.trim().startsWith("${prefix}block_y_separation = ") }
             ?.substringAfter("= ")?.trim()?.toBoolean() ?: false
-        val autoXSeparation = lines.find { it.trim().startsWith("${prefix}auto_x_separation = ") }
-            ?.substringAfter("= ")?.trim()?.toBoolean() ?: true
+        
+        // RetroArch: auto_x_separation default = true, MAIS désactivé si block_x_separation OU image.width != 0
+        // Compatible RetroArch task_overlay.c lignes ~2010-2020
+        var autoXSeparation = lines.find { it.trim().startsWith("${prefix}auto_x_separation = ") }
+            ?.substringAfter("= ")?.trim()?.toBoolean()
+        if (autoXSeparation == null) {
+            // Default = true SAUF si blockXSeparation OU backgroundImage != null
+            autoXSeparation = !blockXSeparation && backgroundImage == null
+        } else if (!autoXSeparation) {
+            // Si explicitement false, respecter
+            autoXSeparation = false
+        } else {
+            // Si explicitement true, mais blockXSeparation OU backgroundImage, désactiver
+            if (blockXSeparation || backgroundImage != null) {
+                autoXSeparation = false
+            }
+        }
+        
+        // RetroArch: auto_y_separation default = false
+        // Compatible RetroArch task_overlay.c lignes ~2025-2030
         val autoYSeparation = lines.find { it.trim().startsWith("${prefix}auto_y_separation = ") }
-            ?.substringAfter("= ")?.trim()?.toBoolean() ?: true
+            ?.substringAfter("= ")?.trim()?.toBoolean() ?: false  // DEFAULT = false (compatible RetroArch)
         
         // Lire le nombre de descripteurs de boutons
         val descCount = lines.find { it.trim().startsWith("${prefix}descs = ") }
@@ -281,10 +305,33 @@ class RetroArchOverlayParser {
             return null
         }
         
+        // CORRECTION: Parser overlayN_descN_normalized (override global normalized per-desc)
+        // Compatible RetroArch task_overlay.c lignes ~260-265
+        // RetroArch: strlcpy(overlay_key + _len, "_normalized", ...); if (config_get_bool(...)) normalized = tmp_bool;
+        var effectiveNormalized = normalized  // Utiliser global par défaut
+        val descNormalizedLine = lines.find { it.trim().startsWith("${descKey}_normalized = ") }
+        val descNormalized = descNormalizedLine?.substringAfter("= ")?.trim()?.toBooleanStrictOrNull()
+        if (descNormalized != null) {
+            effectiveNormalized = descNormalized  // Override si spécifié
+            Log.d(TAG, "Overriding normalized for $descKey: $normalized -> $effectiveNormalized")
+        }
+        
+        // Recalculer widthMod/heightMod si normalized a été overridé
+        // Si effectiveNormalized != normalized, on doit recalculer les mods
+        // Si effectiveNormalized == true (normalized), mods = 1.0f
+        // Si effectiveNormalized == false (pixel), mods = 1.0f / dimensions (mais on n'a pas accès à l'image ici)
+        // Pour l'instant, on utilise les mods globaux (calculés dans parseOverlay())
+        // TODO: Si nécessaire, passer imageDimensionsCallback à parseButton() pour recalculer
+        var effectiveWidthMod = if (effectiveNormalized) 1.0f else widthMod
+        var effectiveHeightMod = if (effectiveNormalized) 1.0f else heightMod
+        
         try {
             // Extraire la valeur entre guillemets
             val descValue = descLine.substringAfter("\"").substringBefore("\"")
-            val parts = descValue.split(",").map { it.trim() }
+            // CORRECTION CRITIQUE: Tokenize par ", " (virgule + espace) comme RetroArch strtok_r(overlay_cpy, ", ", &save)
+            // Compatible RetroArch task_overlay.c ligne ~240: strtok_r(overlay_cpy, ", ", &save)
+            // Le trim() reste nécessaire pour gérer les espaces en début/fin de chaque token
+            val parts = descValue.split(", ").map { it.trim() }
             
             // Validation stricte (compatible RetroArch task_overlay.c lignes 368-379)
             // Format requis: "action,x,y,shape,range_x,range_y" (6 tokens minimum)
@@ -328,8 +375,9 @@ class RetroArchOverlayParser {
             //   desc->x = (float)strtod(x, NULL) * width_mod;
             //   desc->y = (float)strtod(y, NULL) * height_mod;
             // Note: xRaw, yRaw, rangeX, rangeY déjà validés ci-dessus
-            val x = xRaw * widthMod
-            val y = yRaw * heightMod
+            // Utiliser effectiveWidthMod/effectiveHeightMod (peuvent être overridés si descNormalized)
+            val x = xRaw * effectiveWidthMod
+            val y = yRaw * effectiveHeightMod
             val shape = when (parts[3].lowercase()) {
                 "radial" -> ButtonShape.RADIAL
                 "rect" -> ButtonShape.RECT
@@ -345,8 +393,9 @@ class RetroArchOverlayParser {
             //   desc->range_x = (float)strtod(elem4, NULL) * width_mod;
             //   desc->range_y = (float)strtod(elem5, NULL) * height_mod;
             // Note: rangeX et rangeY déjà validés ci-dessus (doivent être > 0)
-            val width = rangeX * widthMod
-            val height = rangeY * heightMod
+            // Utiliser effectiveWidthMod/effectiveHeightMod (peuvent être overridés si descNormalized)
+            val width = rangeX * effectiveWidthMod
+            val height = rangeY * effectiveHeightMod
             
             // Image overlay (optionnel)
             val overlayLine = lines.find { it.trim().startsWith("${descKey}_overlay = ") }

@@ -16,8 +16,8 @@ data class RetroArchOverlayConfig(
  */
 data class OverlayLayout(
     val name: String,                     // "landscape-A", "portrait-6", etc.
-    val fullScreen: Boolean = true,
-    val normalized: Boolean = true,       // Coordonnées 0.0-1.0
+    val fullScreen: Boolean = false,      // DEFAULT = false (compatible RetroArch)
+    val normalized: Boolean = false,      // DEFAULT = false (compatible RetroArch), coordonnées pixel par défaut
     val rangeModifier: Float = 1.0f,      // Multiplier pour hit zones
     val alphaModifier: Float = 1.0f,      // Transparence
     val buttons: List<OverlayButton>,
@@ -26,8 +26,8 @@ data class OverlayLayout(
     val aspectRatio: Float? = null,       // overlay0_aspect_ratio
     val blockXSeparation: Boolean = false, // overlay0_block_x_separation
     val blockYSeparation: Boolean = false, // overlay0_block_y_separation
-    val autoXSeparation: Boolean = true,   // overlay0_auto_x_separation (défaut true)
-    val autoYSeparation: Boolean = true    // overlay0_auto_y_separation (défaut true)
+    val autoXSeparation: Boolean = false,  // overlay0_auto_x_separation (défaut calculé conditionnellement)
+    val autoYSeparation: Boolean = false   // overlay0_auto_y_separation (défaut false, compatible RetroArch)
 )
 
 /**

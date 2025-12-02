@@ -1305,10 +1305,11 @@ private fun isTouchInsideButton(
     overlayScale: Float = 1.0f
 ): Boolean {
     // Item P1 #11: Skip boutons avec hitbox désactivée (reach_* == 0.0f)
-    // Compatible RetroArch task_overlay.c lignes 492-494
-    // Si reach_left + reach_right == 0.0f OU reach_up + reach_down == 0.0f, hitbox désactivée
-    if ((button.reachLeft + button.reachRight == 0.0f) || 
-        (button.reachUp + button.reachDown == 0.0f)) {
+    // Compatible RetroArch task_overlay.c lignes ~430-435
+    // CORRECTION: Utiliser == 0.0f && == 0.0f (comme RetroArch) au lieu de + == 0.0f
+    // RetroArch: if ((desc->reach_left == 0.0f && desc->reach_right == 0.0f) || (desc->reach_up == 0.0f && desc->reach_down == 0.0f))
+    if ((button.reachLeft == 0.0f && button.reachRight == 0.0f) || 
+        (button.reachUp == 0.0f && button.reachDown == 0.0f)) {
         return false  // Hitbox désactivée, toujours retourner false
     }
     

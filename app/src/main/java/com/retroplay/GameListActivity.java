@@ -1,8 +1,10 @@
 
 package com.retroplay;
 
+import android.app.ForegroundServiceStartNotAllowedException;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -2372,11 +2374,30 @@ public class GameListActivity extends AppCompatActivity implements GameAdapter.O
         try {
             Log.i(TAG, "Starting WebServerService on port 7777...");
             Intent serviceIntent = new Intent(this, WebServerService.class);
-            startForegroundService(serviceIntent);
+            
+            // ⭐ FIX Android 12+: Use startForegroundService (required for foreground services)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent);
+            } else {
+                startService(serviceIntent);
+            }
             Log.i(TAG, "WebServerService started successfully");
+        } catch (android.app.ForegroundServiceStartNotAllowedException e) {
+            // ⭐ FIX: Handle Android 12+ restriction - service must be started from visible activity
+            Log.e(TAG, "ForegroundServiceStartNotAllowedException: " + e.getMessage());
+            Log.w(TAG, "Service cannot start as foreground. Starting as regular service (may be killed by system).");
+            try {
+                // Try as regular service (will be less reliable but won't crash)
+                Intent serviceIntent = new Intent(this, WebServerService.class);
+                startService(serviceIntent);
+                Toast.makeText(this, "WebServer démarré (mode arrière-plan)", Toast.LENGTH_SHORT).show();
+            } catch (Exception e2) {
+                Log.e(TAG, "Error starting WebServerService as regular service: ", e2);
+                Toast.makeText(this, "Erreur démarrage WebServer: " + e2.getMessage(), Toast.LENGTH_LONG).show();
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error starting WebServerService: ", e);
-            Toast.makeText(this, "Error starting WebServer: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Erreur démarrage WebServer: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
     

@@ -1,6 +1,8 @@
 package com.retroplay;
 
+import android.app.ForegroundServiceStartNotAllowedException;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -57,9 +59,27 @@ public class WebViewActivity extends AppCompatActivity {
         try {
             Log.i(TAG, "Starting WebServer for WASM game...");
             Intent serviceIntent = new Intent(this, WebServerService.class);
-            startForegroundService(serviceIntent);
+            
+            // ⭐ FIX Android 12+: Use startForegroundService (required for foreground services)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent);
+            } else {
+                startService(serviceIntent);
+            }
             serverStartedByThisActivity = true;
             Log.i(TAG, "WebServer started successfully");
+        } catch (ForegroundServiceStartNotAllowedException e) {
+            // ⭐ FIX: Handle Android 12+ restriction - service must be started from visible activity
+            Log.e(TAG, "ForegroundServiceStartNotAllowedException: " + e.getMessage());
+            Log.w(TAG, "Service cannot start as foreground. Starting as regular service (may be killed by system).");
+            try {
+                // Try as regular service (will be less reliable but won't crash)
+                Intent serviceIntent = new Intent(this, WebServerService.class);
+                startService(serviceIntent);
+                serverStartedByThisActivity = true;
+            } catch (Exception e2) {
+                Log.e(TAG, "Error starting WebServerService as regular service: ", e2);
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error starting WebServer: ", e);
         }

@@ -165,6 +165,7 @@ public class Game implements java.io.Serializable {
     /**
      * Retourne le chemin local du fichier ROM
      * Format: /storage/emulated/0/GameLibrary-Data/{console}/{filename}
+     * Note: Gère correctement les caractères spéciaux (!, +, &, etc.) dans les noms de fichiers
      */
     public String getFile() {
         // Nettoyer le chemin (enlever "./" si présent)
@@ -172,6 +173,34 @@ public class Game implements java.io.Serializable {
         
         // Construire le chemin local complet
         String localPath = "/storage/emulated/0/GameLibrary-Data/" + consoleId + "/" + cleanPath;
+        
+        // Vérifier que le fichier existe réellement avec ce chemin
+        // Si le fichier n'existe pas, essayer de trouver le fichier réel en listant le répertoire
+        java.io.File file = new java.io.File(localPath);
+        if (!file.exists()) {
+            // Le fichier n'existe pas avec ce chemin exact
+            // Essayer de trouver le fichier en listant le répertoire (pour gérer les caractères spéciaux)
+            java.io.File consoleDir = new java.io.File("/storage/emulated/0/GameLibrary-Data/" + consoleId);
+            if (consoleDir.exists() && consoleDir.isDirectory()) {
+                // Extraire le nom de fichier depuis cleanPath
+                String fileName = cleanPath;
+                int lastSlash = cleanPath.lastIndexOf('/');
+                if (lastSlash >= 0) {
+                    fileName = cleanPath.substring(lastSlash + 1);
+                }
+                
+                // Chercher le fichier dans le répertoire (gère les caractères spéciaux)
+                java.io.File[] files = consoleDir.listFiles();
+                if (files != null) {
+                    for (java.io.File f : files) {
+                        if (f.getName().equals(fileName)) {
+                            // Fichier trouvé avec le nom exact (gère les caractères spéciaux)
+                            return f.getAbsolutePath();
+                        }
+                    }
+                }
+            }
+        }
         
         return localPath;
     }

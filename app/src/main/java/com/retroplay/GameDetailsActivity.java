@@ -319,8 +319,9 @@ public class GameDetailsActivity extends AppCompatActivity {
         // (même pour les consoles non listées dans le switch, elles utiliseront .bin par défaut)
         if (isArchive && !isNativeCompressedFormat) {
             // Construire le chemin du cache (MÊME logique que extractToCacheAsync)
-            // Utiliser le répertoire réel de la console (pas l'ID canonique)
-            final String cacheDir = baseDir + ".cache/" + consoleDir;
+            // Utiliser le cache interne de l'application (pas de permissions spéciales nécessaires)
+            final java.io.File appCacheDir = getCacheDir();
+            final String cacheDir = appCacheDir.getAbsolutePath() + "/roms/" + consoleDir;
             
             // Déterminer l'extension cible selon la console
             // IMPORTANT: Le default utilise .bin pour TOUTES les consoles non listées
@@ -369,7 +370,16 @@ public class GameDetailsActivity extends AppCompatActivity {
             }
             
             // Nom du fichier extrait (sans région) - MÊME logique que extractToCacheAsync
+            // Normaliser le nom pour le cache: enlever les caractères spéciaux (!, :, etc.) qui causent des problèmes
             String simpleName = game.getName().replaceAll("\\s*\\(.*?\\)\\s*", "").trim();
+            // Remplacer les caractères spéciaux par des underscores pour éviter les problèmes de fichiers
+            simpleName = simpleName.replaceAll("[^a-zA-Z0-9\\s\\-_]", "_");
+            // Remplacer les espaces multiples par un seul underscore
+            simpleName = simpleName.replaceAll("\\s+", "_");
+            // Enlever les underscores multiples
+            simpleName = simpleName.replaceAll("_+", "_");
+            // Enlever les underscores en début/fin
+            simpleName = simpleName.replaceAll("^_+|_+$", "");
             String cachedRomPath = cacheDir + "/" + simpleName + targetExtension;
             
             // Vérifier si déjà en cache (nom exact)
@@ -747,8 +757,10 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Mapper au vrai nom de répertoire
         final String realConsoleDir = getRealConsoleDirectory(console);
         
-        // Repertoire de cache par console (utiliser le vrai nom de répertoire)
-        final String cacheDir = "/storage/emulated/0/GameLibrary-Data/.cache/" + realConsoleDir;
+        // Utiliser le cache interne de l'application (pas de permissions spéciales nécessaires)
+        // Format: /data/data/com.retroplay/cache/roms/{console}/
+        final java.io.File appCacheDir = getCacheDir();
+        final String cacheDir = appCacheDir.getAbsolutePath() + "/roms/" + realConsoleDir;
         
         // Normaliser le nom de console avec ConsoleNameMapper
         final String canonicalId = ConsoleNameMapper.normalizeToCanonical(console);
@@ -830,7 +842,17 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
         
         // Nom du fichier extrait (sans region)
-        final String simpleName = game.getName().replaceAll("\\s*\\(.*?\\)\\s*", "").trim();
+        // Normaliser le nom pour le cache: enlever les caractères spéciaux (!, :, etc.) qui causent des problèmes
+        String simpleName = game.getName().replaceAll("\\s*\\(.*?\\)\\s*", "").trim();
+        // Remplacer les caractères spéciaux par des underscores pour éviter les problèmes de fichiers
+        // Garder seulement lettres, chiffres, espaces, tirets et underscores
+        simpleName = simpleName.replaceAll("[^a-zA-Z0-9\\s\\-_]", "_");
+        // Remplacer les espaces multiples par un seul underscore
+        simpleName = simpleName.replaceAll("\\s+", "_");
+        // Enlever les underscores multiples
+        simpleName = simpleName.replaceAll("_+", "_");
+        // Enlever les underscores en début/fin
+        simpleName = simpleName.replaceAll("^_+|_+$", "");
         final String cachedRomPath = cacheDir + "/" + simpleName + targetExtension;
         
         // Verifier si deja en cache (rapide, sur UI thread)
@@ -854,8 +876,18 @@ public class GameDetailsActivity extends AppCompatActivity {
                 // Creer repertoire cache
                 java.io.File cacheDirFile = new java.io.File(cacheDir);
                 if (!cacheDirFile.exists()) {
-                    cacheDirFile.mkdirs();
+                    boolean created = cacheDirFile.mkdirs();
+                    if (!created) {
+                        Log.e(TAG, console + ": Failed to create cache directory: " + cacheDir);
+                        runOnUiThread(() -> {
+                            progressDialog.dismiss();
+                            Toast.makeText(this, "Error: Cannot create cache directory", Toast.LENGTH_SHORT).show();
+                        });
+                        return;
+                    }
                 }
+                Log.i(TAG, console + ": Cache directory ready: " + cacheDir);
+                Log.i(TAG, console + ": Cached ROM path (normalized): " + cachedRomPath);
                 
                 // Extraire archive (.zip, .7z comme Lemuroid)
                 java.io.File archiveFile = new java.io.File(zipPath);
@@ -2533,7 +2565,10 @@ public class GameDetailsActivity extends AppCompatActivity {
             // Les chemins de fichiers locaux supportent les caractères spéciaux (!, +, etc.) directement
             File directFile = new File(localPath);
             if (directFile.exists()) {
+                Log.i(TAG, "ROM file found via getFile(): " + directFile.getAbsolutePath());
                 return directFile.getAbsolutePath();
+            } else {
+                Log.w(TAG, "ROM file not found via getFile(): " + localPath);
             }
         }
 
@@ -2544,32 +2579,54 @@ public class GameDetailsActivity extends AppCompatActivity {
             String cleanPath = rawPath.startsWith("./") ? rawPath.substring(2) : rawPath;
             // Note: Les caractères spéciaux (!, +, etc.) sont supportés directement dans les chemins de fichiers Android
 
+            // Extraire le nom du fichier depuis cleanPath
+            int lastSlash = cleanPath.lastIndexOf('/');
+            String fileName = lastSlash >= 0 ? cleanPath.substring(lastSlash + 1) : cleanPath;
+            
+            // Méthode robuste: chercher le fichier en listant le répertoire
+            // Cela gère correctement les caractères spéciaux (!, +, &, etc.)
+            File consoleDirFile = new File(baseDir + consoleDir);
+            if (consoleDirFile.exists() && consoleDirFile.isDirectory()) {
+                File[] files = consoleDirFile.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        // Comparer le nom de fichier exact (gère les caractères spéciaux)
+                        if (f.isFile() && f.getName().equals(fileName)) {
+                            Log.i(TAG, "ROM file found by directory scan: " + f.getAbsolutePath());
+                            return f.getAbsolutePath();
+                        }
+                    }
+                }
+            }
+
             // Essayer avec le chemin complet
             File candidate = new File(baseDir + cleanPath);
             if (candidate.exists()) {
+                Log.i(TAG, "ROM file found via full path: " + candidate.getAbsolutePath());
                 return candidate.getAbsolutePath();
             }
 
             // Essayer avec le répertoire de console
             File remapped = new File(baseDir + consoleDir + "/" + cleanPath);
             if (remapped.exists()) {
+                Log.i(TAG, "ROM file found via console dir: " + remapped.getAbsolutePath());
                 return remapped.getAbsolutePath();
             }
             
-            // Extraire juste le nom du fichier et essayer dans le répertoire de console
-            int lastSlash = cleanPath.lastIndexOf('/');
-            String fileName = lastSlash >= 0 ? cleanPath.substring(lastSlash + 1) : cleanPath;
-            // Les noms de fichiers avec caractères spéciaux (!, +, etc.) sont supportés directement
+            // Essayer juste le nom de fichier dans le répertoire de console
             File finalCandidate = new File(baseDir + consoleDir + "/" + fileName);
             if (finalCandidate.exists()) {
+                Log.i(TAG, "ROM file found by filename only: " + finalCandidate.getAbsolutePath());
                 return finalCandidate.getAbsolutePath();
             }
             
             // Dernier recours: retourner le chemin même s'il n'existe pas
-        return baseDir + consoleDir + "/" + fileName;
+            Log.w(TAG, "ROM file not found, using fallback path: " + baseDir + consoleDir + "/" + fileName);
+            return baseDir + consoleDir + "/" + fileName;
         }
 
         // Si tout échoue, retourner un chemin par défaut
+        Log.e(TAG, "Could not resolve ROM path, using default");
         return baseDir + consoleDir + "/unknown.rom";
     }
 }

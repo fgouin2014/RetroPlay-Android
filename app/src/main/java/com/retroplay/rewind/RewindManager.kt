@@ -74,6 +74,14 @@ class RewindManager(
             return _isSupported.value
         }
         supportChecked = true
+        
+        // Vérifier que le core est chargé avant de tester
+        if (!retroView.isGameLoaded()) {
+            Log.d(TAG, "Skipping support check: game not loaded")
+            _isSupported.value = false
+            return false
+        }
+        
         val state = withContext(Dispatchers.IO) {
             try {
                 retroView.serializeState()
@@ -213,6 +221,12 @@ class RewindManager(
     }
 
     private suspend fun captureState() {
+        // Vérifier que le core est chargé avant de capturer
+        if (!retroView.isGameLoaded()) {
+            Log.d(TAG, "Skipping state capture: game not loaded")
+            return
+        }
+        
         val state = try {
             retroView.serializeState()
         } catch (e: Exception) {

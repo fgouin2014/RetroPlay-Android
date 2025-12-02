@@ -81,6 +81,39 @@ fun RetroArchSettingsDialog(
     onAspectRatioChanged: (String) -> Unit = {},
     onOpenAdvancedOverlaySettings: (() -> Unit)? = null  // Callback pour ouvrir Advanced Overlay Settings
 ) {
+    // Migration automatique depuis .cfg vers SharedPreferences (une seule fois)
+    LaunchedEffect(Unit) {
+        val migrated = prefs.getBoolean("emulation_settings_migrated_from_cfg", false)
+        if (!migrated) {
+            try {
+                val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+                val editor = prefs.edit()
+                
+                // Migrer VSync
+                if (!prefs.contains("emulation_video_vsync")) {
+                    editor.putBoolean("emulation_video_vsync", config.videoVsync)
+                }
+                
+                // Migrer Rewind
+                if (!prefs.contains("emulation_rewind_enable")) {
+                    editor.putBoolean("emulation_rewind_enable", config.rewindEnable)
+                }
+                
+                // Migrer Run-Ahead
+                if (!prefs.contains("emulation_runahead_enabled")) {
+                    editor.putBoolean("emulation_runahead_enabled", config.runAheadEnabled)
+                }
+                if (!prefs.contains("emulation_runahead_frames")) {
+                    editor.putInt("emulation_runahead_frames", config.runAheadFrames)
+                }
+                
+                editor.putBoolean("emulation_settings_migrated_from_cfg", true).apply()
+                android.util.Log.i("RetroArchSettingsDialog", "Migrated settings from .cfg to SharedPreferences")
+            } catch (e: Exception) {
+                android.util.Log.e("RetroArchSettingsDialog", "Migration failed: ${e.message}")
+            }
+        }
+    }
     val assetManager = remember { OverlayAssetManager(context) }
     val overlayPackages = remember { assetManager.getCompatibleOverlays(console) }
 
@@ -1599,9 +1632,13 @@ fun RetroArchSettingsDialog(
                                 TextButton(
                                     onClick = {
                                         // Reset Video Settings to defaults
+                                        prefs.edit()
+                                            .putBoolean("emulation_video_vsync", true)
+                                            .putString("emulation_video_aspect_ratio", "AUTO")
+                                            .apply()
+                                        // Synchroniser avec RetroPlayConfigManager pour compatibilité
                                         val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
                                         com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = true))
-                                        prefs.edit().putString("emulation_video_aspect_ratio", "AUTO").apply()
                                         onVsyncChanged(true)
                                     }
                                 ) {
@@ -1611,7 +1648,7 @@ fun RetroArchSettingsDialog(
                             
                             var vsyncEnabled by remember { 
                                 mutableStateOf(
-                                    com.retroplay.config.RetroPlayConfigManager.loadConfig().videoVsync
+                                    prefs.getBoolean("emulation_video_vsync", true)
                                 )
                             }
                             
@@ -1623,6 +1660,8 @@ fun RetroArchSettingsDialog(
                                 checked = vsyncEnabled,
                                 onCheckedChange = { 
                                     vsyncEnabled = it
+                                    prefs.edit().putBoolean("emulation_video_vsync", it).apply()
+                                    // Synchroniser avec RetroPlayConfigManager pour compatibilité
                                     val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
                                     com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = it))
                                     onVsyncChanged(it)
@@ -1820,7 +1859,7 @@ fun RetroArchSettingsDialog(
                             
                             var rewindEnabled by remember { 
                                 mutableStateOf(
-                                    com.retroplay.config.RetroPlayConfigManager.loadConfig().rewindEnable
+                                    prefs.getBoolean("emulation_rewind_enable", false)
                                 )
                             }
                             
@@ -1830,6 +1869,8 @@ fun RetroArchSettingsDialog(
                                 checked = rewindEnabled,
                                 onCheckedChange = { 
                                     rewindEnabled = it
+                                    prefs.edit().putBoolean("emulation_rewind_enable", it).apply()
+                                    // Synchroniser avec RetroPlayConfigManager pour compatibilité
                                     val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
                                     com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(rewindEnable = it))
                                     onRewindEnabledChanged(it)
@@ -1848,12 +1889,12 @@ fun RetroArchSettingsDialog(
                             // Run-Ahead Settings
                             var runAheadEnabled by remember { 
                                 mutableStateOf(
-                                    com.retroplay.config.RetroPlayConfigManager.loadConfig().runAheadEnabled
+                                    prefs.getBoolean("emulation_runahead_enabled", false)
                                 )
                             }
                             var runAheadFrames by remember { 
                                 mutableStateOf(
-                                    com.retroplay.config.RetroPlayConfigManager.loadConfig().runAheadFrames.toFloat()
+                                    prefs.getInt("emulation_runahead_frames", 1).toFloat()
                                 )
                             }
                             
@@ -1863,6 +1904,8 @@ fun RetroArchSettingsDialog(
                                 checked = runAheadEnabled,
                                 onCheckedChange = { 
                                     runAheadEnabled = it
+                                    prefs.edit().putBoolean("emulation_runahead_enabled", it).apply()
+                                    // Synchroniser avec RetroPlayConfigManager pour compatibilité
                                     val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
                                     com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(runAheadEnabled = it))
                                 }
@@ -1874,6 +1917,8 @@ fun RetroArchSettingsDialog(
                                     value = runAheadFrames,
                                     onValueChange = { 
                                         runAheadFrames = it
+                                        prefs.edit().putInt("emulation_runahead_frames", it.toInt()).apply()
+                                        // Synchroniser avec RetroPlayConfigManager pour compatibilité
                                         val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
                                         com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(runAheadFrames = it.toInt()))
                                     },

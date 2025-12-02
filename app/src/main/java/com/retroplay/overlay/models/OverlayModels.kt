@@ -547,8 +547,33 @@ object OverlayPreferenceManager {
             val globalKey = "overlay_${console}_${key}"
             
             return when {
-                prefs.contains(perOrientationKey) -> prefs.getInt(perOrientationKey, default)
-                prefs.contains(globalKey) -> prefs.getInt(globalKey, default)  // Fallback to global
+                prefs.contains(perOrientationKey) -> {
+                    try {
+                        prefs.getInt(perOrientationKey, default)
+                    } catch (e: ClassCastException) {
+                        // Migration: Float → Int (rare, mais possible)
+                        try {
+                            prefs.getFloat(perOrientationKey, default.toFloat()).toInt().also {
+                                prefs.edit().putInt(perOrientationKey, it).apply()
+                            }
+                        } catch (e2: Exception) {
+                            default
+                        }
+                    }
+                }
+                prefs.contains(globalKey) -> {
+                    try {
+                        prefs.getInt(globalKey, default)
+                    } catch (e: ClassCastException) {
+                        try {
+                            prefs.getFloat(globalKey, default.toFloat()).toInt().also {
+                                prefs.edit().putInt(globalKey, it).apply()
+                            }
+                        } catch (e2: Exception) {
+                            default
+                        }
+                    }
+                }
                 else -> default
             }
         }
@@ -558,8 +583,52 @@ object OverlayPreferenceManager {
             val globalKey = "overlay_${console}_${key}"
             
             return when {
-                prefs.contains(perOrientationKey) -> prefs.getFloat(perOrientationKey, default)
-                prefs.contains(globalKey) -> prefs.getFloat(globalKey, default)  // Fallback to global
+                prefs.contains(perOrientationKey) -> {
+                    try {
+                        prefs.getFloat(perOrientationKey, default)
+                    } catch (e: ClassCastException) {
+                        // Migration: Int → Float (ex: opacity 70 → 0.7f)
+                        // Pour opacity: convertir Int (0-100) → Float (0.0-1.0)
+                        // Pour aspectAdjust: Int (0) → Float (0.0f)
+                        try {
+                            val intValue = prefs.getInt(perOrientationKey, (default * 100).toInt())
+                            if (key == "opacity") {
+                                // opacity: 0-100 → 0.0-1.0
+                                (intValue.coerceIn(0, 100).toFloat() / 100f).also {
+                                    // Sauvegarder la valeur convertie pour éviter de reconvertir
+                                    prefs.edit().putFloat(perOrientationKey, it).apply()
+                                }
+                            } else {
+                                // aspectAdjust et autres: conversion directe
+                                intValue.toFloat().also {
+                                    prefs.edit().putFloat(perOrientationKey, it).apply()
+                                }
+                            }
+                        } catch (e2: Exception) {
+                            default
+                        }
+                    }
+                }
+                prefs.contains(globalKey) -> {
+                    try {
+                        prefs.getFloat(globalKey, default)
+                    } catch (e: ClassCastException) {
+                        try {
+                            val intValue = prefs.getInt(globalKey, (default * 100).toInt())
+                            if (key == "opacity") {
+                                (intValue.coerceIn(0, 100).toFloat() / 100f).also {
+                                    prefs.edit().putFloat(globalKey, it).apply()
+                                }
+                            } else {
+                                intValue.toFloat().also {
+                                    prefs.edit().putFloat(globalKey, it).apply()
+                                }
+                            }
+                        } catch (e2: Exception) {
+                            default
+                        }
+                    }
+                }
                 else -> default
             }
         }

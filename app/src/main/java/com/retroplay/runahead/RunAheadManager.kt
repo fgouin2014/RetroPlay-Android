@@ -110,6 +110,15 @@ class RunAheadManager(
             return initialized && supported
         }
         lastInitializationAttempt = now
+        
+        // Vérifier que le core est chargé avant d'initialiser
+        if (!retroView.isGameLoaded()) {
+            Log.d(TAG, "Skipping run-ahead initialization: game not loaded")
+            initialized = false
+            supported = false
+            return false
+        }
+        
         return try {
             val state = retroView.serializeState()
             if (state.isEmpty()) {
@@ -191,6 +200,13 @@ class RunAheadManager(
                     retroView.audioEnabled = audioBefore
                 }
                 if (index == 0) {
+                    // Vérifier que le core est chargé avant de capturer
+                    if (!retroView.isGameLoaded()) {
+                        Log.w(TAG, "Run-ahead: game not loaded, disabling feature")
+                        supported = false
+                        return true // avoid stepping twice
+                    }
+                    
                     val state = retroView.serializeState()
                     if (state.isEmpty()) {
                         Log.w(TAG, "Run-ahead state capture returned empty buffer, disabling feature")

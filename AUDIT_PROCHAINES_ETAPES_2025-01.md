@@ -9,10 +9,10 @@
 ## 📊 RÉSUMÉ EXÉCUTIF
 
 ### ✅ Complétions Récentes
-- ✅ **Suppression de jeux du gamelist** - Bouton DELETE dans Edit Game Metadata
-- ✅ **Auto-hide QuickActionsBar** - Chevron pour afficher/masquer
-- ✅ **Zapper Native Mode** - Intégration complète avec correction viewport
-- ✅ **EmulationSettingsDialog** - Dialog complet 70+ options
+- ✅ **Suppression de jeux du gamelist** - Bouton DELETE dans Edit Game Metadata avec rafraîchissement automatique
+- ✅ **Auto-hide QuickActionsBar** - Chevron pour afficher/masquer (Native + RetroArch)
+- ✅ **Zapper Native Mode** - Intégration complète avec correction viewport et support Famicom/Chiller
+- ✅ **EmulationSettingsDialog** - Dialog complet 70+ options avec catégorisation
 - ✅ **Overlays RetroArch** - 7/8 phases complètes (Phase 8: Sync ChatAI en attente)
 
 ### ⏳ Tâches Restantes
@@ -20,6 +20,7 @@
 - **P4 (Long Terme):** 3 items
 - **Phase 8 Overlays:** Sync ChatAI
 - **Améliorations UX:** Plusieurs options
+- **N64 Configuration:** Corrections nécessaires
 
 ---
 
@@ -75,20 +76,31 @@
 - **Temps estimé:** 2-3 semaines
 
 #### 4. Support Run-Ahead
-- **Complexité:** Élevée (1-2 semaines)
-- **Impact:** Moyen
-- **Status:** ⏳ Pending (quand APIs disponibles)
+- **Complexité:** Élevée (30-40h pour fork, 15-20h pour "Best Effort")
+- **Impact:** Moyen-Haut (réduction latence input)
+- **Status:** ⏳ Pending (APIs manquantes dans LibretroDroid)
 - **Description:**
   - Support du Run-Ahead pour réduire la latence d'input
   - Détection support Run-Ahead par core
   - Configuration frames Run-Ahead (1-8)
   - Activation/désactivation
   - Gestion mémoire
-- **Note:** Nécessite que LibretroDroid expose les APIs Run-Ahead
+- **APIs Manquantes dans LibretroDroid:**
+  - ❌ Hook pre-frame (intercepter avant `LibretroDroid.step()`)
+  - ❌ Disable audio/video (suspendre pendant ahead frames)
+  - ❌ Contrôle du game loop timing
+- **Options Disponibles:**
+  - **A. Fork LibretroDroid** (30-40h, 100% bénéfice, maintenance élevée)
+  - **B. Implémentation "Best Effort"** (15-20h, 50-70% bénéfice, timing imparfait)
+  - **C. PR Upstream** (40-60h, 100% bénéfice, bénéfice communauté)
 - **Fichiers à modifier:**
-  - `RetroArchEmulatorActivity.kt` - Configuration Run-Ahead (TODO lignes 307, 1917)
+  - `RetroArchEmulatorActivity.kt` - Configuration Run-Ahead (TODO lignes 315, 2502)
   - `CoreVariableManager.kt` - Variables Run-Ahead
-- **Temps estimé:** 1-2 semaines (quand APIs disponibles)
+  - `libretrodroid/` - Si fork (ajout hooks)
+- **Temps estimé:** 
+  - Fork: 30-40h initial + maintenance
+  - Best Effort: 15-20h
+  - PR Upstream: 40-60h
 
 ---
 
@@ -112,6 +124,36 @@
    - Documentation mise à jour
 
 **Temps estimé:** 1 semaine
+
+---
+
+## 🔧 CORRECTIONS N64 (Priorité Moyenne)
+
+### Problèmes Identifiés
+
+1. **Incohérence SharedPreferences**
+   - `ConsoleConfigActivity` utilise `console_config`
+   - Activités Compose utilisent `PreferenceManager.getDefaultSharedPreferences()`
+   - **Impact:** Settings N64 non synchronisés
+
+2. **Mapping valeurs spinner incorrect**
+   - Positions spinner ne correspondent pas aux IDs Libretro
+   - **Impact:** Extensions N64 mal configurées
+
+3. **Application extensions N64 non fonctionnelle**
+   - Valeurs sauvegardées mais pas appliquées
+   - **Impact:** Controller Pak/Rumble Pak/Transfer Pak ne fonctionnent pas
+
+4. **Options core N64 non appliquées**
+   - Resolution, Anti-Aliasing, Bilinear non appliquées
+   - **Impact:** Configuration N64 incomplète
+
+**Fichiers concernés:**
+- `ConsoleConfigActivity.java` (lignes 313-317, 391-558)
+- `NativeComposeEmulatorActivity.kt` (TODO ligne 1148)
+- `activity_console_config.xml`
+
+**Temps estimé:** 1-2 jours
 
 ---
 
@@ -155,13 +197,14 @@
 
 1. **RetroArchSettingsDialog**
    - Dialog spécifique RetroArch pour configuration overlays
-   - **Fichier:** `RetroArchEmulatorActivity.kt` (TODO ligne 4466)
+   - **Fichier:** `RetroArchEmulatorActivity.kt` (TODO ligne 5033)
    - **Temps estimé:** 2-3 jours
 
-2. **N64 Extensions Configuration**
+2. **N64 Extensions Configuration** ⚠️ (Correction nécessaire)
    - Configurer les extensions contrôleur N64
    - **Fichier:** `NativeComposeEmulatorActivity.kt` (TODO ligne 1148)
-   - **Temps estimé:** 1-2 jours
+   - **Note:** Fait partie des corrections N64 ci-dessus
+   - **Temps estimé:** Inclus dans corrections N64
 
 3. **Intégration Autoconfig**
    - Intégrer avec input.cpp pour appliquer les mappings
@@ -173,12 +216,12 @@
 ## 📋 TODOS DANS LE CODE
 
 ### RetroArchEmulatorActivity.kt
-- **Ligne 313:** `// TODO: Apply config to emulator once APIs are available`
-- **Ligne 2041:** `// TODO: Apply config to running emulator (requires Run-Ahead/Rewind APIs)`
-- **Ligne 4466:** `// TODO: Create RetroArchSettingsDialog for RetroArch-specific overlay configuration`
+- **Ligne 315:** `// TODO: Apply config to emulator once APIs are available`
+- **Ligne 2502:** `// TODO: Apply config to running emulator (requires Run-Ahead/Rewind APIs)`
+- **Ligne 5033:** `// TODO: Create RetroArchSettingsDialog for RetroArch-specific overlay configuration`
 
 ### NativeComposeEmulatorActivity.kt
-- **Ligne 1148:** `// TODO: Configurer les extensions contrôleur N64`
+- **Ligne 1148:** `// TODO: Configurer les extensions contrôleur N64` ⚠️ (Correction nécessaire)
 
 ### OverlayModels.kt
 - **Ligne 528:** `// TODO P3: Configuration per-orientation - Les settings avancés (dpadDiagonalSensitivity, opacity, etc.)`
@@ -187,24 +230,31 @@
 - **Ligne 454:** `// TODO: Intégrer avec input.cpp pour appliquer les mappings`
 - **Ligne 464:** `// TODO: Intégrer avec input.cpp pour appliquer les mappings`
 
+### ConsoleConfigActivity.java
+- **Lignes 313-317:** Chargement settings N64 (incohérence SharedPreferences)
+- **Lignes 391-558:** Mapping valeurs spinner (incorrect)
+
 ---
 
 ## 🎯 RECOMMANDATIONS PAR PRIORITÉ
 
 ### Immédiat (Court Terme - 1-2 semaines)
 
-1. **Phase 8: Sync ChatAI** ⭐
+1. **Corrections N64** ⭐ (Priorité)
+   - Fix incohérence SharedPreferences
+   - Fix mapping valeurs spinner
+   - Fix application extensions N64
+   - Fix options core N64
+   - **Impact:** Élevé (support N64 complet)
+
+2. **Phase 8: Sync ChatAI** ⭐
    - Port overlays vers ChatAI-Android
    - Tests et validation
    - **Impact:** Élevé (complétion feature majeure)
 
-2. **Configuration per-orientation overlays**
+3. **Configuration per-orientation overlays**
    - Compléter implémentation partielle
    - **Impact:** Moyen (améliore UX)
-
-3. **Support souris relative** (si nécessaire)
-   - Implémenter si jeux spécifiques le nécessitent
-   - **Impact:** Moyen (jeux nécessitant mouvement relatif)
 
 ### Moyen Terme (1-2 mois)
 
@@ -216,23 +266,29 @@
    - Aperçu avant sélection
    - **Impact:** Moyen (améliore UX)
 
-6. **N64 Extensions Configuration**
-   - Configurer extensions contrôleur
-   - **Impact:** Moyen (support N64 complet)
+6. **Intégration Autoconfig**
+   - Intégrer avec input.cpp
+   - **Impact:** Moyen (améliore support contrôleurs)
+
+7. **Support souris relative** (si nécessaire)
+   - Implémenter si jeux spécifiques le nécessitent
+   - **Impact:** Moyen (jeux nécessitant mouvement relatif)
 
 ### Long Terme (Selon besoins)
 
-7. **Custom Overlays Creator**
+8. **Custom Overlays Creator**
    - Outil création overlays
    - **Impact:** Moyen (outil création)
 
-8. **RetroAchievements Integration**
+9. **RetroAchievements Integration**
    - Features sociales
    - **Impact:** Élevé (features sociales)
 
-9. **Support Run-Ahead**
-   - Quand APIs LibretroDroid disponibles
-   - **Impact:** Moyen (réduction latence)
+10. **Support Run-Ahead**
+    - **Option A:** Fork LibretroDroid (30-40h, 100% bénéfice)
+    - **Option B:** Implémentation "Best Effort" (15-20h, 50-70% bénéfice)
+    - **Option C:** PR Upstream (40-60h, 100% bénéfice + communauté)
+    - **Impact:** Moyen-Haut (réduction latence)
 
 ---
 
@@ -256,24 +312,30 @@
 - **Status:** Production Ready
 - **Phase 8:** En attente (Sync ChatAI)
 
+### Corrections Nécessaires
+- **N64 Configuration:** 4 problèmes identifiés
+- **Priorité:** Moyenne-Élevée
+- **Temps estimé:** 1-2 jours
+
 ---
 
 ## 🔄 PROCHAINES ÉTAPES RECOMMANDÉES
 
-### Option 1: Compléter Overlays (Recommandé)
-1. Phase 8: Sync ChatAI (1 semaine)
-2. Configuration per-orientation (2-4 heures)
-3. Preview Overlay (1-2 jours)
+### Option 1: Corrections + Complétion Overlays (Recommandé)
+1. Corrections N64 (1-2 jours) ⭐
+2. Phase 8: Sync ChatAI (1 semaine)
+3. Configuration per-orientation (2-4 heures)
+4. Preview Overlay (1-2 jours)
 
 ### Option 2: Améliorations UX
 1. RetroArchSettingsDialog (2-3 jours)
-2. N64 Extensions Configuration (1-2 jours)
-3. Intégration Autoconfig (2-3 jours)
+2. Intégration Autoconfig (2-3 jours)
+3. Support souris relative (2-4 heures, si nécessaire)
 
 ### Option 3: Features Avancées
 1. Custom Overlays Creator (2-3 semaines)
 2. RetroAchievements Integration (2-3 semaines)
-3. Support Run-Ahead (1-2 semaines, quand APIs disponibles)
+3. Support Run-Ahead (selon option choisie)
 
 ### Option 4: Tests et Validation
 1. Tests EmulationSettingsDialog avec différents cores
@@ -286,27 +348,34 @@
 
 ### Questions à considérer
 
-1. **Phase 8 Overlays:**
+1. **Corrections N64:**
+   - Priorité immédiate ou peut attendre?
+   - Impact sur utilisateurs N64?
+
+2. **Phase 8 Overlays:**
    - Quand souhaitez-vous faire le port vers ChatAI?
    - Y a-t-il des différences d'architecture à considérer?
 
-2. **Support souris relative:**
+3. **Support souris relative:**
    - Y a-t-il des jeux spécifiques qui nécessitent ce support?
    - Ou peut-on le reporter?
 
-3. **Custom Overlays Creator:**
+4. **Custom Overlays Creator:**
    - Est-ce une priorité pour les utilisateurs?
    - Ou peut-on le reporter?
 
-4. **RetroAchievements:**
+5. **RetroAchievements:**
    - Intérêt pour les features sociales?
    - Priorité élevée ou peut attendre?
 
-5. **Run-Ahead:**
-   - Les APIs LibretroDroid sont-elles disponibles?
-   - Ou attendre leur disponibilité?
+6. **Run-Ahead:**
+   - Quelle option préférez-vous?
+     - **A. Fork LibretroDroid** (effort élevé, résultat parfait)
+     - **B. Best Effort** (effort moyen, résultat partiel)
+     - **C. PR Upstream** (effort très élevé, bénéfice communauté)
+   - Priorité immédiate ou peut attendre?
 
-6. **Améliorations UX:**
+7. **Améliorations UX:**
    - Quelles améliorations sont les plus importantes pour vous?
    - Configuration per-orientation vs Preview vs Éditeur?
 
@@ -317,9 +386,25 @@
 - La majorité des tâches critiques (P0/P1/P2) sont complétées
 - Les overlays RetroArch sont **Production Ready** (7/8 phases)
 - Les tâches restantes sont principalement des optimisations (P3) et des features avancées (P4)
+- **Corrections N64 identifiées** - Priorité recommandée
 - Plusieurs améliorations UX sont optionnelles et peuvent être développées selon les priorités
+- **Run-Ahead nécessite décision** sur l'approche (Fork vs Best Effort vs PR)
+
+---
+
+## 🔗 RÉFÉRENCES
+
+### Documents Clés
+- `RUNAHEAD_RESEARCH_COMPLETE.md` - Analyse complète Run-Ahead
+- `AUDIT_CONSOLE_CONFIG_N64.md` - Audit configuration N64
+- `ETAT_ACTUEL_OVERLAYS_RETROARCH.md` - Status overlays
+- `TACHES_RESTANTES_RESUME.md` - Résumé tâches restantes
+
+### Code Sources
+- `c:\repos\RetroArch-master\` - Source de vérité RetroArch
+- `c:\repos\common-overlays-master\` - Overlays officiels
+- `libretrodroid/` - APIs LibretroDroid (limitations identifiées)
 
 ---
 
 **Dernière mise à jour:** 2025-01-XX
-

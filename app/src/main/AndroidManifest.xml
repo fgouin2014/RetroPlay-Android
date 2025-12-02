@@ -145,10 +145,11 @@
                 android:theme="@android:style/Theme.Translucent.NoTitleBar" />
                     
                 <!-- WebServer Service (port 7777) pour EmulatorJS -->
+                <!-- ⭐ FIX Android 12+: Support multiple foreground service types -->
                 <service
                     android:name=".WebServerService"
                     android:enabled="true"
                     android:exported="false"
-                    android:foregroundServiceType="dataSync" />
+                    android:foregroundServiceType="dataSync|specialUse" />
     </application>
 </manifest>

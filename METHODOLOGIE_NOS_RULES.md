@@ -405,6 +405,35 @@ Pour tout nouveau feature:
 
 ---
 
+## 🔍 Audit "Bytes by Bytes" - Parsing
+
+**NOUVELLE ÉTAPE CRITIQUE:** Avant d'implémenter, faire un audit "bytes by bytes" du parsing:
+
+- [ ] **1. Comparer format tokenize**
+  - Vérifier le séparateur exact (ex: `", "` vs `","`)
+  - Vérifier le traitement des espaces
+  - Comparer avec `strtok_r()` ou équivalent RetroArch
+
+- [ ] **2. Vérifier TOUS les paramètres parsés**
+  - Lister tous les paramètres dans RetroArch
+  - Vérifier que notre parser lit les mêmes
+  - Vérifier les valeurs par défaut
+
+- [ ] **3. Comparer conversions**
+  - Pixel → normalized (width_mod, height_mod)
+  - Formats de nombres (float, int, bool)
+  - Encodage des strings
+
+- [ ] **4. Vérifier edge cases**
+  - Valeurs manquantes
+  - Formats invalides
+  - Chemins relatifs (#include)
+  - Résolution des références (next_target)
+
+**Document de référence:** `AUDIT_PARSING_BYTES_BY_BYTES.md`
+
+---
+
 ## 🏆 Conclusion
 
 **"Nos Rules"** = NOS règles, basées sur une compréhension complète des specs officielles

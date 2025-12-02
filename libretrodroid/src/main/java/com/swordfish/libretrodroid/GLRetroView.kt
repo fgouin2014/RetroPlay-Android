@@ -175,8 +175,22 @@ class GLRetroView(
     }
 
     fun serializeState(): ByteArray = runOnGLThread {
-        LibretroDroid.serializeState()
+        if (!isGameLoaded || isAborted) {
+            Log.w("GLRetroView", "serializeState called but game not loaded or aborted (isGameLoaded=$isGameLoaded, isAborted=$isAborted)")
+            return@runOnGLThread ByteArray(0)
+        }
+        try {
+            LibretroDroid.serializeState()
+        } catch (e: Exception) {
+            Log.e("GLRetroView", "serializeState failed: ${e.message}", e)
+            ByteArray(0)
+        }
     }
+    
+    /**
+     * Check if game is loaded and ready for state operations
+     */
+    fun isGameLoaded(): Boolean = isGameLoaded && !isAborted
     fun setCheat(index : Int, enable : Boolean, code : String) = runOnGLThread {
         LibretroDroid.setCheat(index, enable, code)
     }

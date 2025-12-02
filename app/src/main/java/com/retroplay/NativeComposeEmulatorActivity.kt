@@ -146,6 +146,21 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     private var isZapperGame: Boolean = false
     private var zapperPort: Int = 1  // Port par défaut: 1 (index) = Port 2 NES. 0 = Port 1 pour Chiller
     
+    // P3: Quick tap detection - Compatible RetroArch android_check_quick_tap()
+    // Stocke le timestamp du dernier tap pour détecter les taps rapides (< 200ms)
+    private var lastZapperTapTime: Long = 0
+    private var quickTapResetHandler: android.os.Handler? = null
+    private val quickTapResetRunnable = Runnable {
+        // Reset après 200ms si aucun nouveau tap (compatible RetroArch ligne 809-811)
+        if (lastZapperTapTime > 0) {
+            val timeSinceLastTap = android.os.SystemClock.elapsedRealtime() - lastZapperTapTime
+            if (timeSinceLastTap >= 200) {
+                lastZapperTapTime = 0
+                Log.d(TAG, "[ZAPPER] Quick tap timer reset (>200ms)")
+            }
+        }
+    }
+    
     // État pour mode d'affichage du crosshair Zapper (MutableState pour reactivity Compose)
     private val crosshairMode = mutableStateOf(CrosshairMode.RETROPLAY_ONLY)
     
@@ -180,6 +195,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     private val currentDiskState = mutableIntStateOf(0)
     
     private var gameCRC: String? = null
+    
+    // Flags pour éviter de configurer plusieurs fois
+    private var controllerConfigurationDone = false
+    private var n64ExtensionsConfigurationDone = false
     
     /**
      * Termine l'activité de manière sécurisée.
@@ -346,6 +365,196 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Configure les contrôleurs après que le jeu soit chargé
+     * Appelé depuis FrameRendered event (timing optimal)
+     */
+    private fun configureControllersAfterGameLoaded() {
+        try {
+            // Vérifier si le jeu a échoué à charger
+            if (showCoreErrorDialog.value) {
+                Log.w(TAG, "[CONTROLLER] Game failed to load, skipping controller configuration")
+                return
+            }
+            
+            // Vérifier que retroView est dans un état valide
+            try {
+                val testControllers = retroView.getControllers()
+                if (testControllers.isEmpty()) {
+                    Log.w(TAG, "[CONTROLLER] No controllers available, game may not be loaded yet")
+                    return
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "[CONTROLLER] Cannot access controllers, game not loaded: ${e.message}")
+                return
+            }
+            
+            // Configurer le type de contrôleur pour PSX (DualShock pour analog sticks)
+            if (console.equals("psx", ignoreCase = true)) {
+                try {
+                    val controllers = retroView.getControllers()
+                    Log.i(TAG, "[PSX] Available controllers: ${controllers.getOrNull(0)?.map { "id=${it.id} desc='${it.description}'" }}")
+                    
+                    if (controllers.isNotEmpty() && controllers[0].isNotEmpty()) {
+                        // Chercher le contrôleur DualShock (essayer "dualshock" en priorité)
+                        val dualshock = controllers[0].firstOrNull { 
+                            it.description?.contains("dualshock", ignoreCase = true) == true
+                        } ?: controllers[0].firstOrNull {
+                            it.description?.contains("analog", ignoreCase = true) == true
+                        }
+                        
+                        if (dualshock != null) {
+                            try {
+                                retroView.setControllerType(0, dualshock.id)
+                                Log.i(TAG, "[PSX] Controller type set to DualShock (id=${dualshock.id}, desc='${dualshock.description}')")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "[PSX] Failed to set DualShock controller type: ${e.message}")
+                            }
+                        } else {
+                            Log.w(TAG, "[PSX] DualShock controller not found. Using default.")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "[PSX] Error configuring controller type", e)
+                }
+            }
+            
+            // Configuration des ports contrôleurs
+            // 1. Vérifier d'abord s'il y a une configuration manuelle (override détection auto)
+            // 2. Sinon, utiliser la détection automatique (Zapper, etc.)
+            var hasManualConfig = false
+            
+            // Lire depuis console_config (comme ConsoleConfigActivity) OU compose_gamepad_settings (comme RetroArchSettingsDialog)
+            val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+            val composePrefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
+            
+            // Vérifier chaque port (0-3) pour une configuration manuelle
+            for (port in 0..3) {
+                // Priorité: console_config (ConsoleConfigActivity) puis compose_gamepad_settings (RetroArchSettingsDialog)
+                var manualControllerType = consoleConfigPrefs.getInt("controller_port_${console}_port${port}", -1)
+                if (manualControllerType == -1) {
+                    manualControllerType = composePrefs.getInt("controller_port_${console}_port${port}", -1)
+                }
+                
+                if (manualControllerType != -1) {
+                    // Configuration manuelle trouvée pour ce port
+                    hasManualConfig = true
+                    try {
+                        retroView.setControllerType(port, manualControllerType)
+                        val controllerName = when (manualControllerType) {
+                            0 -> "None"
+                            1 -> "Joypad"
+                            4 -> "Lightgun"
+                            6 -> "Pointer"
+                            258 -> "Zapper"
+                            else -> "Type $manualControllerType"
+                        }
+                        Log.i(TAG, "[CONTROLLER] Port ${port + 1} manually configured as: $controllerName (id=$manualControllerType)")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[CONTROLLER] Failed to set controller type for port ${port + 1}: ${e.message} - Continuing with other ports")
+                        // ✅ CONTINUER au lieu de return (amélioration gestion erreurs)
+                    }
+                }
+            }
+            
+            // Si pas de configuration manuelle, utiliser la détection automatique
+            if (!hasManualConfig && isZapperGame) {
+                // Configuration automatique pour les jeux Zapper
+                // CRITIQUE: FCEUmm nécessite RETRO_DEVICE_ZAPPER (258) pour appeler get_mouse_input()
+                // Mais ensuite, en mode RetroPointer (touchscreen), get_mouse_input() lit RETRO_DEVICE_POINTER
+                // Donc on DOIT configurer RETRO_DEVICE_ZAPPER (258) pour que get_mouse_input() soit appelé!
+                // Chiller utilise le port 0 (Port 1), les autres jeux utilisent le port 1 (Port 2)
+                try {
+                    retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
+                    Log.i(TAG, "[ZAPPER] Auto-detected: Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
+                    Log.i(TAG, "[ZAPPER] FCEUmm will call get_mouse_input() which reads RETRO_DEVICE_POINTER in RetroPointer mode")
+                    
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@NativeComposeEmulatorActivity,
+                            "Zapper detected! Port ${zapperPort + 1} (index $zapperPort)\nTouch game area to shoot",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "[ZAPPER] Failed to set Zapper controller type: ${e.message}")
+                }
+            } else if (hasManualConfig) {
+                Log.i(TAG, "[CONTROLLER] Manual port configuration applied (auto-detection overridden)")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[CONTROLLER] Error in configureControllersAfterGameLoaded: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * Configure les extensions N64 après que les contrôleurs soient configurés
+     * Appelé depuis FrameRendered event (timing optimal)
+     */
+    private fun configureN64ExtensionsAfterGameLoaded() {
+        try {
+            Log.i(TAG, "[N64] Configuring controller extensions...")
+
+            // Charger les paramètres depuis SharedPreferences (console_config, comme ConsoleConfigActivity)
+            val prefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+            val prefix = "n64_"
+
+            // Mapping des positions spinner vers les valeurs Libretro :
+            // Spinner position 0 = "Controller Pak" → Libretro ID 1
+            // Spinner position 1 = "Rumble Pak" → Libretro ID 2
+            // Spinner position 2 = "Transfer Pak" → Libretro ID 5
+            val pakValues = intArrayOf(1, 2, 5)
+
+            // Collecter les extensions configurées pour logging
+            val configuredExtensions = mutableListOf<Pair<Int, String>>()
+            
+            // Configurer les extensions pour chaque port (0-3)
+            for (port in 0..3) {  // 4 ports maximum pour N64
+                try {
+                    // pakPosition: 0 = Controller Pak, 1 = Rumble Pak, 2 = Transfer Pak (positions spinner)
+                    val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: 0 = Controller Pak
+                    
+                    // Vérifier que pakPosition est valide (0-2)
+                    if (pakPosition >= 0 && pakPosition < pakValues.size) {
+                        val pakValue = pakValues[pakPosition] // ID Libretro (1, 2, ou 5)
+
+                        val pakName = when (pakPosition) {
+                            0 -> "Controller Pak"
+                            1 -> "Rumble Pak"
+                            2 -> "Transfer Pak"
+                            else -> "Unknown"
+                        }
+                        
+                        // Configurer l'extension via setControllerType()
+                        try {
+                            retroView.setControllerType(port, pakValue)
+                            Log.i(TAG, "[N64] Extension configured for port ${port + 1}: $pakName (id=$pakValue) via setControllerType()")
+                            configuredExtensions.add(Pair(port + 1, pakName))
+                        } catch (e: Exception) {
+                            Log.w(TAG, "[N64] Failed to set extension for port ${port + 1} via setControllerType(): ${e.message}")
+                            Log.w(TAG, "[N64] Port ${port + 1}: $pakName (id=$pakValue) - configuration failed, continuing with other ports")
+                            // ✅ CONTINUER au lieu de return (amélioration gestion erreurs)
+                        }
+                    } else {
+                        Log.d(TAG, "[N64] Port ${port + 1}: Invalid pak position ($pakPosition), skipping")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "[N64] Could not configure extension for port ${port + 1}: ${e.message} - Continuing")
+                    // ✅ CONTINUER au lieu de return (amélioration gestion erreurs)
+                }
+            }
+            
+            // Log récapitulatif
+            if (configuredExtensions.isNotEmpty()) {
+                Log.i(TAG, "[N64] Successfully configured ${configuredExtensions.size} extensions: ${configuredExtensions.joinToString { "Port ${it.first}=${it.second}" }}")
+            } else {
+                Log.i(TAG, "[N64] No extensions configured")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[N64] Error configuring controller extensions: ${e.message}", e)
+        }
+    }
+    
     private fun toggleQuickActionsBar() {
         quickActionsBarVisible.value = !quickActionsBarVisible.value
         Log.i(TAG, "[QUICK_ACTIONS_BAR_NATIVE] ${if (quickActionsBarVisible.value) "VISIBLE" else "HIDDEN"}")
@@ -529,6 +738,9 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
      * 
      * Utilise RETRO_DEVICE_POINTER (6) pour envoyer coordonnées exactes au core FCEUmm
      * 
+     * P3: Quick tap detection - Détecte les taps rapides (< 200ms) pour améliorer réactivité
+     * Compatible RetroArch android_check_quick_tap() (lignes 805-815)
+     * 
      * @param event Touch event
      * @param gameViewBounds Bounds exacts du GLRetroView (zone de jeu)
      * @param triggerOnTouch Si true, tir instantané (DOWN+UP), sinon hold-release
@@ -635,6 +847,21 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 )
                 
                 if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                    // P3: Quick tap detection - Compatible RetroArch android_check_quick_tap() (lignes 805-815)
+                    val currentTime = android.os.SystemClock.elapsedRealtime()
+                    val timeSinceLastTap = if (lastZapperTapTime > 0) currentTime - lastZapperTapTime else Long.MAX_VALUE
+                    val isQuickTap = timeSinceLastTap < 200
+                    lastZapperTapTime = currentTime
+                    
+                    // Reset le handler précédent et programmer un nouveau reset après 200ms
+                    quickTapResetHandler?.removeCallbacks(quickTapResetRunnable)
+                    quickTapResetHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                    quickTapResetHandler?.postDelayed(quickTapResetRunnable, 200)
+                    
+                    if (isQuickTap && timeSinceLastTap != Long.MAX_VALUE) {
+                        Log.d(TAG, "[ZAPPER] Quick tap detected (${timeSinceLastTap}ms < 200ms)")
+                    }
+                    
                     Log.i(TAG, "[ZAPPER] ===== TOUCH DOWN =====")
                     Log.i(TAG, "[ZAPPER] Screen touch: (${touchX.toInt()}, ${touchY.toInt()})")
                     Log.i(TAG, "[ZAPPER] Bounds: left=${bounds.left.toInt()}, top=${bounds.top.toInt()}, width=${bounds.width.toInt()}, height=${bounds.height.toInt()}")
@@ -650,15 +877,30 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     // Mais pour être sûr, on envoie aussi MOUSE_BUTTON_LEFT comme RetroArchEmulatorActivity
                     // Cela fonctionne en double: POINTER_PRESSED ET MOUSE_BUTTON_LEFT
                     if (triggerOnTouch) {
-                        Log.i(TAG, "[ZAPPER] Sending MOUSE_BUTTON_LEFT pressed on port ${zapperPort + 1} (triggerOnTouch=true)")
+                        Log.i(TAG, "[ZAPPER] Sending MOUSE_BUTTON_LEFT pressed on port ${zapperPort + 1} (triggerOnTouch=true${if (isQuickTap) ", quick tap" else ""})")
+                        
+                        // Optimisation quick tap: Pulse réduit pour meilleure réactivité
+                        val pulseDuration = if (isQuickTap) 8 else 16  // 8ms pour quick taps, 16ms normal (1 frame)
+                        
                         retroView.sendMouseButton(
                             com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
                             true,  // Pressed
                             zapperPort  // Port configuré selon le jeu
                         )
+                        
+                        // Maintenir le trigger pendant pulseDuration pour meilleure détection
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            retroView.sendMouseButton(
+                                com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
+                                false,  // Released
+                                zapperPort
+                            )
+                            Log.d(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT released after ${pulseDuration}ms pulse${if (isQuickTap) " (quick tap optimized)" else ""}")
+                        }, pulseDuration.toLong())
+                        
                         Log.i(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT sent on port ${zapperPort + 1}")
                     } else {
-                        Log.i(TAG, "[ZAPPER] triggerOnTouch=false, will fire on ACTION_UP")
+                        Log.i(TAG, "[ZAPPER] triggerOnTouch=false, will fire on ACTION_UP${if (isQuickTap) ", quick tap" else ""}")
                     }
                     Log.i(TAG, "[ZAPPER] =========================")
                 }
@@ -717,6 +959,21 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             if (variables.isNotEmpty()) {
                 val firstKey = variables.firstOrNull()?.key ?: ""
                 Log.i(TAG, "First variable key: $firstKey (expected prefix: $expectedCoreId)")
+                
+                // Pour Mupen64Plus: Log toutes les variables disponibles pour découverte
+                if (expectedCoreId.contains("mupen64plus", ignoreCase = true)) {
+                    Log.d(TAG, "[N64] Mupen64Plus - Available variables for discovery:")
+                    variables.filter { it.key?.contains("mupen64plus", ignoreCase = true) == true || 
+                                     it.key?.contains("rdp", ignoreCase = true) == true ||
+                                     it.key?.contains("gfx", ignoreCase = true) == true ||
+                                     it.key?.contains("resolution", ignoreCase = true) == true ||
+                                     it.key?.contains("msaa", ignoreCase = true) == true ||
+                                     it.key?.contains("bilinear", ignoreCase = true) == true }
+                        .take(20)  // Limiter à 20 pour éviter spam
+                        .forEach { variable ->
+                            Log.d(TAG, "[N64]   ${variable.key} = ${variable.value} (desc: ${variable.description})")
+                        }
+                }
             }
             
             // Parser les variables
@@ -954,12 +1211,37 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                             Variable("parallel-n64-bilinear_mode", if (bilinear) "1" else "0")
                         )
                     } else if (isMupen64Plus) {
-                        // Mupen64Plus Next variables (plus limitées que ParaLLEl N64)
-                        // Mupen64Plus a moins d'options configurables via variables
-                        Log.i(TAG, "[N64] Mupen64Plus Next detected - limited core options available")
-                        // Pour l'instant, pas de variables spécifiques connues pour Mupen64Plus
-                        // On pourrait ajouter des variables si elles sont découvertes
-                        emptyArray<Variable>()
+                        // Mupen64Plus Next variables
+                        // Note: Mupen64Plus utilise des noms de variables différents de ParaLLEl N64
+                        // Variables connues basées sur documentation RetroArch et tests
+                        Log.i(TAG, "[N64] Mupen64Plus Next detected - applying core options")
+                        
+                        // Mupen64Plus utilise des variables avec préfixe "mupen64plus-"
+                        // Mapping similaire à ParaLLEl N64 mais avec noms différents
+                        arrayOf(
+                            // Resolution: Mupen64Plus utilise "mupen64plus-rdp-resolution" ou "mupen64plus-gfx-resolution"
+                            // Essayer les deux formats possibles
+                            Variable("mupen64plus-rdp-resolution", when (resolution) {
+                                0 -> "320x240"
+                                1 -> "640x480"
+                                2 -> "960x720"
+                                3 -> "1280x960"
+                                else -> "320x240"
+                            }),
+                            // Anti-aliasing: Mupen64Plus utilise MSAA (Multi-Sample Anti-Aliasing)
+                            // Valeurs: 0 = disabled, 2 = 2x, 4 = 4x, 8 = 8x
+                            Variable("mupen64plus-rdp-msaa", when (antialiasing) {
+                                0 -> "0"  // Disabled
+                                1 -> "2"  // 2x MSAA
+                                2 -> "4"  // 4x MSAA
+                                3 -> "8"  // 8x MSAA
+                                else -> "0"
+                            }),
+                            // Bilinear filtering: 0 = disabled, 1 = enabled
+                            Variable("mupen64plus-rdp-bilinear", if (bilinear) "1" else "0")
+                        ).also {
+                            Log.i(TAG, "[N64] Mupen64Plus variables configured: resolution=$resolution, AA=$antialiasing, bilinear=$bilinear")
+                        }
                     } else {
                         // Core inconnu - utiliser les variables ParaLLEl N64 par défaut
                         Log.w(TAG, "[N64] Unknown N64 core, using ParaLLEl N64 variables as fallback")
@@ -984,6 +1266,15 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                             else -> "Unknown N64 core"
                         }
                         Log.i(TAG, "[N64] Core variables set for $coreName via GLRetroViewData.variables API")
+                        
+                        // Pour Mupen64Plus: Log les variables configurées pour validation
+                        if (isMupen64Plus && n64Variables.isNotEmpty()) {
+                            Log.d(TAG, "[N64] Mupen64Plus variables applied:")
+                            n64Variables.forEach { variable ->
+                                Log.d(TAG, "[N64]   ${variable.key} = ${variable.value}")
+                            }
+                            Log.d(TAG, "[N64] Note: If variables don't work, check available variables via retroView.getVariables() after core loads")
+                        }
                     } catch (e: Exception) {
                         Log.w(TAG, "[N64] Failed to set variables via GLRetroViewData API: ${e.message}")
                     }
@@ -1124,13 +1415,26 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         applyRunAheadSettings()
         lifecycle.addObserver(retroView)
         
-        // Monitor GL events to refresh disk info for multi-disc games
+        // Monitor GL events to refresh disk info for multi-disc games and configure controllers
         lifecycleScope.launch {
             try {
                 retroView.getGLRetroEvents().collect { event ->
                     when (event) {
                         is GLRetroView.GLRetroEvents.FrameRendered -> {
                             rewindManager?.onFrameRendered()
+                            
+                            // Configure controllers after first frame is rendered (game is loaded and running)
+                            if (!controllerConfigurationDone && !showCoreErrorDialog.value) {
+                                controllerConfigurationDone = true
+                                configureControllersAfterGameLoaded()
+                            }
+                            
+                            // Configure N64 extensions after controllers are configured
+                            if (controllerConfigurationDone && !n64ExtensionsConfigurationDone && console.equals("n64", ignoreCase = true) && !showCoreErrorDialog.value) {
+                                n64ExtensionsConfigurationDone = true
+                                configureN64ExtensionsAfterGameLoaded()
+                            }
+                            
                             if (System.currentTimeMillis() % 1000 < 17) {
                                 val disks = retroView.getAvailableDisks()
                                 val current = retroView.getCurrentDisk()
@@ -1198,197 +1502,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             }
         }, CRASH_TIMEOUT_MS)
         
-        // Configurer le type de contrôleur pour PSX (DualShock pour analog sticks)
-        if (console.equals("psx", ignoreCase = true)) {
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try {
-                    val controllers = retroView.getControllers()
-                    Log.i(TAG, "[PSX] Available controllers: ${controllers.getOrNull(0)?.map { "id=${it.id} desc='${it.description}'" }}")
-                    
-                    if (controllers.isNotEmpty() && controllers[0].isNotEmpty()) {
-                        // Chercher le contrôleur DualShock (essayer "dualshock" en priorité)
-                        val dualshock = controllers[0].firstOrNull { 
-                            it.description?.contains("dualshock", ignoreCase = true) == true
-                        } ?: controllers[0].firstOrNull {
-                            it.description?.contains("analog", ignoreCase = true) == true
-                        }
-                        
-                        if (dualshock != null) {
-                            retroView.setControllerType(0, dualshock.id)
-                            Log.i(TAG, "[PSX] Controller type set to DualShock (id=${dualshock.id}, desc='${dualshock.description}')")
-                        } else {
-                            Log.w(TAG, "[PSX] DualShock controller not found. Using default.")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "[PSX] Error configuring controller type", e)
-                }
-            }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
-        }
-        
-        // Configuration des ports contrôleurs
-        // 1. Vérifier d'abord s'il y a une configuration manuelle (override détection auto)
-        // 2. Sinon, utiliser la détection automatique (Zapper, etc.)
-        // CRITICAL: Ne configurer les contrôleurs QUE si le jeu est chargé avec succès
-        // Utiliser un délai plus long (2 secondes) pour laisser le temps au Flow d'erreur de détecter les problèmes
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            try {
-                // Vérifier si le jeu a échoué à charger (dialog d'erreur affiché)
-                if (showCoreErrorDialog.value) {
-                    Log.w(TAG, "[CONTROLLER] Game failed to load, skipping controller configuration")
-                    return@postDelayed
-                }
-                
-                // Vérifier également si retroView est dans un état valide avant d'appeler setControllerType
-                // Si le jeu n'est pas chargé, setControllerType() peut crasher
-                try {
-                    // Tester si on peut accéder aux contrôleurs (indique que le core est initialisé)
-                    val testControllers = retroView.getControllers()
-                    if (testControllers.isEmpty()) {
-                        Log.w(TAG, "[CONTROLLER] No controllers available, game may not be loaded yet")
-                        return@postDelayed
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "[CONTROLLER] Cannot access controllers, game not loaded: ${e.message}")
-                    return@postDelayed
-                }
-                
-                var hasManualConfig = false
-                
-                // Lire depuis console_config (comme ConsoleConfigActivity) OU compose_gamepad_settings (comme RetroArchSettingsDialog)
-                val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
-                val composePrefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
-                
-                // Vérifier chaque port (0-3) pour une configuration manuelle
-                for (port in 0..3) {
-                    // Priorité: console_config (ConsoleConfigActivity) puis compose_gamepad_settings (RetroArchSettingsDialog)
-                    var manualControllerType = consoleConfigPrefs.getInt("controller_port_${console}_port${port}", -1)
-                    if (manualControllerType == -1) {
-                        manualControllerType = composePrefs.getInt("controller_port_${console}_port${port}", -1)
-                    }
-                    
-                    if (manualControllerType != -1) {
-                        // Configuration manuelle trouvée pour ce port
-                        hasManualConfig = true
-                        try {
-                            retroView.setControllerType(port, manualControllerType)
-                            val controllerName = when (manualControllerType) {
-                                0 -> "None"
-                                1 -> "Joypad"
-                                4 -> "Lightgun"
-                                6 -> "Pointer"
-                                258 -> "Zapper"
-                                else -> "Type $manualControllerType"
-                            }
-                            Log.i(TAG, "[CONTROLLER] Port ${port + 1} manually configured as: $controllerName (id=$manualControllerType)")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "[CONTROLLER] Failed to set controller type for port ${port + 1}: ${e.message}")
-                            // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
-                            return@postDelayed
-                        }
-                    }
-                }
-                
-                // Si pas de configuration manuelle, utiliser la détection automatique
-                if (!hasManualConfig && isZapperGame) {
-                    // Configuration automatique pour les jeux Zapper
-                    // CRITIQUE: FCEUmm nécessite RETRO_DEVICE_ZAPPER (258) pour appeler get_mouse_input()
-                    // Mais ensuite, en mode RetroPointer (touchscreen), get_mouse_input() lit RETRO_DEVICE_POINTER
-                    // Donc on DOIT configurer RETRO_DEVICE_ZAPPER (258) pour que get_mouse_input() soit appelé!
-                    // Chiller utilise le port 0 (Port 1), les autres jeux utilisent le port 1 (Port 2)
-                    try {
-                        retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
-                        Log.i(TAG, "[ZAPPER] Auto-detected: Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
-                        Log.i(TAG, "[ZAPPER] FCEUmm will call get_mouse_input() which reads RETRO_DEVICE_POINTER in RetroPointer mode")
-                        
-                        runOnUiThread {
-                            Toast.makeText(
-                                this@NativeComposeEmulatorActivity,
-                                "Zapper detected! Port ${zapperPort + 1} (index $zapperPort)\nTouch game area to shoot",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "[ZAPPER] Failed to set Zapper controller type: ${e.message}")
-                        // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
-                        return@postDelayed
-                    }
-                } else if (hasManualConfig) {
-                    Log.i(TAG, "[CONTROLLER] Manual port configuration applied (auto-detection overridden)")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "[CONTROLLER] Failed to configure controller ports: ${e.message}", e)
-            }
-        }, 2000)  // Attendre 2 secondes pour laisser le temps au Flow d'erreur de détecter les problèmes
-
-        // Configurer les extensions contrôleur pour N64
-        if (console.equals("n64", ignoreCase = true)) {
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try {
-                    Log.i(TAG, "[N64] Configuring controller extensions...")
-
-                    // Charger les paramètres depuis SharedPreferences (console_config, comme ConsoleConfigActivity)
-                    val prefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
-                    val prefix = "n64_"
-
-                    // Mapping des positions spinner vers les valeurs Libretro :
-                    // Spinner position 0 = "Controller Pak" → Libretro ID 1
-                    // Spinner position 1 = "Rumble Pak" → Libretro ID 2
-                    // Spinner position 2 = "Transfer Pak" → Libretro ID 5
-                    val pakValues = intArrayOf(1, 2, 5)
-
-                    // Collecter les extensions configurées pour logging
-                    val configuredExtensions = mutableListOf<Pair<Int, String>>()
-                    
-                    // Configurer les extensions pour chaque port (0-3)
-                    for (port in 0..3) {  // 4 ports maximum pour N64
-                        try {
-                            // pakPosition: 0 = Controller Pak, 1 = Rumble Pak, 2 = Transfer Pak (positions spinner)
-                            val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: 0 = Controller Pak
-                            
-                            // Vérifier que pakPosition est valide (0-2)
-                            if (pakPosition >= 0 && pakPosition < pakValues.size) {
-                                val pakValue = pakValues[pakPosition] // ID Libretro (1, 2, ou 5)
-
-                                val pakName = when (pakPosition) {
-                                    0 -> "Controller Pak"
-                                    1 -> "Rumble Pak"
-                                    2 -> "Transfer Pak"
-                                    else -> "Unknown"
-                                }
-                                
-                                // Configurer l'extension via setControllerType()
-                                try {
-                                    retroView.setControllerType(port, pakValue)
-                                    Log.i(TAG, "[N64] Extension configured for port ${port + 1}: $pakName (id=$pakValue) via setControllerType()")
-                                    configuredExtensions.add(Pair(port + 1, pakName))
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "[N64] Failed to set extension for port ${port + 1} via setControllerType(): ${e.message}")
-                                    Log.w(TAG, "[N64] Port ${port + 1}: $pakName (id=$pakValue) - configuration failed")
-                                    // Ne pas continuer si setControllerType échoue (jeu probablement pas chargé)
-                                    return@postDelayed
-                                }
-                            } else {
-                                Log.d(TAG, "[N64] Port ${port + 1}: Invalid pak position ($pakPosition), skipping")
-                            }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "[N64] Could not configure extension for port ${port + 1}: ${e.message}")
-                        }
-                    }
-                    
-                    // Log récapitulatif
-                    if (configuredExtensions.isNotEmpty()) {
-                        Log.i(TAG, "[N64] Successfully configured ${configuredExtensions.size} extensions: ${configuredExtensions.joinToString { "Port ${it.first}=${it.second}" }}")
-                    } else {
-                        Log.i(TAG, "[N64] No extensions configured")
-                    }
-
-
-                } catch (e: Exception) {
-                    Log.e(TAG, "[N64] Error configuring controller extensions", e)
-                }
-            }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
-        }
+        // Configuration des contrôleurs et extensions N64 se fait maintenant via FrameRendered event
+        // Voir lifecycleScope.launch { retroView.getGLRetroEvents().collect { ... } } ci-dessus
 
         // Initialiser le CheatApplier
         cheatApplier = com.retroplay.cheat.CheatApplier(retroView)
@@ -1962,6 +2077,15 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     // Sauvegarder l'état du jeu dans un slot (organisé par console/slot)
     private fun saveGameState(slot: Int) {
         try {
+            // Vérifier que le core est chargé avant de sauvegarder
+            if (!retroView.isGameLoaded()) {
+                Log.w(TAG, "[$console] Cannot save state: game not loaded yet")
+                runOnUiThread {
+                    Toast.makeText(this, "Game not ready for saving", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
+            
             // Structure : saves/{console}/slot{slot}/{gameName}.state
             val slotDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot")
             if (!slotDir.exists()) {
@@ -1970,6 +2094,16 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             
             val saveFile = File(slotDir, "${gameName}.state")
             val stateData = retroView.serializeState()
+            
+            // Vérifier que les données sont valides
+            if (stateData.isEmpty()) {
+                Log.w(TAG, "[$console] serializeState returned empty data")
+                runOnUiThread {
+                    Toast.makeText(this, "Save failed: empty state", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
+            
             saveFile.writeBytes(stateData)
             
             Log.i(TAG, "[$console] Game state saved to slot $slot: ${saveFile.absolutePath}")
@@ -2543,6 +2677,7 @@ private fun ComposeEmulatorScreen(
                                         showInputsMode = advancedSettings.showInputs,
                                         hideWhenGamepadConnected = advancedSettings.hideWhenGamepadConnected,
                                         analogRecenterZone = advancedSettings.analogRecenterZone,
+                                        aspectAdjust = advancedSettings.aspectAdjust,
                                         isZapperGame = isZapperGame,  // Passer le flag Zapper pour que les overlays ne consomment que les touches sur boutons
                                         onButtonPress = { action ->
                                             val keyCodes = com.retroplay.overlay.models.RetroArchButtonMapping.parseAction(action)

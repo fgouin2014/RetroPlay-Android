@@ -1,5 +1,6 @@
 package com.retroplay;
 
+import android.app.ForegroundServiceStartNotAllowedException;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -7,8 +8,10 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
@@ -46,8 +49,34 @@ public class WebServerService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.i(TAG, "WebServerService onStartCommand");
         
-        // Start as foreground service with notification
-        startForeground(NOTIFICATION_ID, createNotification());
+        // ⭐ FIX Android 12+: Start as foreground service with proper service type
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                // Android 14+ (API 34+) - Use FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                // (dataSync type may not be appropriate for WebServer)
+                startForeground(NOTIFICATION_ID, createNotification(), 
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Android 12-13 (API 31-33) - Use dataSync type (declared in manifest)
+                startForeground(NOTIFICATION_ID, createNotification(), 
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            } else {
+                // Android 11 and below - No service type required
+                startForeground(NOTIFICATION_ID, createNotification());
+            }
+            Log.i(TAG, "WebServerService started as foreground service");
+        } catch (ForegroundServiceStartNotAllowedException e) {
+            // ⭐ FIX: Handle exception gracefully - try as regular service
+            Log.e(TAG, "Foreground service not allowed, starting as regular service: " + e.getMessage());
+            // Continue as regular service (may be killed by system, but better than crash)
+            try {
+                startForeground(NOTIFICATION_ID, createNotification());
+            } catch (Exception e2) {
+                Log.e(TAG, "Failed to start service: " + e2.getMessage());
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting foreground service: " + e.getMessage(), e);
+        }
         
         return START_STICKY; // Restart service if killed
     }

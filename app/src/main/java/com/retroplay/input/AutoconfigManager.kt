@@ -176,6 +176,9 @@ class AutoconfigManager(private val context: Context) {
     
     /**
      * Chercher configuration par VID/PID
+     * 
+     * CORRECTION: Retourner le principal avec les mappings partagés si une alternative match
+     * (compatible RetroArch task_autodetect.c:input_autoconfigure_get_config_file_affinity)
      */
     private fun findConfigByVidPid(vendorId: Int, productId: Int): DeviceConfig? {
         // Lister tous les fichiers .cfg disponibles
@@ -189,10 +192,12 @@ class AutoconfigManager(private val context: Context) {
                     return config
                 }
                 
-                // Vérifier alternatives
+                // Vérifier alternatives - retourner le principal avec mappings partagés
                 for (alt in config.alternatives) {
                     if (alt.vendorId == vendorId && alt.productId == productId) {
-                        return alt
+                        // Retourner le principal (avec mappings) au lieu de l'alternative seule
+                        // Les mappings sont déjà hérités dans les alternatives lors du parsing
+                        return config
                     }
                 }
             }
@@ -203,6 +208,9 @@ class AutoconfigManager(private val context: Context) {
     
     /**
      * Chercher configuration par name
+     * 
+     * CORRECTION: Retourner le principal avec les mappings partagés si une alternative match
+     * (compatible RetroArch task_autodetect.c:input_autoconfigure_get_config_file_affinity)
      */
     private fun findConfigByName(deviceName: String): DeviceConfig? {
         val configFiles = listAllConfigFiles()
@@ -215,10 +223,12 @@ class AutoconfigManager(private val context: Context) {
                     return config
                 }
                 
-                // Match avec alternatives
+                // Match avec alternatives - retourner le principal avec mappings partagés
                 for (alt in config.alternatives) {
                     if (alt.deviceName.equals(deviceName, ignoreCase = true)) {
-                        return alt
+                        // Retourner le principal (avec mappings) au lieu de l'alternative seule
+                        // Les mappings sont déjà hérités dans les alternatives lors du parsing
+                        return config
                     }
                 }
             }
@@ -342,9 +352,7 @@ class AutoconfigManager(private val context: Context) {
         var altVendorId: Int? = null
         var altProductId: Int? = null
         var altDisplayName: String? = null
-        val altButtonMappings = mutableMapOf<String, String>()
-        val altAxisMappings = mutableMapOf<String, String>()
-        val altLabels = mutableMapOf<String, String>()
+        // CORRECTION: Les mappings ne sont pas parsés pour les alternatives (partagés avec principal)
         
         for (line in lines) {
             val trimmed = line.trim()
@@ -369,6 +377,7 @@ class AutoconfigManager(private val context: Context) {
                 // Alternative détectée
                 if (currentAltIndex != altNum) {
                     // Nouvelle alternative, sauvegarder la précédente
+                    // CORRECTION: Les mappings sont hérités du principal (partagés)
                     if (currentAltIndex > 0 && altDeviceName.isNotEmpty()) {
                         alternatives.add(
                             DeviceConfig(
@@ -376,14 +385,12 @@ class AutoconfigManager(private val context: Context) {
                                 vendorId = altVendorId,
                                 productId = altProductId,
                                 displayName = altDisplayName,
-                                buttonMappings = altButtonMappings.toMap(),
-                                axisMappings = altAxisMappings.toMap(),
-                                labels = altLabels.toMap()
+                                // Mappings hérités du principal (seront copiés après parsing complet)
+                                buttonMappings = emptyMap(),
+                                axisMappings = emptyMap(),
+                                labels = emptyMap()
                             )
                         )
-                        altButtonMappings.clear()
-                        altAxisMappings.clear()
-                        altLabels.clear()
                     }
                     currentAltIndex = altNum
                     altDeviceName = ""
@@ -393,15 +400,15 @@ class AutoconfigManager(private val context: Context) {
                 }
                 
                 // Parser champ alternative
+                // CORRECTION: Les mappings (input_*_btn, input_*_axis, input_*_label) n'ont PAS de _alt suffix
+                // Ils sont partagés entre principal et alternatives (compatible RetroArch task_autodetect.c)
                 val cleanKey = key.replace("_alt$altNum", "")
                 when {
                     cleanKey == "input_device" -> altDeviceName = value
                     cleanKey == "input_device_display_name" -> altDisplayName = value
                     cleanKey == "input_vendor_id" -> altVendorId = value.toIntOrNull()
                     cleanKey == "input_product_id" -> altProductId = value.toIntOrNull()
-                    cleanKey.endsWith("_btn") -> altButtonMappings[cleanKey] = value
-                    cleanKey.endsWith("_axis") -> altAxisMappings[cleanKey] = value
-                    cleanKey.endsWith("_label") -> altLabels[cleanKey] = value
+                    // Les mappings sont partagés, pas de parsing avec _alt suffix
                 }
             } else {
                 // Champ principal
@@ -422,6 +429,7 @@ class AutoconfigManager(private val context: Context) {
         }
         
         // Sauvegarder la dernière alternative si présente
+        // CORRECTION: Les mappings sont hérités du principal (partagés)
         if (currentAltIndex > 0 && altDeviceName.isNotEmpty()) {
             alternatives.add(
                 DeviceConfig(
@@ -429,10 +437,21 @@ class AutoconfigManager(private val context: Context) {
                     vendorId = altVendorId,
                     productId = altProductId,
                     displayName = altDisplayName,
-                    buttonMappings = altButtonMappings.toMap(),
-                    axisMappings = altAxisMappings.toMap(),
-                    labels = altLabels.toMap()
+                    // Mappings hérités du principal (seront copiés après)
+                    buttonMappings = emptyMap(),
+                    axisMappings = emptyMap(),
+                    labels = emptyMap()
                 )
+            )
+        }
+        
+        // CORRECTION: Hériter les mappings du principal vers les alternatives (compatible RetroArch)
+        // Les mappings sont partagés entre principal et alternatives
+        val alternativesWithMappings = alternatives.map { alt ->
+            alt.copy(
+                buttonMappings = buttonMappings,
+                axisMappings = axisMappings,
+                labels = labels
             )
         }
         
@@ -444,7 +463,7 @@ class AutoconfigManager(private val context: Context) {
             buttonMappings = buttonMappings,
             axisMappings = axisMappings,
             labels = labels,
-            alternatives = alternatives
+            alternatives = alternativesWithMappings
         )
     }
     

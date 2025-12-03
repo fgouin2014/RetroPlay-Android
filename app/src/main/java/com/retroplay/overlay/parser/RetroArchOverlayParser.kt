@@ -161,7 +161,9 @@ class RetroArchOverlayParser {
             val rectValue = rectLine.substringAfter("\"").substringBefore("\"")
             // CORRECTION: Tokenize par ", " (virgule + espace) comme RetroArch
             // Compatible RetroArch: strtok_r(cfg_rect_array_cpy, ", ", &save)
-            val rectParts = rectValue.split(", ").map { it.trim().toFloatOrNull() ?: 0f }
+            // strtok_r(", ") traite chaque caractère comme délimiteur (virgule OU espace)
+            // split(",") + trim() reproduit le comportement
+            val rectParts = rectValue.split(",").map { it.trim().toFloatOrNull() ?: 0f }
             if (rectParts.size >= 4) {
                 com.retroplay.overlay.models.OverlayRect(
                     x = rectParts[0],
@@ -328,10 +330,11 @@ class RetroArchOverlayParser {
         try {
             // Extraire la valeur entre guillemets
             val descValue = descLine.substringAfter("\"").substringBefore("\"")
-            // CORRECTION CRITIQUE: Tokenize par ", " (virgule + espace) comme RetroArch strtok_r(overlay_cpy, ", ", &save)
-            // Compatible RetroArch task_overlay.c ligne ~240: strtok_r(overlay_cpy, ", ", &save)
-            // Le trim() reste nécessaire pour gérer les espaces en début/fin de chaque token
-            val parts = descValue.split(", ").map { it.trim() }
+            // CORRECTION: strtok_r(", ") traite chaque caractère comme délimiteur (virgule OU espace)
+            // En Kotlin, on utilise split(",") puis trim() pour gérer les espaces
+            // Compatible RetroArch task_overlay.c ligne ~282: strtok_r(overlay_cpy, ", ", &save)
+            // strtok_r(", ") = split sur virgule OU espace, donc split(",") + trim() reproduit le comportement
+            val parts = descValue.split(",").map { it.trim() }
             
             // Validation stricte (compatible RetroArch task_overlay.c lignes 368-379)
             // Format requis: "action,x,y,shape,range_x,range_y" (6 tokens minimum)

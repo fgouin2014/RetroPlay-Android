@@ -160,7 +160,7 @@ fun TurboSettingsDialog(
                                             disabledContainerColor = Color(0xFF2A2A2A)
                                         )
                                     ) {
-                                        Text(label, fontSize = 12.sp)
+                                        Text(label, fontSize = 12.sp, maxLines = 1)
                                     }
                                 }
                             }

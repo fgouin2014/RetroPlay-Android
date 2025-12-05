@@ -878,51 +878,37 @@ object OverlayPreferenceManager {
 }
 
 /**
- * Configuration turbo compatible RetroArch
+ * Configuration turbo hybride pour mobile
  * DEFAULT_TURBO_PERIOD = 6 frames @ 60fps = 10 Hz
  */
 data class TurboSettings(
-    val enabled: Boolean = true,
+    val enabled: Boolean = false,         // Désactivé par défaut
     val frequency: Int = 10,              // Hz (5-30)
     val dutyCycle: Float = 0.5f,          // 0.1-0.9 (50% par défaut)
-    val allowDpad: Boolean = false,       // Turbo sur directions
-    val mode: TurboMode = TurboMode.AUTO_TOGGLE
+    val enabledButtons: Set<String> = setOf("a", "b", "x", "y")  // Boutons avec turbo
 )
-
-enum class TurboMode {
-    AUTO_TOGGLE,    // Mode actuel: toggle automatique
-    HOLD,           // Maintenir pour turbo
-    CLASSIC         // À implémenter plus tard
-}
 
 object TurboPreferenceManager {
     private const val KEY_ENABLED = "turbo_enabled"
     private const val KEY_FREQUENCY = "turbo_frequency"
     private const val KEY_DUTY_CYCLE = "turbo_duty_cycle"
-    private const val KEY_ALLOW_DPAD = "turbo_allow_dpad"
-    private const val KEY_MODE = "turbo_mode"
+    private const val KEY_ENABLED_BUTTONS = "turbo_enabled_buttons"
     
     fun save(prefs: android.content.SharedPreferences, settings: TurboSettings) {
         prefs.edit()
             .putBoolean(KEY_ENABLED, settings.enabled)
             .putInt(KEY_FREQUENCY, settings.frequency)
             .putFloat(KEY_DUTY_CYCLE, settings.dutyCycle)
-            .putBoolean(KEY_ALLOW_DPAD, settings.allowDpad)
-            .putString(KEY_MODE, settings.mode.name)
+            .putStringSet(KEY_ENABLED_BUTTONS, settings.enabledButtons)
             .apply()
     }
     
     fun load(prefs: android.content.SharedPreferences): TurboSettings {
         return TurboSettings(
-            enabled = prefs.getBoolean(KEY_ENABLED, true),
+            enabled = prefs.getBoolean(KEY_ENABLED, false),  // Désactivé par défaut
             frequency = prefs.getInt(KEY_FREQUENCY, 10),
             dutyCycle = prefs.getFloat(KEY_DUTY_CYCLE, 0.5f),
-            allowDpad = prefs.getBoolean(KEY_ALLOW_DPAD, false),
-            mode = try {
-                TurboMode.valueOf(prefs.getString(KEY_MODE, "AUTO_TOGGLE") ?: "AUTO_TOGGLE")
-            } catch (e: Exception) {
-                TurboMode.AUTO_TOGGLE
-            }
+            enabledButtons = prefs.getStringSet(KEY_ENABLED_BUTTONS, setOf("a", "b", "x", "y")) ?: setOf("a", "b", "x", "y")
         )
     }
 }

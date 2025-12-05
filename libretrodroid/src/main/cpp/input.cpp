@@ -599,30 +599,54 @@ void Input::onSensorEvent(int sensorType, float x, float y, float z) {
     }
 }
 
-void Input::onKeyEvent(unsigned int port, int action, int keyCode) {
-    // P1 #9: Keyboard Support
-    // Try to convert as RetroPad first (gamepad buttons), then as keyboard (RetroK)
-    // This allows both gamepad buttons AND keyboard keys to work
-    int retroKeyCode = convertAndroidToLibretroKey(keyCode);
+// Show Inputs PHYSICAL: Vérifier si un bouton physique est pressé
+bool Input::isPhysicalButtonPressed(unsigned port, int retroPadId) const {
+    if (port >= 4) return false;
+    return pads[port].pressedKeys.find(retroPadId) != pads[port].pressedKeys.end();
+}
 
-    if (retroKeyCode != UNKNOWN_KEY) {
-        // Gamepad button (RetroPad)
-    if (action == AKEY_EVENT_ACTION_DOWN) {
-        pads[port].pressedKeys.insert(retroKeyCode);
-    } else if (action == AKEY_EVENT_ACTION_UP) {
-        pads[port].pressedKeys.erase(retroKeyCode);
+void Input::onKeyEvent(unsigned int port, int action, int keyCode) {
+    if (port >= 4) return;
+    
+    // CORRECTION: Utiliser mappings autoconfig dynamiques (compatible RetroArch)
+    // 1. Vérifier si un mapping autoconfig existe pour ce keyCode
+    int retroPadId = getRetroPadIdFromKeyCode(port, keyCode);
+    
+    if (retroPadId != UNKNOWN_KEY) {
+        // Mapping autoconfig trouvé - utiliser le mapping dynamique
+        if (action == AKEY_EVENT_ACTION_DOWN) {
+            pads[port].pressedKeys.insert(retroPadId);
+            pads[port].pressedKeyCodes.insert(keyCode);
+        } else if (action == AKEY_EVENT_ACTION_UP) {
+            pads[port].pressedKeys.erase(retroPadId);
+            pads[port].pressedKeyCodes.erase(keyCode);
+        }
+        return;
     }
-    } else {
-        // Not a gamepad button, try as keyboard (RetroK)
-        // Note: We can't get metaState here, so modifiers won't be available
-        // For full keyboard support with modifiers, use onKeyboardEvent() instead
-        unsigned retroK = convertAndroidToRetroK(keyCode);
-        if (retroK != RETROK_UNKNOWN) {
-            if (action == AKEY_EVENT_ACTION_DOWN) {
-                pads[port].pressedKeyboardKeys.insert(retroK);
-            } else if (action == AKEY_EVENT_ACTION_UP) {
-                pads[port].pressedKeyboardKeys.erase(retroK);
-            }
+    
+    // 2. Fallback: mapping hardcodé (si pas d'autoconfig)
+    int retroKeyCode = convertAndroidToLibretroKey(keyCode);
+    if (retroKeyCode != UNKNOWN_KEY) {
+        // Gamepad button (RetroPad) - hardcoded mapping
+        if (action == AKEY_EVENT_ACTION_DOWN) {
+            pads[port].pressedKeys.insert(retroKeyCode);
+            pads[port].pressedKeyCodes.insert(keyCode);
+        } else if (action == AKEY_EVENT_ACTION_UP) {
+            pads[port].pressedKeys.erase(retroKeyCode);
+            pads[port].pressedKeyCodes.erase(keyCode);
+        }
+        return;
+    }
+    
+    // 3. Pas un gamepad button, essayer comme clavier (RetroK)
+    // Note: We can't get metaState here, so modifiers won't be available
+    // For full keyboard support with modifiers, use onKeyboardEvent() instead
+    unsigned retroK = convertAndroidToRetroK(keyCode);
+    if (retroK != RETROK_UNKNOWN) {
+        if (action == AKEY_EVENT_ACTION_DOWN) {
+            pads[port].pressedKeyboardKeys.insert(retroK);
+        } else if (action == AKEY_EVENT_ACTION_UP) {
+            pads[port].pressedKeyboardKeys.erase(retroK);
         }
     }
 }
@@ -883,6 +907,36 @@ void Input::onMouseButton(int port, int button, int pressed) {
             LOGD("[NATIVE MOUSE] Unknown mouse button: %d", button);
             break;
     }
+}
+
+// Autoconfig mappings - compatible RetroArch input_config_set_autoconfig_binds()
+void Input::setAutoconfigMapping(unsigned port, int retroPadId, int keyCode) {
+    if (port >= 4) return;
+    
+    // Mapping: RETRO_DEVICE_ID_JOYPAD_* → AKEYCODE (joykey from .cfg)
+    // Ex: input_a_btn = "96" → setAutoconfigMapping(port, RETRO_DEVICE_ID_JOYPAD_A, 96)
+    // Compatible RetroArch: android_joypad_button_state() uses joykey from autoconfig
+    pads[port].autoconfigMappings[keyCode] = retroPadId;
+    
+    LOGD("[NATIVE AUTOCONFIG] port=%d mapping: AKEYCODE=%d → RetroPad ID=%d", port, keyCode, retroPadId);
+}
+
+void Input::clearAutoconfigMappings(unsigned port) {
+    if (port >= 4) return;
+    pads[port].autoconfigMappings.clear();
+    LOGD("[NATIVE AUTOCONFIG] port=%d mappings cleared", port);
+}
+
+int Input::getRetroPadIdFromKeyCode(unsigned port, int keyCode) const {
+    if (port >= 4) return UNKNOWN_KEY;
+    
+    // Chercher dans les mappings autoconfig
+    auto it = pads[port].autoconfigMappings.find(keyCode);
+    if (it != pads[port].autoconfigMappings.end()) {
+        return it->second;  // Retourner le RetroPad ID mappé
+    }
+    
+    return UNKNOWN_KEY;  // Pas de mapping trouvé
 }
 
 } //namespace libretrodroid

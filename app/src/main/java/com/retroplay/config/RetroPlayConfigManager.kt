@@ -55,6 +55,9 @@ object RetroPlayConfigManager {
         // Smart Config
         val smartConfigEnabled: Boolean = true,
         val smartConfigAutoRunAhead: Boolean = true,
+        // Uses adaptive granularity per console to prevent OOM:
+        // - NES/GB: granularity=5 (small savestates)
+        // - PSX/N64: granularity=30-45 (large savestates 2-4 MB)
         val smartConfigAutoRewind: Boolean = true,
         val smartConfigAutoOverlay: Boolean = false,
         val smartConfigShowOSD: Boolean = true,

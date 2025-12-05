@@ -354,10 +354,19 @@ class RetroArchOverlayParser {
                 return null
             }
             
-            // Validation des valeurs (doivent être positives pour range_x/range_y)
-            if (rangeX <= 0f || rangeY <= 0f) {
-                Log.e(TAG, "Invalid range values (must be > 0): range_x=$rangeX, range_y=$rangeY")
+            // Validation des valeurs pour range_x/range_y
+            // CORRECTION: Accepter range=0 si c'est intentionnel (boutons invisibles/triggers)
+            // Compatible RetroArch: Les boutons avec range=0,0 et reach=0 sont des triggers invisibles
+            // Exemple: overlay_next avec range=0,0 pour auto-switch entre layouts
+            // Si range > 0, il doit être strictement positif
+            if (rangeX < 0f || rangeY < 0f) {
+                Log.e(TAG, "Invalid range values (must be >= 0): range_x=$rangeX, range_y=$rangeY")
                 return null
+            }
+            
+            // Si range=0, c'est probablement un bouton invisible/trigger (valide)
+            if (rangeX == 0f || rangeY == 0f) {
+                // Log.v(TAG, "Button $descKey has zero range (invisible/trigger button): range_x=$rangeX, range_y=$rangeY")
             }
             
             // Parser les composants
@@ -421,6 +430,10 @@ class RetroArchOverlayParser {
                 ?.substringAfter("= ")?.trim()?.toBooleanStrictOrNull() ?: false
             val movable = lines.find { it.trim().startsWith("${descKey}_movable = ") }
                 ?.substringAfter("= ")?.trim()?.toBooleanStrictOrNull() ?: false
+            
+            // Turbo (RetroPlay extension - pas dans RetroArch officiel)
+            val turbo = lines.find { it.trim().startsWith("${descKey}_turbo = ") }
+                ?.substringAfter("= ")?.trim()?.toBooleanStrictOrNull() ?: false
 
             fun readFloat(key: String, default: Float): Float =
                 lines.find { it.trim().startsWith("${descKey}_${key} = ") }
@@ -445,6 +458,31 @@ class RetroArchOverlayParser {
                 else -> OverlayButtonType.BUTTONS
             }
             
+            // CORRECTION 2: Defaults 8-way selon type (compatible RetroArch task_overlay.c lignes 134-162)
+            // Si aucun mapping customisé n'est spécifié, utiliser les defaults RetroArch
+            var eightwayUpDefault: String? = null
+            var eightwayDownDefault: String? = null
+            var eightwayLeftDefault: String? = null
+            var eightwayRightDefault: String? = null
+            
+            when (buttonType) {
+                OverlayButtonType.DPAD_AREA -> {
+                    // Defaults dpad_area: up/down/left/right
+                    eightwayUpDefault = "up"
+                    eightwayDownDefault = "down"
+                    eightwayLeftDefault = "left"
+                    eightwayRightDefault = "right"
+                }
+                OverlayButtonType.ABXY_AREA -> {
+                    // Defaults abxy_area: x/b/y/a
+                    eightwayUpDefault = "x"
+                    eightwayDownDefault = "b"
+                    eightwayLeftDefault = "y"
+                    eightwayRightDefault = "a"
+                }
+                else -> {}
+            }
+            
             // Parser 8-way custom mappings pour dpad_area et abxy_area
             // Format peut être "a|b|c" (bitmask) ou simple "a"
             fun readMapping(key: String): String? =
@@ -452,24 +490,37 @@ class RetroArchOverlayParser {
                     ?.substringAfter("= ")?.trim()
             
             // Parser les mappings 8-way (peuvent être au format "a|b|c")
-            val eightwayUp = readMapping("up")
-            val eightwayDown = readMapping("down")
-            val eightwayLeft = readMapping("left")
-            val eightwayRight = readMapping("right")
+            // Utiliser defaults si non spécifiés
+            val eightwayUp = readMapping("up") ?: eightwayUpDefault
+            val eightwayDown = readMapping("down") ?: eightwayDownDefault
+            val eightwayLeft = readMapping("left") ?: eightwayLeftDefault
+            val eightwayRight = readMapping("right") ?: eightwayRightDefault
             val eightwayUpLeft = readMapping("up_left")
             val eightwayUpRight = readMapping("up_right")
             val eightwayDownLeft = readMapping("down_left")
             val eightwayDownRight = readMapping("down_right")
             
+            // CORRECTION 3: Pré-calculer diagonales si non spécifiées (compatible RetroArch task_overlay.c lignes 198-216)
+            // Diagonales = OR des directions (up_right = up | right)
+            val eightwayUpLeftFinal = eightwayUpLeft ?: 
+                if (eightwayUp != null && eightwayLeft != null) "$eightwayUp|$eightwayLeft" else null
+            val eightwayUpRightFinal = eightwayUpRight ?: 
+                if (eightwayUp != null && eightwayRight != null) "$eightwayUp|$eightwayRight" else null
+            val eightwayDownLeftFinal = eightwayDownLeft ?: 
+                if (eightwayDown != null && eightwayLeft != null) "$eightwayDown|$eightwayLeft" else null
+            val eightwayDownRightFinal = eightwayDownRight ?: 
+                if (eightwayDown != null && eightwayRight != null) "$eightwayDown|$eightwayRight" else null
+            
             // Parser les bitmasks pour les 8-way mappings (compatible RetroArch)
+            // Utiliser les valeurs finales (avec diagonales pré-calculées)
             val eightwayUpMask = eightwayUp?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
             val eightwayDownMask = eightwayDown?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
             val eightwayLeftMask = eightwayLeft?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
             val eightwayRightMask = eightwayRight?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
-            val eightwayUpLeftMask = eightwayUpLeft?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
-            val eightwayUpRightMask = eightwayUpRight?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
-            val eightwayDownLeftMask = eightwayDownLeft?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
-            val eightwayDownRightMask = eightwayDownRight?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayUpLeftMask = eightwayUpLeftFinal?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayUpRightMask = eightwayUpRightFinal?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayDownLeftMask = eightwayDownLeftFinal?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
+            val eightwayDownRightMask = eightwayDownRightFinal?.let { RetroArchButtonMapping.parseButtonMask(it) } ?: emptySet()
             
             val button = OverlayButton(
                 action = action,
@@ -487,6 +538,7 @@ class RetroArchOverlayParser {
                 exclusive = exclusive,
                 rangeModExclusive = rangeModExclusive,
                 movable = movable,
+                turbo = turbo,
                 reachUp = reachUp,
                 reachDown = reachDown,
                 reachLeft = reachLeft,
@@ -500,15 +552,15 @@ class RetroArchOverlayParser {
                 eightwayDown = eightwayDown,
                 eightwayLeft = eightwayLeft,
                 eightwayRight = eightwayRight,
-                eightwayUpLeft = eightwayUpLeft,
-                eightwayUpRight = eightwayUpRight,
-                eightwayDownLeft = eightwayDownLeft,
-                eightwayDownRight = eightwayDownRight
+                eightwayUpLeft = eightwayUpLeftFinal,
+                eightwayUpRight = eightwayUpRightFinal,
+                eightwayDownLeft = eightwayDownLeftFinal,
+                eightwayDownRight = eightwayDownRightFinal
             )
             
             // Log détaillé pour boutons système
             if (action == "overlay_next" || action == "menu_toggle") {
-                Log.d(TAG, "PARSED SYSTEM BUTTON: $descKey | action='$action' | pos=($x,$y) | img='$imagePath' | target='$nextTarget'")
+                // Log.v(TAG, "PARSED SYSTEM BUTTON: $descKey | action='$action' | pos=($x,$y) | img='$imagePath' | target='$nextTarget'")
             }
             
             return button

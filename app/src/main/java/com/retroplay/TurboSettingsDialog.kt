@@ -126,25 +126,45 @@ fun TurboSettingsDialog(
                         )
                     }
                     
-                    // Allow D-Pad
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Allow D-Pad Turbo", color = Color.White)
-                            Text(
-                                "Enable turbo on directional buttons",
-                                color = Color.Gray,
-                                fontSize = 12.sp
-                            )
+                    // Boutons turbo disponibles
+                    Text("Turbo Buttons", color = Color.White, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Text("Select which buttons can use turbo", color = Color.Gray, fontSize = 11.sp)
+                    
+                    // Grille de boutons sélectionnables
+                    val availableButtons = listOf(
+                        "a" to "A", "b" to "B", "x" to "X", "y" to "Y",
+                        "l" to "L", "r" to "R", "l2" to "L2", "r2" to "R2",
+                        "up" to "UP", "down" to "DOWN", "left" to "LEFT", "right" to "RIGHT"
+                    )
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        availableButtons.chunked(4).forEach { rowButtons ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                rowButtons.forEach { (action, label) ->
+                                    val isSelected = action in settings.enabledButtons
+                                    Button(
+                                        onClick = {
+                                            settings = if (isSelected) {
+                                                settings.copy(enabledButtons = settings.enabledButtons - action)
+                                            } else {
+                                                settings.copy(enabledButtons = settings.enabledButtons + action)
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f).height(45.dp),
+                                        enabled = settings.enabled,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isSelected) Color(0xFF00BCD4) else Color(0xFF424242),
+                                            disabledContainerColor = Color(0xFF2A2A2A)
+                                        )
+                                    ) {
+                                        Text(label, fontSize = 12.sp)
+                                    }
+                                }
+                            }
                         }
-                        Switch(
-                            checked = settings.allowDpad,
-                            enabled = settings.enabled,
-                            onCheckedChange = { settings = settings.copy(allowDpad = it) }
-                        )
                     }
                     
                     Spacer(modifier = Modifier.weight(1f))

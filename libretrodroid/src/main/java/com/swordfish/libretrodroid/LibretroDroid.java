@@ -148,6 +148,29 @@ public class LibretroDroid {
     public static native void onMouseButton(int port, int button, int pressed);
 
     public static native void onKeyEvent(int port, int action, int keyCode);
+    
+    /**
+     * Show Inputs PHYSICAL: Vérifier si un bouton du gamepad physique est pressé
+     * @param port Port du gamepad (0-3)
+     * @param retroPadId RetroPad ID (RETRO_DEVICE_ID_JOYPAD_*)
+     * @return true si le bouton est pressé sur le gamepad physique
+     */
+    public static native boolean isPhysicalButtonPressed(int port, int retroPadId);
+    
+    /**
+     * Set autoconfig mapping: RetroPad ID → AKEYCODE (from .cfg file)
+     * Compatible RetroArch input_config_set_autoconfig_binds()
+     * @param port Controller port (0-3)
+     * @param retroPadId RETRO_DEVICE_ID_JOYPAD_* (e.g., RETRO_DEVICE_ID_JOYPAD_A = 8)
+     * @param keyCode Android AKEYCODE (e.g., AKEYCODE_BUTTON_A = 96)
+     */
+    public static native void setAutoconfigMapping(int port, int retroPadId, int keyCode);
+    
+    /**
+     * Clear all autoconfig mappings for a port (reset to defaults)
+     * @param port Controller port (0-3)
+     */
+    public static native void clearAutoconfigMappings(int port);
 
     public static native void refreshAspectRatio();
     

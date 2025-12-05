@@ -79,7 +79,8 @@ fun RetroArchSettingsDialog(
     onVsyncChanged: (Boolean) -> Unit = {},
     onRewindEnabledChanged: (Boolean) -> Unit = {},
     onAspectRatioChanged: (String) -> Unit = {},
-    onOpenAdvancedOverlaySettings: (() -> Unit)? = null  // Callback pour ouvrir Advanced Overlay Settings
+    onOpenAdvancedOverlaySettings: (() -> Unit)? = null,  // Callback pour ouvrir Advanced Overlay Settings
+    onPsxAnalogModeChanged: ((Boolean) -> Unit)? = null  // Callback pour changer mode analog PSX (immediate, no reboot)
 ) {
     // Migration automatique depuis .cfg vers SharedPreferences (une seule fois)
     LaunchedEffect(Unit) {
@@ -118,6 +119,10 @@ fun RetroArchSettingsDialog(
     val overlayPackages = remember { assetManager.getCompatibleOverlays(console) }
 
     var customBrowsed by remember { mutableStateOf(OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()) }
+    
+    // OPTIMISATION: Chargement asynchrone des layouts disponibles (évite ANR pour packages avec 16+ layouts)
+    var availableLayoutsLoading by remember { mutableStateOf(false) }
+    var availableLayoutsCache by remember { mutableStateOf<List<String>>(emptyList()) }
 
     val currentOverlayPref = remember { OverlayPreferenceManager.load(prefs, console) }
     var selectedOverlay by remember {
@@ -195,6 +200,7 @@ fun RetroArchSettingsDialog(
     var hideInMenu by remember { mutableStateOf(advancedSettings.hideInMenu) }
     var behindMenu by remember { mutableStateOf(advancedSettings.behindMenu) }
     var hideWhenGamepad by remember { mutableStateOf(advancedSettings.hideWhenGamepadConnected) }
+    var hideWhenGamepadPort0Only by remember { mutableStateOf(advancedSettings.hideWhenGamepadConnectedPort0Only) }
     var showInputs by remember { mutableStateOf(advancedSettings.showInputs) }
     var showInputsPort by remember { mutableStateOf(advancedSettings.showInputsPort) }
     var lightgunPort by remember { mutableStateOf(advancedSettings.lightgunPort) }
@@ -226,6 +232,7 @@ fun RetroArchSettingsDialog(
         hideInMenu = newSettings.hideInMenu
         behindMenu = newSettings.behindMenu
         hideWhenGamepad = newSettings.hideWhenGamepadConnected
+        hideWhenGamepadPort0Only = newSettings.hideWhenGamepadConnectedPort0Only
         showInputs = newSettings.showInputs
         showInputsPort = newSettings.showInputsPort
         lightgunPort = newSettings.lightgunPort
@@ -242,7 +249,7 @@ fun RetroArchSettingsDialog(
     }
     
     // Save when changed + trigger preview transparency (Advanced Overlay Settings)
-    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, showInputs, showInputsPort, lightgunPort, lightgunTriggerOnTouch, lightgunTriggerDelay, lightgunAllowOffscreen, mouseSpeed, mouseSwipeThreshold, mouseHoldToDrag, mouseHoldMsec, mouseDoubleTapToDrag, mouseDtapMsec, showMouseCursor, useSameSettings) {
+    LaunchedEffect(dpadDiagonalSensitivity, abxyDiagonalSensitivity, analogRecenterZone, opacity, aspectAdjust, hideInMenu, behindMenu, hideWhenGamepad, hideWhenGamepadPort0Only, showInputs, showInputsPort, lightgunPort, lightgunTriggerOnTouch, lightgunTriggerDelay, lightgunAllowOffscreen, mouseSpeed, mouseSwipeThreshold, mouseHoldToDrag, mouseHoldMsec, mouseDoubleTapToDrag, mouseDtapMsec, showMouseCursor, useSameSettings) {
         val newSettings = com.retroplay.overlay.models.AdvancedOverlaySettings(
             dpadDiagonalSensitivity = dpadDiagonalSensitivity,
             abxyDiagonalSensitivity = abxyDiagonalSensitivity,
@@ -252,6 +259,7 @@ fun RetroArchSettingsDialog(
             hideInMenu = hideInMenu,
             behindMenu = behindMenu,
             hideWhenGamepadConnected = hideWhenGamepad,
+            hideWhenGamepadConnectedPort0Only = hideWhenGamepadPort0Only,
             showInputs = showInputs,
             showInputsPort = showInputsPort,
             lightgunPort = lightgunPort,
@@ -304,14 +312,28 @@ fun RetroArchSettingsDialog(
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    val availableLayouts = remember(selectedOverlay, selectedCustomPath) {
+    // OPTIMISATION: Chargement asynchrone avec LaunchedEffect pour éviter ANR
+    // rgpad a 16 layouts, le parsing peut prendre 5-10 secondes sur le main thread
+    LaunchedEffect(selectedOverlay, selectedCustomPath) {
         if (selectedOverlay.isNotEmpty()) {
-            val customCfgName = selectedCustomPath?.substringAfter("/")
-            assetManager.getAvailableLayouts(selectedOverlay, console, customCfgName)
+            availableLayoutsLoading = true
+            // Lancer dans un coroutine (ne bloque pas le UI thread)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val customCfgName = selectedCustomPath?.substringAfter("/")
+                val layouts = assetManager.getAvailableLayouts(selectedOverlay, console, customCfgName)
+                // Mettre à jour sur le main thread
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    availableLayoutsCache = layouts
+                    availableLayoutsLoading = false
+                }
+            }
         } else {
-            emptyList()
+            availableLayoutsCache = emptyList()
+            availableLayoutsLoading = false
         }
     }
+    
+    val availableLayouts = availableLayoutsCache
 
     LaunchedEffect(availableLayouts, selectedLandscapeLayout) {
         if (availableLayouts.isNotEmpty()) {
@@ -638,7 +660,7 @@ fun RetroArchSettingsDialog(
                         val portraitLayouts = availableLayouts.filter { it.contains("portrait", ignoreCase = true) }
 
                         if (landscapeLayouts.isNotEmpty()) {
-                            Text("Landscape", color = Color(0xFFBBBBBB), fontSize = 13.sp)
+                            Text("Landscape (${landscapeLayouts.size} layouts)", color = Color(0xFFBBBBBB), fontSize = 13.sp)
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -667,7 +689,7 @@ fun RetroArchSettingsDialog(
                         }
 
                         if (portraitLayouts.isNotEmpty()) {
-                            Text("Portrait", color = Color(0xFFBBBBBB), fontSize = 13.sp)
+                            Text("Portrait (${portraitLayouts.size} layouts)", color = Color(0xFFBBBBBB), fontSize = 13.sp)
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -849,6 +871,7 @@ fun RetroArchSettingsDialog(
                                                 hideInMenu = hideInMenu,
                                                 behindMenu = behindMenu,
                                                 hideWhenGamepadConnected = hideWhenGamepad,
+                                                hideWhenGamepadConnectedPort0Only = hideWhenGamepadPort0Only,
                                                 showInputs = showInputs,
                                                 showInputsPort = showInputsPort,
                                                 lightgunPort = lightgunPort,
@@ -1185,6 +1208,40 @@ fun RetroArchSettingsDialog(
                                         uncheckedTrackColor = Color(0xFF444444)
                                     )
                                 )
+                            }
+                            
+                            // Hide When Gamepad Connected - Port 0 Only (multijoueur)
+                            if (hideWhenGamepad) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Port 0 Only (Multijoueur)",
+                                            color = Color.White,
+                                            fontSize = 14.sp
+                                        )
+                                        Text(
+                                            "Hide overlay only if gamepad on port 0. Allows player 2 to use overlay touch",
+                                            color = Color(0xFF888888),
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                    Switch(
+                                        checked = hideWhenGamepadPort0Only,
+                                        onCheckedChange = { hideWhenGamepadPort0Only = it },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color(0xFFFF9800),
+                                            checkedTrackColor = Color(0xFFFF9800).copy(alpha = 0.5f),
+                                            uncheckedThumbColor = Color(0xFF888888),
+                                            uncheckedTrackColor = Color(0xFF444444)
+                                        )
+                                    )
+                                }
                             }
                             
                             Spacer(Modifier.height(16.dp))
@@ -1936,6 +1993,50 @@ fun RetroArchSettingsDialog(
                             }
 
                             HorizontalDivider(color = Color(0xFF444444))
+                            
+                            // ========== CONSOLE-SPECIFIC SETTINGS ==========
+                            // PSX: Enable Analog Mode (DualShock)
+                            if (console.equals("psx", ignoreCase = true)) {
+                                Text(
+                                    text = "PlayStation Settings",
+                                    color = Color(0xFFFF9800),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                
+                                var psxAnalogMode by remember { 
+                                    mutableStateOf(
+                                        prefs.getBoolean("psx_analog_mode_enabled", true)
+                                    )
+                                }
+                                
+                                SwitchRow(
+                                    title = "Enable Analog Mode (DualShock)",
+                                    subtitle = "Activate analog sticks on PSX controller (like pressing ANALOG button on DualShock)",
+                                    checked = psxAnalogMode,
+                                    onCheckedChange = { 
+                                        psxAnalogMode = it
+                                        prefs.edit().putBoolean("psx_analog_mode_enabled", it).apply()
+                                        // Appliquer immédiatement si callback fourni
+                                        onPsxAnalogModeChanged?.invoke(it)
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            if (it) "Analog mode ON - Applied immediately!" else "Analog mode OFF - Applied immediately!",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                )
+                                
+                                Text(
+                                    text = "When enabled, analog sticks will work in games that support them (Ape Escape, Medal of Honor, Crash Team Racing, etc.). Changes apply immediately!",
+                                    color = Color(0xFF888888),
+                                    fontSize = 11.sp,
+                                    fontStyle = FontStyle.Italic,
+                                    modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+                                )
+                                
+                                HorizontalDivider(color = Color(0xFF444444))
+                            }
 
                             // ========== INPUT SETTINGS (HOTKEYS) SECTION ==========
                             Text(
@@ -2158,6 +2259,19 @@ fun RetroArchSettingsDialog(
 
 fun layoutDisplayName(layoutName: String): String {
     val lower = layoutName.lowercase()
+    
+    // Pour rgpad: utiliser noms réels au lieu de labels génériques
+    // Ex: "portrait-basic-mini" → "Basic Mini"
+    //     "landscape-options-hidden" → "Options Hidden"
+    if (lower.contains("basic") || lower.contains("options")) {
+        return layoutName
+            .removePrefix("landscape-")
+            .removePrefix("portrait-")
+            .split("-")
+            .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+    }
+    
+    // Fallback pour autres overlays (flat, dual-shock, etc.)
     return when {
         lower.contains("both-analog") -> "Both Analog"
         lower.contains("left-analog") && lower.contains("menu") -> "Left Analog + Menu"

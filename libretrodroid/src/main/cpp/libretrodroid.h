@@ -105,6 +105,13 @@ public:
     void onMotionEvent(unsigned int port, unsigned int source, float xAxis, float yAxis);
     void onMouseButton(int port, int button, int pressed);
     void onTouchEvent(float xAxis, float yAxis);
+    
+    // Show Inputs PHYSICAL: Vérifier si un bouton du gamepad physique est pressé
+    bool isPhysicalButtonPressed(unsigned int port, int retroPadId) const;
+    
+    // Autoconfig mappings - compatible RetroArch input_config_set_autoconfig_binds()
+    void setAutoconfigMapping(unsigned port, int retroPadId, int keyCode);
+    void clearAutoconfigMappings(unsigned port);
 
     void refreshAspectRatio();
     float getAspectRatio();

@@ -130,6 +130,16 @@ class GLRetroView(
         inputListener?.onKeyEvent(port, action, keyCode)
         queueEvent { LibretroDroid.onKeyEvent(port, action, keyCode) }
     }
+    
+    /**
+     * Show Inputs PHYSICAL: Vérifier si un bouton du gamepad physique est pressé
+     * @param port Port du gamepad (0-3)
+     * @param retroPadId RetroPad ID (RETRO_DEVICE_ID_JOYPAD_*)
+     * @return true si le bouton est pressé sur le gamepad physique
+     */
+    fun isPhysicalButtonPressed(port: Int = 0, retroPadId: Int): Boolean {
+        return LibretroDroid.isPhysicalButtonPressed(port, retroPadId)
+    }
 
     fun sendMotionEvent(source: Int, xAxis: Float, yAxis: Float, port: Int = 0) {
         inputListener?.onMotionEvent(port, source, xAxis, yAxis)

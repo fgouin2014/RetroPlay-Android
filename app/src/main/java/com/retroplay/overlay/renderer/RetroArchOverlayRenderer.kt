@@ -943,20 +943,15 @@ private fun handleOverlayTouch(
                     onLightgunAction(button.action)
                 } else {
                     // Actions normales (boutons gamepad)
-                    Log.d(TAG, "Button pressed: ${button.action}${if (button.turbo) " [TURBO]" else ""}")
-                    // TURBO: Si le bouton a turbo=true, ajouter à turboState
-                    if (button.turbo && turboSettings.enabled) {
-                        // Vérifier restrictions D-Pad
-                        val isDpad = button.action in listOf("up", "down", "left", "right")
-                        if (!isDpad || turboSettings.allowDpad) {
-                            turboState[button.action] = true
-                            onButtonPress(button.action)
-                        } else {
-                            // D-Pad turbo disabled, press normal
-                            onButtonPress(button.action)
-                        }
+                    // TURBO: Vérifier si ce bouton est dans la liste des boutons turbo activés
+                    val isTurboButton = turboSettings.enabled && button.action in turboSettings.enabledButtons
+                    Log.d(TAG, "Button pressed: ${button.action}${if (isTurboButton) " [TURBO]" else ""}")
+                    
+                    if (isTurboButton) {
+                        turboState[button.action] = true
+                        onButtonPress(button.action)
                     } else {
-                        onButtonPress(button.action) // Press normal (turbo disabled ou non-turbo)
+                        onButtonPress(button.action) // Press normal
                     }
                 }
             }
@@ -1148,9 +1143,10 @@ private fun handleOverlayTouch(
                 if (RetroArchButtonMapping.isHotkeyAction(button.action)) {
                     onHotkeyChange(button.action, false)
                 } else if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
-                    Log.d(TAG, "Button released: ${button.action}${if (button.turbo) " [TURBO]" else ""}")
+                    val isTurboButton = button.action in turboState.keys
+                    Log.d(TAG, "Button released: ${button.action}${if (isTurboButton) " [TURBO]" else ""}")
                     // TURBO: Retirer du turboState quand relâché
-                    if (button.turbo) {
+                    if (isTurboButton) {
                         turboState.remove(button.action)
                     }
                     onButtonRelease(button.action)

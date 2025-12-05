@@ -3,6 +3,7 @@ package com.retroplay.overlay.assets
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.LruCache
 import android.util.Log
 import com.retroplay.overlay.models.OverlayPackageInfo
 import com.retroplay.overlay.models.RetroArchOverlayConfig
@@ -26,9 +27,41 @@ class OverlayAssetManager(private val context: Context) {
         
         // Racine des overlays dans les assets (structure identique aux repos RetroArch)
         private const val ASSETS_OVERLAYS_ROOT = "overlays/gamepads"
+        
+        // Taille maximale du cache bitmap (20 MB)
+        // Un overlay typique a ~25 boutons × ~100 KB = ~2.5 MB
+        // 20 MB permet de cacher ~8 overlays complets
+        private const val MAX_CACHE_SIZE_MB = 20
+        private const val MAX_CACHE_SIZE_BYTES = MAX_CACHE_SIZE_MB * 1024 * 1024
     }
     
     private val parser = RetroArchOverlayParser()
+    
+    /**
+     * Cache LRU pour les bitmaps d'overlay
+     * Évite de recharger les images depuis le disque à chaque recomposition
+     * Clé: "overlayName/imagePath" (ex: "dual-shock/img/A.png")
+     */
+    private val bitmapCache: LruCache<String, Bitmap> = object : LruCache<String, Bitmap>(MAX_CACHE_SIZE_BYTES) {
+        override fun sizeOf(key: String, bitmap: Bitmap): Int {
+            // Retourner la taille en bytes (width * height * 4 bytes par pixel ARGB)
+            return bitmap.byteCount
+        }
+        
+        override fun entryRemoved(evicted: Boolean, key: String, oldValue: Bitmap, newValue: Bitmap?) {
+            // Optionnel: Log quand une image est évincée du cache
+            if (evicted) {
+                Log.d(TAG, "Bitmap evicted from cache: $key (${oldValue.byteCount / 1024} KB)")
+            }
+        }
+    }
+    
+    /**
+     * Cache pour les configs parsées (évite double parsing)
+     * Clé: "overlayName/customCfgName" (ex: "rgpad/rgpad_modern.cfg")
+     * SYNCHRONIZED pour éviter double parsing sur threads parallèles
+     */
+    private val configCache = java.util.concurrent.ConcurrentHashMap<String, RetroArchOverlayConfig>()
     
     /**
      * Callback pour rapporter la progression de l'installation
@@ -128,7 +161,16 @@ class OverlayAssetManager(private val context: Context) {
      * @param customCfgName Nom du .cfg custom (ex: "dreamcast.cfg"), null pour auto-detect
      * @return Configuration parsée, ou null si erreur
      */
-    fun loadOverlayConfig(overlayName: String, console: String, customCfgName: String? = null): RetroArchOverlayConfig? {
+    fun loadOverlayConfig(overlayName: String, console: String, customCfgName: String? = null): RetroArchOverlayConfig? = synchronized(this) {
+        // OPTIMISATION: Vérifier le cache d'abord (évite double parsing)
+        val cacheKey = "$overlayName/${customCfgName ?: console}"
+        configCache[cacheKey]?.let {
+            Log.i(TAG, "Config cache HIT: $cacheKey (avoided re-parsing 16 layouts!)")
+            return it
+        }
+        
+        Log.i(TAG, "Config cache MISS: $cacheKey (will parse now)")
+        
         // Si customCfgName spécifié (custom browsé), l'utiliser directement
         var cfgFile = if (customCfgName != null) {
             File(OVERLAY_DIR, "$overlayName/$customCfgName")
@@ -187,7 +229,9 @@ class OverlayAssetManager(private val context: Context) {
         val config = parser.parseConfig(cfgFile, overlayName, imageDimensionsCallback)
         
         if (config != null && parser.validateConfig(config)) {
-            Log.i(TAG, "Successfully loaded overlay config: $overlayName (cfg: ${cfgFile.name})")
+            // Mettre en cache pour éviter double parsing
+            configCache[cacheKey] = config
+            Log.i(TAG, "Successfully loaded overlay config: $overlayName (cfg: ${cfgFile.name}) [CACHED]")
             Log.d(TAG, parser.getConfigStats(config))
             return config
         }
@@ -197,12 +241,25 @@ class OverlayAssetManager(private val context: Context) {
     }
     
     /**
-     * Charger une image de bouton
+     * Charger une image de bouton avec cache LRU
      * @param overlayName Nom de l'overlay
      * @param imagePath Chemin relatif de l'image (ex: "img/A.png")
      * @return Bitmap, ou null si non trouvé
      */
     fun loadButtonImage(overlayName: String, imagePath: String): Bitmap? {
+        // Clé unique pour le cache: "overlayName/imagePath"
+        val cacheKey = "$overlayName/$imagePath"
+        
+        // Vérifier le cache d'abord
+        synchronized(bitmapCache) {
+            val cached = bitmapCache.get(cacheKey)
+            if (cached != null && !cached.isRecycled) {
+                Log.v(TAG, "Bitmap cache HIT: $cacheKey")
+                return cached
+            }
+        }
+        
+        // Cache miss: charger depuis le disque
         val imageFile = File(OVERLAY_DIR, "$overlayName/$imagePath")
         
         if (!imageFile.exists()) {
@@ -211,10 +268,41 @@ class OverlayAssetManager(private val context: Context) {
         }
         
         return try {
-            BitmapFactory.decodeFile(imageFile.absolutePath)
+            val bitmap = BitmapFactory.decodeFile(imageFile.absolutePath)
+            if (bitmap != null) {
+                // Ajouter au cache
+                synchronized(bitmapCache) {
+                    bitmapCache.put(cacheKey, bitmap)
+                }
+                Log.v(TAG, "Bitmap loaded and cached: $cacheKey (${bitmap.byteCount / 1024} KB)")
+            }
+            bitmap
         } catch (e: Exception) {
             Log.e(TAG, "Error loading image: ${imageFile.absolutePath}", e)
             null
+        }
+    }
+    
+    /**
+     * Vider le cache bitmap (utile pour libérer de la mémoire)
+     */
+    fun clearBitmapCache() {
+        synchronized(bitmapCache) {
+            bitmapCache.evictAll()
+            Log.i(TAG, "Bitmap cache cleared")
+        }
+    }
+    
+    /**
+     * Obtenir les statistiques du cache bitmap
+     */
+    fun getCacheStats(): String {
+        synchronized(bitmapCache) {
+            val maxSize = bitmapCache.maxSize() / (1024 * 1024) // MB
+            val currentSize = (bitmapCache.size() / (1024 * 1024)).toFloat() // MB
+            val entryCount = bitmapCache.snapshot().size
+            
+            return "Cache: ${String.format("%.1f", currentSize)}/$maxSize MB | Entries: $entryCount"
         }
     }
     

@@ -264,6 +264,26 @@ void LibretroDroid::onKeyEvent(unsigned int port, int action, int keyCode) {
     }
 }
 
+// Show Inputs PHYSICAL: Vérifier si un bouton du gamepad physique est pressé
+bool LibretroDroid::isPhysicalButtonPressed(unsigned int port, int retroPadId) const {
+    if (input) {
+        return input->isPhysicalButtonPressed(port, retroPadId);
+    }
+    return false;
+}
+
+void LibretroDroid::setAutoconfigMapping(unsigned port, int retroPadId, int keyCode) {
+    if (input) {
+        input->setAutoconfigMapping(port, retroPadId, keyCode);
+    }
+}
+
+void LibretroDroid::clearAutoconfigMappings(unsigned port) {
+    if (input) {
+        input->clearAutoconfigMappings(port);
+    }
+}
+
 void LibretroDroid::create(
     unsigned int GLESVersion,
     const std::string& soFilePath,

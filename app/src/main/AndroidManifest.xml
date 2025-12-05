@@ -32,6 +32,7 @@
     <!-- Permissions pour le service en arrière-plan -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <uses-feature android:name="android.hardware.camera"
                   android:required="false" />
@@ -150,6 +151,11 @@
                     android:name=".WebServerService"
                     android:enabled="true"
                     android:exported="false"
-                    android:foregroundServiceType="dataSync|specialUse" />
+                    android:foregroundServiceType="dataSync|specialUse">
+                    <!-- Android 14+ requirement: Justification for specialUse type -->
+                    <property
+                        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                        android:value="Local HTTP server for game emulation" />
+                </service>
     </application>
 </manifest>

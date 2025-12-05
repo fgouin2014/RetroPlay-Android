@@ -160,6 +160,40 @@ object SmartConfigManager {
     }
     
     /**
+     * Get optimal Rewind granularity based on console
+     * 
+     * Granularity = how many frames between savestate captures.
+     * Higher = less memory pressure, lower rewind resolution.
+     * 
+     * Critical for PSX/N64 where savestates are 2-4 MB each!
+     * At granularity=1 + 60fps = 120-240 MB/sec of allocations = OOM
+     * 
+     * @param console Console ID
+     * @return Frames between captures (1 = every frame, 60 = once per second)
+     */
+    fun getOptimalRewindGranularity(console: String): Int {
+        val granularity = when (console) {
+            // Light consoles: small savestates (8-50 KB), can capture often
+            "nes", "gb", "gbc" -> 5          // ~12 captures/sec
+            
+            // Medium consoles: moderate savestates (100-500 KB)
+            "snes", "gba", "genesis", "sms", "gg" -> 15  // ~4 captures/sec
+            
+            // Heavy consoles: large savestates (1-4 MB)
+            "psx", "ps1", "playstation" -> 30  // ~2 captures/sec
+            "n64" -> 45                         // ~1.3 captures/sec
+            "saturn", "dc", "dreamcast" -> 60   // ~1 capture/sec
+            "psp" -> 60                         // ~1 capture/sec
+            
+            // Default: conservative for unknown consoles
+            else -> 30
+        }
+        
+        Log.d(TAG, "[REWIND] Console '$console' -> granularity = $granularity frames")
+        return granularity
+    }
+    
+    /**
      * Get optimal fast-forward ratio
      * 
      * RPGs benefit from higher ratios (skip grinding/cutscenes)
@@ -198,6 +232,7 @@ object SmartConfigManager {
             runAheadFrames = getOptimalRunAheadFrames(gameInfo, console),
             runAheadEnabled = shouldEnableRunAheadByDefault(gameInfo),
             rewindBufferSize = getOptimalRewindBuffer(gameInfo, console),
+            rewindGranularity = getOptimalRewindGranularity(console),
             rewindEnabled = shouldEnableRewindByDefault(gameInfo),
             overlayName = getOptimalOverlay(gameInfo, console),
             fastForwardRatio = getOptimalFastForwardRatio(gameInfo)
@@ -212,15 +247,21 @@ data class SmartConfig(
     val runAheadFrames: Int,
     val runAheadEnabled: Boolean,
     val rewindBufferSize: Int,
+    val rewindGranularity: Int,
     val rewindEnabled: Boolean,
     val overlayName: String,
     val fastForwardRatio: Float
 ) {
     fun toLogString(): String {
+        val rewindInfo = if (rewindEnabled) {
+            "${rewindBufferSize / 1024 / 1024}MB @ 1/${rewindGranularity} frames"
+        } else {
+            "disabled"
+        }
         return """
             [SMART CONFIG]
               Run-Ahead: ${if (runAheadEnabled) "$runAheadFrames frames" else "disabled"}
-              Rewind: ${if (rewindEnabled) "${rewindBufferSize / 1024 / 1024}MB" else "disabled"}
+              Rewind: $rewindInfo
               Overlay: $overlayName
               FF Ratio: ${fastForwardRatio}x
         """.trimIndent()

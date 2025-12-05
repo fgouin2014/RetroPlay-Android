@@ -3,6 +3,8 @@ package com.retroplay.input
 import android.content.Context
 import android.util.Log
 import android.view.InputDevice
+import com.swordfish.libretrodroid.LibretroDroid
+import com.retroplay.overlay.models.RetroPadIds
 import java.io.File
 import java.io.InputStream
 
@@ -468,21 +470,109 @@ class AutoconfigManager(private val context: Context) {
     }
     
     /**
-     * Appliquer une configuration à un device
+     * Parser une valeur de mapping depuis .cfg (compatible RetroArch input_config_parse_joy_button)
+     * Formats supportés:
+     * - "96" → AKEYCODE numérique (strtoull)
+     * - "h0up" → Hat direction (HAT_MAP)
+     * - "nul" → NO_BTN (pas de mapping)
      * 
-     * TODO: Intégrer avec input.cpp pour appliquer les mappings
-     * Pour l'instant, on retourne juste la config trouvée
+     * @param value Valeur depuis .cfg (ex: "96", "h0up", "nul")
+     * @return AKEYCODE (Int) ou null si "nul" ou invalide
      */
-    fun applyConfig(device: ConnectedDevice, config: DeviceConfig) {
-        Log.i(TAG, "Applying config '${config.deviceName}' to device '${device.name}'")
+    private fun parseButtonValue(value: String): Int? {
+        val trimmed = value.trim()
         
-        // Log des mappings
-        Log.d(TAG, "Button mappings: ${config.buttonMappings.size}")
-        Log.d(TAG, "Axis mappings: ${config.axisMappings.size}")
+        // "nul" → NO_BTN (pas de mapping)
+        if (trimmed.equals("nul", ignoreCase = true) || trimmed.isEmpty()) {
+            return null
+        }
         
-        // TODO: Intégrer avec input.cpp pour appliquer les mappings
-        // - Convertir les mappings .cfg en mapping Android keycodes
-        // - Stocker dans input.cpp pour utilisation lors de onKeyEvent/onMotionEvent
+        // "h0up" → Hat direction (HAT_MAP) - TODO: Support hats si nécessaire
+        if (trimmed.startsWith("h", ignoreCase = true)) {
+            // Pour l'instant, on ignore les hats (peu utilisés sur Android)
+            Log.w(TAG, "Hat mapping not supported yet: $trimmed")
+            return null
+        }
+        
+        // "96" → AKEYCODE numérique (strtoull)
+        return trimmed.toIntOrNull()
+    }
+    
+    /**
+     * Convertir nom de bouton .cfg → RetroPad ID
+     * Ex: "input_a_btn" → RetroPadIds.JOYPAD_A
+     * Compatible RetroArch input_config_translate_str_to_bind_id()
+     */
+    private fun getRetroPadIdFromButtonName(buttonName: String): Int? {
+        // Extraire le nom du bouton (ex: "input_a_btn" → "a")
+        val name = buttonName
+            .removePrefix("input_")
+            .removeSuffix("_btn")
+            .lowercase()
+        
+        // Mapping nom → RetroPad ID (compatible RetroArch)
+        return when (name) {
+            "a" -> RetroPadIds.JOYPAD_A
+            "b" -> RetroPadIds.JOYPAD_B
+            "x" -> RetroPadIds.JOYPAD_X
+            "y" -> RetroPadIds.JOYPAD_Y
+            "l" -> RetroPadIds.JOYPAD_L
+            "r" -> RetroPadIds.JOYPAD_R
+            "l2" -> RetroPadIds.JOYPAD_L2
+            "r2" -> RetroPadIds.JOYPAD_R2
+            "l3" -> RetroPadIds.JOYPAD_L3
+            "r3" -> RetroPadIds.JOYPAD_R3
+            "start" -> RetroPadIds.JOYPAD_START
+            "select" -> RetroPadIds.JOYPAD_SELECT
+            "up" -> RetroPadIds.JOYPAD_UP
+            "down" -> RetroPadIds.JOYPAD_DOWN
+            "left" -> RetroPadIds.JOYPAD_LEFT
+            "right" -> RetroPadIds.JOYPAD_RIGHT
+            else -> {
+                Log.w(TAG, "Unknown button name: $name (from $buttonName)")
+                null
+            }
+        }
+    }
+    
+    /**
+     * Appliquer une configuration à un device
+     * Compatible RetroArch input_config_set_autoconfig_binds()
+     * 
+     * @param device Device connecté
+     * @param config Configuration parsée depuis .cfg
+     * @param port Port du controller (0-3)
+     */
+    fun applyConfig(device: ConnectedDevice, config: DeviceConfig, port: Int = 0) {
+        Log.i(TAG, "Applying config '${config.deviceName}' to device '${device.name}' on port $port")
+        
+        // Clear existing mappings for this port
+        LibretroDroid.clearAutoconfigMappings(port)
+        
+        // Apply button mappings
+        var appliedCount = 0
+        for ((buttonName, value) in config.buttonMappings) {
+            val retroPadId = getRetroPadIdFromButtonName(buttonName)
+            val keyCode = parseButtonValue(value)
+            
+            if (retroPadId != null && keyCode != null) {
+                LibretroDroid.setAutoconfigMapping(port, retroPadId, keyCode)
+                appliedCount++
+                Log.d(TAG, "Mapped: $buttonName = $value → RetroPad ID=$retroPadId, AKEYCODE=$keyCode")
+            } else {
+                if (retroPadId == null) {
+                    Log.w(TAG, "Unknown button name: $buttonName")
+                }
+                if (keyCode == null) {
+                    Log.d(TAG, "Skipping button mapping: $buttonName = $value (nul or invalid)")
+                }
+            }
+        }
+        
+        Log.i(TAG, "Applied $appliedCount button mappings for port $port")
+        
+        // TODO: Apply axis mappings (input_*_axis) - nécessite parsing "+0", "-0", etc.
+        // Pour l'instant, on se concentre sur les boutons
     }
 }
 

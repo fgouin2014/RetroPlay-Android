@@ -349,6 +349,34 @@ JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_onKeyEvent
     LibretroDroid::getInstance().onKeyEvent(port, action, keyCode);
 }
 
+// Show Inputs PHYSICAL: Vérifier si un bouton du gamepad physique est pressé
+JNIEXPORT jboolean JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_isPhysicalButtonPressed(
+    JNIEnv* env,
+    jclass obj,
+    jint port,
+    jint retroPadId
+) {
+    return LibretroDroid::getInstance().isPhysicalButtonPressed(port, retroPadId);
+}
+
+JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_setAutoconfigMapping(
+    JNIEnv* env,
+    jclass obj,
+    jint port,
+    jint retroPadId,
+    jint keyCode
+) {
+    LibretroDroid::getInstance().setAutoconfigMapping(port, retroPadId, keyCode);
+}
+
+JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_clearAutoconfigMappings(
+    JNIEnv* env,
+    jclass obj,
+    jint port
+) {
+    LibretroDroid::getInstance().clearAutoconfigMappings(port);
+}
+
 JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_create(
     JNIEnv* env,
     jclass obj,

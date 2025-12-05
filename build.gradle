@@ -1,20 +1,14 @@
 buildscript {
-    ext.kotlin_version = '2.0.21'  // Version expérimentale pour Compose
+    ext.kotlin_version = '2.0.21'
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://jitpack.io' }
+        gradlePluginPortal()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.4.0'  // Mis à jour pour Kotlin 2.0
+        classpath 'com.android.tools.build:gradle:8.4.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url 'https://jitpack.io' }
-    }
-}
+// allprojects block removed - now using dependencyResolutionManagement in settings.gradle

@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <unordered_set>
+#include <unordered_map>
 #include <array>
 
 namespace libretrodroid {
@@ -95,6 +96,13 @@ private:
         // Keyboard support (P1 #9) - compatible RetroArch RETRO_DEVICE_KEYBOARD
         // Store pressed keyboard keys as RetroK IDs (RETROK_*)
         std::unordered_set<unsigned> pressedKeyboardKeys;
+        
+        // Autoconfig mappings (compatible RetroArch android_key_state + autoconfig)
+        // Mapping: RETRO_DEVICE_ID_JOYPAD_* → AKEYCODE (joykey from .cfg)
+        // Ex: input_a_btn = "96" → RETRO_DEVICE_ID_JOYPAD_A → 96 (AKEYCODE_BUTTON_A)
+        // Compatible RetroArch: android_joypad_button_state() uses joykey from autoconfig
+        std::unordered_map<int, int> autoconfigMappings;  // RetroPad ID → AKEYCODE
+        std::unordered_set<int> pressedKeyCodes;  // AKEYCODE pressed (like RetroArch android_key_state)
     };
 
 public:
@@ -110,6 +118,9 @@ public:
     static constexpr int RETRO_DEVICE_ID_JOYPAD_DOWN_RIGHT = 53;
 
     int16_t getInputState(unsigned port, unsigned device, unsigned index, unsigned id);
+    
+    // Show Inputs PHYSICAL: Expose l'état des boutons du gamepad physique
+    bool isPhysicalButtonPressed(unsigned port, int retroPadId) const;
 
     void onKeyEvent(unsigned int port, int action, int keyCode);
     void onMotionEvent(int port, int motionSource, float xAxis, float yAxis);
@@ -138,6 +149,14 @@ public:
     // Values should be in range [0.0, 1.0] where 0.0 = unpressed, 1.0 = fully pressed
     // Compatible RetroArch analog_state[port][6] (L2) and [7] (R2)
     void setTriggerValue(unsigned port, int trigger, float value);
+    
+    // Autoconfig mappings - compatible RetroArch input_config_set_autoconfig_binds()
+    // Set button mapping: RETRO_DEVICE_ID_JOYPAD_* → AKEYCODE (from .cfg file)
+    // Ex: setAutoconfigMapping(port, RETRO_DEVICE_ID_JOYPAD_A, 96) for input_a_btn = "96"
+    void setAutoconfigMapping(unsigned port, int retroPadId, int keyCode);
+    
+    // Clear all autoconfig mappings for a port (reset to defaults)
+    void clearAutoconfigMappings(unsigned port);
 
 private:
     const int UNKNOWN_KEY = -1;
@@ -145,7 +164,11 @@ private:
     template<typename ...T>
     bool anyPressed(unsigned int port, unsigned id, T&... args) const;
     bool anyPressed(unsigned int port, unsigned int id) const;
-    int convertAndroidToLibretroKey(int keyCode) const;
+    int convertAndroidToLibretroKey(int keyCode) const;  // Fallback hardcoded mapping (if no autoconfig)
+    
+    // Get RetroPad ID from AKEYCODE using autoconfig mappings (compatible RetroArch)
+    // Returns RETRO_DEVICE_ID_JOYPAD_* if mapping exists, UNKNOWN_KEY otherwise
+    int getRetroPadIdFromKeyCode(unsigned port, int keyCode) const;
     
     // P1 #9: Keyboard Support - convert Android keycode → RetroK (compatible RetroArch input_keymaps_translate_keysym_to_rk)
     // Maps Android AKEYCODE_* to RetroArch RETROK_* (for RETRO_DEVICE_KEYBOARD)

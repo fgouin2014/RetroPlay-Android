@@ -261,10 +261,21 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     private fun applyRewindSettings() {
         val manager = rewindManager ?: return
         val config = retroPlayConfig
+        
+        // Use SmartConfig granularity if auto-rewind is enabled (adapts to console)
+        // PSX/N64 need higher granularity (30-60) to avoid OOM from large savestates
+        val effectiveGranularity = if (config.smartConfigEnabled && config.smartConfigAutoRewind) {
+            val smartGranularity = com.retroplay.database.SmartConfigManager.getOptimalRewindGranularity(console)
+            Log.i(TAG, "[REWIND] Using SmartConfig granularity for $console: $smartGranularity frames")
+            smartGranularity
+        } else {
+            config.rewindGranularity
+        }
+        
         manager.configure(
-            enabled = config.rewindEnable,
+            enabled = config.rewindEnable || (config.smartConfigEnabled && config.smartConfigAutoRewind),
             bufferSizeBytes = config.rewindBufferSize,
-            granularity = config.rewindGranularity
+            granularity = effectiveGranularity
         )
     }
 
@@ -390,6 +401,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             }
             
             // Configurer le type de contrôleur pour PSX (DualShock pour analog sticks)
+            // TEMPORAIREMENT DÉSACTIVÉ pour tester si c'est la cause du crash
+            /*
             if (console.equals("psx", ignoreCase = true)) {
                 try {
                     val controllers = retroView.getControllers()
@@ -418,6 +431,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     Log.e(TAG, "[PSX] Error configuring controller type", e)
                 }
             }
+            */
+            Log.i(TAG, "[PSX] Controller configuration DISABLED for testing")
             
             // Configuration des ports contrôleurs
             // 1. Vérifier d'abord s'il y a une configuration manuelle (override détection auto)
@@ -509,6 +524,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
             val configuredExtensions = mutableListOf<Pair<Int, String>>()
             
             // Configurer les extensions pour chaque port (0-3)
+            // TEMPORAIREMENT DÉSACTIVÉ pour tester si c'est la cause du crash
+            /*
             for (port in 0..3) {  // 4 ports maximum pour N64
                 try {
                     // pakPosition: 0 = Controller Pak, 1 = Rumble Pak, 2 = Transfer Pak (positions spinner)
@@ -543,6 +560,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                     // ✅ CONTINUER au lieu de return (amélioration gestion erreurs)
                 }
             }
+            */
+            Log.i(TAG, "[N64] Extension configuration DISABLED for testing")
             
             // Log récapitulatif
             if (configuredExtensions.isNotEmpty()) {
@@ -2676,6 +2695,7 @@ private fun ComposeEmulatorScreen(
                                         abxyDiagonalSensitivity = advancedSettings.abxyDiagonalSensitivity,
                                         showInputsMode = advancedSettings.showInputs,
                                         hideWhenGamepadConnected = advancedSettings.hideWhenGamepadConnected,
+                                        hideWhenGamepadConnectedPort0Only = advancedSettings.hideWhenGamepadConnectedPort0Only,
                                         analogRecenterZone = advancedSettings.analogRecenterZone,
                                         aspectAdjust = advancedSettings.aspectAdjust,
                                         isZapperGame = isZapperGame,  // Passer le flag Zapper pour que les overlays ne consomment que les touches sur boutons

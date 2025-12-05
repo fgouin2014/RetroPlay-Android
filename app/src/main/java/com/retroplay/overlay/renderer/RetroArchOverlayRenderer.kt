@@ -23,8 +23,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import com.retroplay.overlay.assets.OverlayAssetManager
 import com.retroplay.overlay.models.*
+import com.retroplay.overlay.models.TurboPreferenceManager
+import com.retroplay.overlay.models.TurboSettings
 import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlinx.coroutines.delay
 
 /**
  * Composable principal pour afficher un overlay RetroArch complet
@@ -107,6 +110,7 @@ fun calculateOverlayViewport(
 fun RetroArchOverlayScreen(
     layout: OverlayLayout,
     overlayName: String,
+    customCfgName: String? = null,  // Nom du .cfg custom (pour invalider cache d'images)
     assetManager: OverlayAssetManager,
     onButtonPress: (String) -> Unit,
     onButtonRelease: (String) -> Unit,
@@ -130,19 +134,73 @@ fun RetroArchOverlayScreen(
     dpadDiagonalSensitivity: Int = 50,     // Sensibilité diagonales D-pad (0-100)
     abxyDiagonalSensitivity: Int = 50,     // Sensibilité diagonales ABXY (0-100)
     showInputsMode: com.retroplay.overlay.models.ShowInputsMode = com.retroplay.overlay.models.ShowInputsMode.NONE,
+    showInputsPort: Int = 0,               // Port à afficher pour PHYSICAL mode (0-3)
+    retroView: com.swordfish.libretrodroid.GLRetroView? = null,  // Pour lire l'état du gamepad physique
     hideWhenGamepadConnected: Boolean = false,
+    hideWhenGamepadConnectedPort0Only: Boolean = false,  // Si true, vérifie seulement port 0 (compatible RetroArch, utile multijoueur)
     analogRecenterZone: Int = 0,           // Recentrage analog sticks (0-100)
     isZapperGame: Boolean = false,         // Mode Zapper: ne consommer QUE les touches sur boutons
     aspectAdjust: Float = 0.0f,            // Ajustement aspect ratio (-0.5 à 0.5, 0.0 = pas d'ajustement)
     modifier: Modifier = Modifier
 ) {
     val TAG = "RetroArchOverlay"
+    val context = LocalContext.current
     
-    // Détecter si un gamepad physique est connecté
-    val isGamepadConnected = remember {
-        android.view.InputDevice.getDeviceIds().any { deviceId ->
-            val device = android.view.InputDevice.getDevice(deviceId)
-            device != null && (device.sources and android.view.InputDevice.SOURCE_GAMEPAD) == android.view.InputDevice.SOURCE_GAMEPAD
+    // Détecter si un gamepad physique est connecté (détection dynamique)
+    // Compatible RetroArch input_overlay_want_hidden() qui vérifie input_config_get_device_name(0) != NULL
+    var isGamepadConnected by remember { mutableStateOf(false) }
+    
+    // Fonction pour vérifier les gamepads connectés
+    // Compatible RetroArch: input_overlay_want_hidden() vérifie input_config_get_device_name(0) != NULL
+    fun checkGamepadConnected(): Boolean {
+        val gamepads = android.view.InputDevice.getDeviceIds()
+            .sorted()  // Trier par deviceId pour avoir le premier (généralement port 0)
+            .mapNotNull { deviceId ->
+                android.view.InputDevice.getDevice(deviceId)
+            }
+            .filter { device ->
+                (device.sources and android.view.InputDevice.SOURCE_GAMEPAD) == android.view.InputDevice.SOURCE_GAMEPAD
+            }
+        
+        return if (hideWhenGamepadConnectedPort0Only) {
+            // Mode "port 0 seulement" (compatible RetroArch, utile multijoueur)
+            // Vérifie seulement le premier gamepad (généralement assigné au port 0)
+            // Permet multijoueur: joueur 1 sur gamepad (port 0), joueur 2 sur overlay touch
+            // Compatible RetroArch: input_config_get_device_name(0) != NULL
+            gamepads.isNotEmpty() && gamepads.firstOrNull() != null
+        } else {
+            // Mode "tous les ports" (comportement par défaut, plus pratique)
+            // Cache l'overlay si n'importe quel gamepad est connecté
+            gamepads.isNotEmpty()
+        }
+    }
+    
+    // Initialiser l'état
+    LaunchedEffect(Unit) {
+        isGamepadConnected = checkGamepadConnected()
+    }
+    
+    // Écouter les changements de devices (connexion/déconnexion)
+    DisposableEffect(Unit) {
+        val inputManager = context.getSystemService(android.content.Context.INPUT_SERVICE) as android.hardware.input.InputManager
+        val listener = object : android.hardware.input.InputManager.InputDeviceListener {
+            override fun onInputDeviceAdded(deviceId: Int) {
+                isGamepadConnected = checkGamepadConnected()
+                Log.d(TAG, "Input device added: $deviceId, gamepad connected: $isGamepadConnected")
+            }
+            override fun onInputDeviceRemoved(deviceId: Int) {
+                isGamepadConnected = checkGamepadConnected()
+                Log.d(TAG, "Input device removed: $deviceId, gamepad connected: $isGamepadConnected")
+            }
+            override fun onInputDeviceChanged(deviceId: Int) {
+                isGamepadConnected = checkGamepadConnected()
+                Log.d(TAG, "Input device changed: $deviceId, gamepad connected: $isGamepadConnected")
+            }
+        }
+        inputManager.registerInputDeviceListener(listener, null)
+        
+        onDispose {
+            inputManager.unregisterInputDeviceListener(listener)
         }
     }
     
@@ -185,8 +243,47 @@ fun RetroArchOverlayScreen(
     // Map<buttonIndex, Pair<deltaX, deltaY>> - delta en coordonnées normalisées
     val movableButtonDeltas = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
     
+    // TURBO: Configuration et état (compatible RetroArch 10 Hz)
+    val turboPrefs = remember { context.getSharedPreferences("retroplay_prefs", android.content.Context.MODE_PRIVATE) }
+    val turboSettings = remember { mutableStateOf(TurboPreferenceManager.load(turboPrefs)) }
+    val turboState = remember { mutableStateMapOf<String, Boolean>() }
+    var frameCounter by remember { mutableStateOf(0L) }
+    
+    // Frame-based turbo compatible RetroArch (60 FPS)
+    LaunchedEffect(turboSettings.value) {
+        while (true) {
+            delay(16L) // ~60 FPS
+            frameCounter++
+            
+            if (!turboSettings.value.enabled) continue
+            
+            val period = (60 / turboSettings.value.frequency).coerceAtLeast(2)
+            val dutyCycle = (period * turboSettings.value.dutyCycle).toLong().coerceAtLeast(1)
+            
+            turboState.keys.toList().forEach { action ->
+                val isPressed = (frameCounter % period) < dutyCycle
+                val lastState = turboState[action] ?: false
+                
+                if (isPressed != lastState) {
+                    if (isPressed) onButtonPress(action)
+                    else onButtonRelease(action)
+                    turboState[action] = isPressed
+                }
+            }
+        }
+    }
+    
+    // Listener pour changements de config turbo
+    LaunchedEffect(Unit) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key?.startsWith("turbo_") == true) {
+                turboSettings.value = TurboPreferenceManager.load(turboPrefs)
+            }
+        }
+        turboPrefs.registerOnSharedPreferenceChangeListener(listener)
+    }
+    
     // P3: Charger positions sauvegardées pour boutons déplaçables au démarrage
-    val context = LocalContext.current
     LaunchedEffect(layout.name) {
         val prefs = context.getSharedPreferences("overlay_prefs", android.content.Context.MODE_PRIVATE)
         
@@ -208,6 +305,31 @@ fun RetroArchOverlayScreen(
     // État des analog sticks
     val analogLeftState = remember { mutableStateOf(AnalogStickState()) }
     val analogRightState = remember { mutableStateOf(AnalogStickState()) }
+    
+    // CRITIQUE: Cache des ImageBitmap pour éviter les conversions répétées à chaque frame
+    // Clé: "overlayName/imagePath" (ex: "dual-shock/img/A.png")
+    // Sans ce cache, asImageBitmap() est appelé 25 boutons × 60 FPS = 1500 fois/sec = 150 MB/sec → OOM !
+    // NOTE: La clé inclut customCfgName pour invalider le cache quand on change de .cfg custom
+    val imageBitmapCache = remember(overlayName, layout.name, customCfgName) {
+        Log.d(TAG, "[CACHE] Creating ImageBitmap cache for overlay='$overlayName', layout='${layout.name}', custom='$customCfgName'")
+        val cache = mutableMapOf<String, androidx.compose.ui.graphics.ImageBitmap>()
+        var totalSize = 0
+        scaledLayout.buttons.forEach { button ->
+            button.imagePath?.let { path ->
+                val cacheKey = "$overlayName/$path"
+                if (!cache.containsKey(cacheKey)) {
+                    val bitmap = assetManager.loadButtonImage(overlayName, path)
+                    if (bitmap != null) {
+                        val imageBitmap = bitmap.asImageBitmap()
+                        cache[cacheKey] = imageBitmap
+                        totalSize += bitmap.byteCount / 1024
+                    }
+                }
+            }
+        }
+        Log.d(TAG, "[CACHE] ImageBitmap cache created: ${cache.size} images, ~${totalSize} KB total")
+        cache
+    }
     
     Box(
         modifier = modifier
@@ -237,6 +359,8 @@ fun RetroArchOverlayScreen(
                     pressedButtons = pressedButtons,
                     buttonTouchMasks = buttonTouchMasks,
                     movableButtonDeltas = movableButtonDeltas,
+                    turboState = turboState,
+                    turboSettings = turboSettings.value,
                     analogLeftState = analogLeftState,
                     analogRightState = analogRightState,
                     onButtonPress = onButtonPress,
@@ -294,11 +418,11 @@ fun RetroArchOverlayScreen(
                 val hitboxWidthPx = button.rangeXHitbox * viewport.width * effectiveRangeMod
                 val hitboxHeightPx = button.rangeYHitbox * viewport.height * effectiveRangeMod
                 
-                // Charger et afficher l'image du bouton
+                // Charger et afficher l'image du bouton depuis le cache
                 button.imagePath?.let { path ->
-                    val bitmap = assetManager.loadButtonImage(overlayName, path)
-                    if (bitmap != null) {
-                        val imageBitmap = bitmap.asImageBitmap()
+                    val cacheKey = "$overlayName/$path"
+                    val imageBitmap = imageBitmapCache[cacheKey]
+                    if (imageBitmap != null) {
                         // IMPORTANT: Utiliser button.alphaModifier si défini, sinon layout.alphaModifier
                         val effectiveAlphaMod = button.alphaModifier ?: scaledLayout.alphaModifier
                         val isPressed = pressedButtons.values.any { it.contains(button) }
@@ -455,12 +579,45 @@ fun RetroArchOverlayScreen(
                 }
             }
             
-            // MODE SHOW INPUTS: Afficher visuel des boutons pressés (TOUCHED mode)
+            // MODE SHOW INPUTS: Afficher visuel des boutons pressés
+            // TOUCHED: boutons overlay tactiles pressés
+            // PHYSICAL: boutons overlay correspondant aux boutons gamepad physiques pressés
+            // BOTH: les deux
             if (showInputsMode == com.retroplay.overlay.models.ShowInputsMode.TOUCHED || 
+                showInputsMode == com.retroplay.overlay.models.ShowInputsMode.PHYSICAL ||
                 showInputsMode == com.retroplay.overlay.models.ShowInputsMode.BOTH) {
                 
-                // Parcourir tous les boutons pressés
-                pressedButtons.values.flatten().toSet().forEach { pressedButton ->
+                // Set des boutons à afficher (combine TOUCHED et PHYSICAL selon le mode)
+                val buttonsToShow = mutableSetOf<OverlayButton>()
+                
+                // Mode TOUCHED ou BOTH: ajouter les boutons tactiles pressés
+                if (showInputsMode == com.retroplay.overlay.models.ShowInputsMode.TOUCHED || 
+                    showInputsMode == com.retroplay.overlay.models.ShowInputsMode.BOTH) {
+                    buttonsToShow.addAll(pressedButtons.values.flatten().toSet())
+                }
+                
+                // Mode PHYSICAL ou BOTH: ajouter les boutons correspondant aux inputs physiques
+                if ((showInputsMode == com.retroplay.overlay.models.ShowInputsMode.PHYSICAL || 
+                    showInputsMode == com.retroplay.overlay.models.ShowInputsMode.BOTH) &&
+                    retroView != null) {
+                    // Pour chaque bouton de l'overlay
+                    scaledLayout.buttons.forEach { button ->
+                        // Vérifier si un des RetroPad IDs du buttonMask est pressé sur le gamepad physique
+                        val isPhysicallyPressed = button.buttonMask.any { retroPadId ->
+                            try {
+                                retroView!!.isPhysicalButtonPressed(showInputsPort, retroPadId)
+                            } catch (e: Exception) {
+                                false
+                            }
+                        }
+                        if (isPhysicallyPressed) {
+                            buttonsToShow.add(button)
+                        }
+                    }
+                }
+                
+                // Afficher tous les boutons identifiés
+                buttonsToShow.forEach { pressedButton ->
                     // Skip system buttons (overlay, layout_next, etc.)
                     if (!com.retroplay.overlay.models.RetroArchButtonMapping.isOverlayControlAction(pressedButton.action)) {
                         val xPx = viewport.x + (pressedButton.x * viewport.width)
@@ -515,6 +672,8 @@ private fun handleOverlayTouch(
     pressedButtons: MutableMap<Int, Set<OverlayButton>>,
     buttonTouchMasks: MutableMap<OverlayButton, MutableSet<Int>>,
     movableButtonDeltas: MutableMap<Int, Pair<Float, Float>>,
+    turboState: MutableMap<String, Boolean>,  // État turbo
+    turboSettings: TurboSettings,  // Configuration turbo
     analogLeftState: MutableState<AnalogStickState>,
     analogRightState: MutableState<AnalogStickState>,
     onButtonPress: (String) -> Unit,
@@ -554,10 +713,28 @@ private fun handleOverlayTouch(
             // Les hitboxes sont projetées avec viewport.x + (button.xHitbox * viewport.width), donc aussi en pixels écran
             // Pas besoin de conversion! Utiliser directement x, y
             // D'abord vérifier si c'est un analog stick
-            // Pour analog sticks : utiliser button.rangeModifier même pour détection initiale (large zone tactile)
+            // CORRECTION CRITIQUE: Utiliser range_mod SEULEMENT si le stick est déjà actif
+            // Compatible RetroArch input_overlay_coords_inside_hitbox(use_range_mod)
+            // Si pas encore actif: hitbox normale (1.0x) pour éviter de capturer les boutons voisins (X, flèches)
+            // Si déjà actif: hitbox étendue (3.5x) pour confort de jeu
             val analogStick = layout.buttons.find { button ->
-                (button.type == OverlayButtonType.ANALOG_LEFT || button.type == OverlayButtonType.ANALOG_RIGHT) &&
-                isTouchInsideButton(x, y, button, button.rangeModifier, viewport, overlayScale)
+                if (button.type != OverlayButtonType.ANALOG_LEFT && button.type != OverlayButtonType.ANALOG_RIGHT) {
+                    return@find false
+                }
+                
+                // Vérifier si ce stick est déjà actif (a un pointerId assigné)
+                val isAlreadyActive = when (button.type) {
+                    OverlayButtonType.ANALOG_LEFT -> analogLeftState.value.isActivated
+                    OverlayButtonType.ANALOG_RIGHT -> analogRightState.value.isActivated
+                    else -> false
+                }
+                
+                // CRITIQUE: use_range_mod = isAlreadyActive (compatible RetroArch)
+                // Premier touch: 1.0f (hitbox normale, ne chevauche pas les autres boutons)
+                // Touches suivantes: button.rangeModifier (3.5x, zone étendue pour confort)
+                val effectiveRangeMod = if (isAlreadyActive) button.rangeModifier else 1.0f
+                
+                isTouchInsideButton(x, y, button, effectiveRangeMod, viewport, overlayScale)
             }
             
             // DEBUG: Log pour comprendre pourquoi les analog sticks ne sont pas détectés
@@ -579,7 +756,9 @@ private fun handleOverlayTouch(
                 // C'est un analog stick
                 val centerX = viewport.x + (analogStick.x * viewport.width)
                 val centerY = viewport.y + (analogStick.y * viewport.height)
-                val radius = analogStick.width * viewport.width * layout.rangeModifier
+                // CORRECTION: Utiliser button.rangeModifier (3.5x) pour le calcul du rayon
+                // Même si détection initiale utilise 1.0f, le calcul des valeurs utilise toujours le range étendu
+                val radius = analogStick.width * viewport.width * analogStick.rangeModifier
                 
                 // Vérifier si c'est le premier touch (pas encore activé) et si dans la zone de recentrage
                 val isFirstTouch = when (analogStick.type) {
@@ -764,8 +943,21 @@ private fun handleOverlayTouch(
                     onLightgunAction(button.action)
                 } else {
                     // Actions normales (boutons gamepad)
-                    Log.d(TAG, "Button pressed: ${button.action}")
-                    onButtonPress(button.action)
+                    Log.d(TAG, "Button pressed: ${button.action}${if (button.turbo) " [TURBO]" else ""}")
+                    // TURBO: Si le bouton a turbo=true, ajouter à turboState
+                    if (button.turbo && turboSettings.enabled) {
+                        // Vérifier restrictions D-Pad
+                        val isDpad = button.action in listOf("up", "down", "left", "right")
+                        if (!isDpad || turboSettings.allowDpad) {
+                            turboState[button.action] = true
+                            onButtonPress(button.action)
+                        } else {
+                            // D-Pad turbo disabled, press normal
+                            onButtonPress(button.action)
+                        }
+                    } else {
+                        onButtonPress(button.action) // Press normal (turbo disabled ou non-turbo)
+                    }
                 }
             }
         }
@@ -956,7 +1148,11 @@ private fun handleOverlayTouch(
                 if (RetroArchButtonMapping.isHotkeyAction(button.action)) {
                     onHotkeyChange(button.action, false)
                 } else if (!RetroArchButtonMapping.isOverlayControlAction(button.action)) {
-                    Log.d(TAG, "Button released: ${button.action}")
+                    Log.d(TAG, "Button released: ${button.action}${if (button.turbo) " [TURBO]" else ""}")
+                    // TURBO: Retirer du turboState quand relâché
+                    if (button.turbo) {
+                        turboState.remove(button.action)
+                    }
                     onButtonRelease(button.action)
                 }
                 
@@ -1381,7 +1577,14 @@ private fun BoxScope.RetroArchButton(
         }
     }
     
-    if (bitmap != null) {
+    // Convertir Bitmap Android → ImageBitmap Compose UNE SEULE FOIS
+    // CRITIQUE: asImageBitmap() alloue ~100-200 KB par conversion
+    // Sans remember(), appelé à chaque frame (60 FPS) = 1500 conversions/sec = 150 MB/sec → OOM !
+    val imageBitmap = remember(bitmap) {
+        bitmap?.asImageBitmap()
+    }
+    
+    if (imageBitmap != null) {
         // Convertir coordonnées normalisées → pixels
         val xPx = button.x * screenSize.width
         val yPx = button.y * screenSize.height
@@ -1397,7 +1600,7 @@ private fun BoxScope.RetroArchButton(
         ) {
             // Dessiner l'image du bouton
             drawImage(
-                bitmap = bitmap,
+                image = imageBitmap,
                 center = Offset(xPx, yPx),
                 size = Size(widthPx, heightPx),
                 alpha = alpha
@@ -1407,16 +1610,15 @@ private fun BoxScope.RetroArchButton(
 }
 
 /**
- * Extension pour dessiner une image centrée
+ * Extension pour dessiner une ImageBitmap Compose centrée
+ * Note: Prend ImageBitmap directement (déjà convertie et cachée) au lieu de Bitmap
  */
 private fun DrawScope.drawImage(
-    bitmap: Bitmap,
+    image: androidx.compose.ui.graphics.ImageBitmap,
     center: Offset,
     size: Size,
     alpha: Float
 ) {
-    val imageBitmap = bitmap.asImageBitmap()
-    
     // Position top-left depuis le centre
     val topLeft = Offset(
         x = center.x - size.width / 2,
@@ -1424,7 +1626,7 @@ private fun DrawScope.drawImage(
     )
     
     drawImage(
-        image = imageBitmap,
+        image = image,
         dstOffset = androidx.compose.ui.unit.IntOffset(
             x = topLeft.x.toInt(),
             y = topLeft.y.toInt()

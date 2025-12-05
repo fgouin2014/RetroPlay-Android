@@ -64,6 +64,7 @@ data class OverlayButton(
     val exclusive: Boolean = false,       // overlayN_descM_exclusive
     val rangeModExclusive: Boolean = false, // overlayN_descM_range_mod_exclusive
     val movable: Boolean = false,         // overlayN_descM_movable
+    val turbo: Boolean = false,           // overlayN_descM_turbo (RetroPlay extension)
     val reachUp: Float = 1.0f,            // overlayN_descM_reach_up/_y
     val reachDown: Float = 1.0f,
     val reachLeft: Float = 1.0f,
@@ -399,6 +400,7 @@ data class AdvancedOverlaySettings(
     val hideInMenu: Boolean = false,
     val behindMenu: Boolean = false,
     val hideWhenGamepadConnected: Boolean = false,
+    val hideWhenGamepadConnectedPort0Only: Boolean = false,  // Si true, vérifie seulement port 0 (compatible RetroArch, utile multijoueur)
     val showInputs: ShowInputsMode = ShowInputsMode.NONE,
     val showInputsPort: Int = 0,               // Port à afficher (0 = all)
     // Lightgun options
@@ -698,6 +700,7 @@ object OverlayPreferenceManager {
             hideInMenu = getBoolean("hide_in_menu", true),  // DEFAULT_OVERLAY_HIDE_IN_MENU
             behindMenu = getBoolean("behind_menu", false),  // DEFAULT_OVERLAY_BEHIND_MENU
             hideWhenGamepadConnected = getBoolean("hide_when_gamepad", false),  // DEFAULT_OVERLAY_HIDE_WHEN_GAMEPAD_CONNECTED
+            hideWhenGamepadConnectedPort0Only = getBoolean("hide_when_gamepad_port0_only", false),  // Mode port 0 seulement (compatible RetroArch, utile multijoueur)
             showInputs = showInputsMode,
             showInputsPort = getInt("show_inputs_port", 0),  // DEFAULT_OVERLAY_SHOW_INPUTS_PORT
             lightgunPort = getInt("lightgun_port", -1),  // DEFAULT_INPUT_OVERLAY_LIGHTGUN_PORT (-1 = all ports)
@@ -740,6 +743,7 @@ object OverlayPreferenceManager {
         editor.putBoolean("overlay_${console}_hide_in_menu$suffix", settings.hideInMenu)
         editor.putBoolean("overlay_${console}_behind_menu$suffix", settings.behindMenu)
         editor.putBoolean("overlay_${console}_hide_when_gamepad$suffix", settings.hideWhenGamepadConnected)
+        editor.putBoolean("overlay_${console}_hide_when_gamepad_port0_only$suffix", settings.hideWhenGamepadConnectedPort0Only)
         editor.putString("overlay_${console}_show_inputs$suffix", settings.showInputs.name)
         editor.putInt("overlay_${console}_show_inputs_port$suffix", settings.showInputsPort)
         editor.putInt("overlay_${console}_lightgun_port$suffix", settings.lightgunPort)
@@ -779,6 +783,7 @@ object OverlayPreferenceManager {
                 landscape.hideInMenu == portrait.hideInMenu &&
                 landscape.behindMenu == portrait.behindMenu &&
                 landscape.hideWhenGamepadConnected == portrait.hideWhenGamepadConnected &&
+                landscape.hideWhenGamepadConnectedPort0Only == portrait.hideWhenGamepadConnectedPort0Only &&
                 landscape.showInputs == portrait.showInputs &&
                 landscape.showInputsPort == portrait.showInputsPort &&
                 landscape.lightgunPort == portrait.lightgunPort &&
@@ -869,6 +874,56 @@ object OverlayPreferenceManager {
         prefs.edit()
             .putStringSet("overlay_${console}_custom_browsed", existingCustoms)
             .commit()
+    }
+}
+
+/**
+ * Configuration turbo compatible RetroArch
+ * DEFAULT_TURBO_PERIOD = 6 frames @ 60fps = 10 Hz
+ */
+data class TurboSettings(
+    val enabled: Boolean = true,
+    val frequency: Int = 10,              // Hz (5-30)
+    val dutyCycle: Float = 0.5f,          // 0.1-0.9 (50% par défaut)
+    val allowDpad: Boolean = false,       // Turbo sur directions
+    val mode: TurboMode = TurboMode.AUTO_TOGGLE
+)
+
+enum class TurboMode {
+    AUTO_TOGGLE,    // Mode actuel: toggle automatique
+    HOLD,           // Maintenir pour turbo
+    CLASSIC         // À implémenter plus tard
+}
+
+object TurboPreferenceManager {
+    private const val KEY_ENABLED = "turbo_enabled"
+    private const val KEY_FREQUENCY = "turbo_frequency"
+    private const val KEY_DUTY_CYCLE = "turbo_duty_cycle"
+    private const val KEY_ALLOW_DPAD = "turbo_allow_dpad"
+    private const val KEY_MODE = "turbo_mode"
+    
+    fun save(prefs: android.content.SharedPreferences, settings: TurboSettings) {
+        prefs.edit()
+            .putBoolean(KEY_ENABLED, settings.enabled)
+            .putInt(KEY_FREQUENCY, settings.frequency)
+            .putFloat(KEY_DUTY_CYCLE, settings.dutyCycle)
+            .putBoolean(KEY_ALLOW_DPAD, settings.allowDpad)
+            .putString(KEY_MODE, settings.mode.name)
+            .apply()
+    }
+    
+    fun load(prefs: android.content.SharedPreferences): TurboSettings {
+        return TurboSettings(
+            enabled = prefs.getBoolean(KEY_ENABLED, true),
+            frequency = prefs.getInt(KEY_FREQUENCY, 10),
+            dutyCycle = prefs.getFloat(KEY_DUTY_CYCLE, 0.5f),
+            allowDpad = prefs.getBoolean(KEY_ALLOW_DPAD, false),
+            mode = try {
+                TurboMode.valueOf(prefs.getString(KEY_MODE, "AUTO_TOGGLE") ?: "AUTO_TOGGLE")
+            } catch (e: Exception) {
+                TurboMode.AUTO_TOGGLE
+            }
+        )
     }
 }
 

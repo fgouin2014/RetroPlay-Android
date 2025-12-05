@@ -14,6 +14,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -151,6 +152,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private val showCoreChangeConfirmDialog = mutableStateOf(false)
     private var coreChangeConfirmMessage = ""
     
+    // Turbo menus
+    private val showTurboSettings = mutableStateOf(false)
+    private val showQuickTurbo = mutableStateOf(false)
+    
     // États pour DIP Switches, Core Options, Game Info et Cheats
     private val showDipSwitchDialog = mutableStateOf(false)
     private val showCoreOptionsDialog = mutableStateOf(false)
@@ -173,6 +178,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     
     // File picker pour custom .cfg (initialisé AVANT onCreate avec lateinit)
     private lateinit var pickCustomCfgLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
+    
+    // File browser custom pour .cfg (évite problèmes SAF Android)
+    private val showCfgBrowser = mutableStateOf(false)
     
     /**
      * Gérer le fichier .cfg sélectionné (LECTURE SEULE - aucune modification)
@@ -331,10 +339,21 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private fun applyRewindSettings() {
         val manager = rewindManager ?: return
         val config = retroPlayConfig
+        
+        // Use SmartConfig granularity if auto-rewind is enabled (adapts to console)
+        // PSX/N64 need higher granularity (30-60) to avoid OOM from large savestates
+        val effectiveGranularity = if (config.smartConfigEnabled && config.smartConfigAutoRewind) {
+            val smartGranularity = com.retroplay.database.SmartConfigManager.getOptimalRewindGranularity(console)
+            Log.i(TAG, "[REWIND] Using SmartConfig granularity for $console: $smartGranularity frames")
+            smartGranularity
+        } else {
+            config.rewindGranularity
+        }
+        
         manager.configure(
-            enabled = config.rewindEnable,
+            enabled = config.rewindEnable || (config.smartConfigEnabled && config.smartConfigAutoRewind),
             bufferSizeBytes = config.rewindBufferSize,
-            granularity = config.rewindGranularity
+            granularity = effectiveGranularity
         )
     }
     
@@ -471,32 +490,40 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             }
             
             // Configurer le type de contrôleur pour PSX (DualShock pour analog sticks)
+            // TEMPORAIREMENT DÉSACTIVÉ pour tester si c'est la cause du crash
+            // PSX: Configure DualShock si mode analog activé
             if (console.equals("psx", ignoreCase = true)) {
-                try {
-                    val controllers = retroView.getControllers()
-                    Log.i(TAG, "[PSX] Available controllers: ${controllers.getOrNull(0)?.map { "id=${it.id} desc='${it.description}'" }}")
-                    
-                    if (controllers.isNotEmpty() && controllers[0].isNotEmpty()) {
-                        // Chercher le contrôleur DualShock (essayer "dualshock" en priorité)
-                        val dualshock = controllers[0].firstOrNull { 
-                            it.description?.contains("dualshock", ignoreCase = true) == true
-                        } ?: controllers[0].firstOrNull {
-                            it.description?.contains("analog", ignoreCase = true) == true
-                        }
+                val psxAnalogEnabled = prefs.getBoolean("psx_analog_mode_enabled", true)
+                
+                if (psxAnalogEnabled) {
+                    try {
+                        val controllers = retroView.getControllers()
+                        Log.i(TAG, "[PSX] Available controllers: ${controllers.getOrNull(0)?.map { "id=${it.id} desc='${it.description}'" }}")
                         
-                        if (dualshock != null) {
-                            try {
-                                retroView.setControllerType(0, dualshock.id)
-                                Log.i(TAG, "[PSX] Controller type set to DualShock (id=${dualshock.id}, desc='${dualshock.description}')")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "[PSX] Failed to set DualShock controller type: ${e.message}")
+                        if (controllers.isNotEmpty() && controllers[0].isNotEmpty()) {
+                            // Chercher le contrôleur DualShock (essayer "dualshock" en priorité)
+                            val dualshock = controllers[0].firstOrNull { 
+                                it.description?.contains("dualshock", ignoreCase = true) == true
+                            } ?: controllers[0].firstOrNull {
+                                it.description?.contains("analog", ignoreCase = true) == true
                             }
-                        } else {
-                            Log.w(TAG, "[PSX] DualShock controller not found. Using default.")
+                            
+                            if (dualshock != null) {
+                                try {
+                                    retroView.setControllerType(0, dualshock.id)
+                                    Log.i(TAG, "[PSX] Controller type set to DualShock (id=${dualshock.id}, desc='${dualshock.description}') - Analog sticks ENABLED")
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "[PSX] Failed to set DualShock controller type: ${e.message}")
+                                }
+                            } else {
+                                Log.w(TAG, "[PSX] DualShock controller not found. Using default.")
+                            }
                         }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[PSX] Error configuring controller type", e)
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "[PSX] Error configuring controller type", e)
+                } else {
+                    Log.i(TAG, "[PSX] Analog mode DISABLED - Using standard pad (D-Pad only)")
                 }
             }
             
@@ -564,6 +591,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             }
             
             // Configurer les extensions contrôleur pour N64
+            // TEMPORAIREMENT DÉSACTIVÉ pour tester si c'est la cause du crash
+            /*
             if (console.equals("n64", ignoreCase = true)) {
                 try {
                     Log.i(TAG, "[N64] Configuring controller extensions...")
@@ -629,6 +658,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     Log.e(TAG, "[N64] Error configuring extensions: ${e.message}", e)
                 }
             }
+            */
+            Log.i(TAG, "[N64] Extension configuration DISABLED for testing")
         } catch (e: Exception) {
             Log.e(TAG, "[CONTROLLER] Error in configureControllersAfterGameLoaded: ${e.message}", e)
         }
@@ -1876,6 +1907,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }, CRASH_TIMEOUT_MS)
         
         // Configurer le type de contrôleur pour PSX (DualShock pour analog sticks)
+        // TEMPORAIREMENT DÉSACTIVÉ pour tester si c'est la cause du crash
+        /*
         if (console.equals("psx", ignoreCase = true)) {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 try {
@@ -1902,6 +1935,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 }
             }, 1000)  // Attendre 1 seconde pour que le core soit complètement initialisé
         }
+        */
+        Log.i(TAG, "[PSX] Delayed controller configuration DISABLED for testing")
         
         // Configuration des contrôleurs et extensions N64 se fait maintenant via FrameRendered event
         // Voir lifecycleScope.launch { retroView.getGLRetroEvents().collect { ... } } ci-dessus (ligne 1753-1763)
@@ -1972,6 +2007,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 showCheatsDialog = showCheatsDialog,
                 showSmartConfigDialog = showSmartConfigDialog,
                 showPerGameConfigDialog = showPerGameConfigDialog,
+                showCfgBrowser = showCfgBrowser,
+                showTurboSettings = showTurboSettings,
+                showQuickTurbo = showQuickTurbo,
                 gameCRC = gameCRC,
                 loadedCheats = loadedCheats,
                 overlaysVisible = overlaysVisible,
@@ -1986,6 +2024,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 },
                 onSaveState = { slot ->
                     saveGameState(slot)
+                },
+                onDeleteSlot = { slot ->
+                    deleteSaveSlot(console, gameName, slot)
                 },
                 isZapperGame = isZapperGame,
                 gameViewBounds = gameViewBounds,  // Passer le state pour capture
@@ -2068,8 +2109,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     startActivity(intent)
                 },
                 onLoadCustomCfg = {
-                    // Lancer le file picker pour sélectionner un .cfg
-                    pickCustomCfgLauncher.launch(arrayOf("*/*"))
+                    // Afficher le file browser custom au lieu du SAF Android
+                    // Le SAF ne montre pas les .cfg car ils ne sont pas indexés dans MediaStore
+                    // Le browser custom lit directement le FS avec MANAGE_EXTERNAL_STORAGE
+                    showCfgBrowser.value = true
                 },
                 // Callbacks pour RetroArchSettingsDialog
                 onShaderChanged = { shaderName ->
@@ -2741,6 +2784,37 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
     }
     
+    // Supprimer une sauvegarde (slot)
+    private fun deleteSaveSlot(console: String, gameName: String, slot: Int) {
+        try {
+            val slotDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot")
+            val saveFile = File(slotDir, "${gameName}.state")
+            val thumbnailFile = File(slotDir, "thumbnail.png")
+            
+            var deleted = false
+            if (saveFile.exists()) {
+                saveFile.delete()
+                deleted = true
+                Log.i(TAG, "[$console] Deleted save file: ${saveFile.absolutePath}")
+            }
+            if (thumbnailFile.exists()) {
+                thumbnailFile.delete()
+                Log.i(TAG, "[$console] Deleted thumbnail: ${thumbnailFile.absolutePath}")
+            }
+            
+            if (deleted) {
+                runOnUiThread {
+                    Toast.makeText(this, "[$console] Slot $slot supprimé", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting save slot $slot", e)
+            runOnUiThread {
+                Toast.makeText(this, "Erreur lors de la suppression", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
     // État pour fast forward et pause (MutableState pour reactivity Compose)
     private val isFastForwardActive = mutableStateOf(false)
     private var fastForwardRatio = 2  // 2x par défaut (2x, 3x, 4x disponibles)
@@ -3402,6 +3476,9 @@ internal fun ComposeEmulatorScreen(
     showCheatsDialog: MutableState<Boolean>,
     showSmartConfigDialog: MutableState<Boolean>,
     showPerGameConfigDialog: MutableState<Boolean>,
+    showCfgBrowser: MutableState<Boolean> = mutableStateOf(false),  // File browser custom pour .cfg
+    showTurboSettings: MutableState<Boolean> = mutableStateOf(false),
+    showQuickTurbo: MutableState<Boolean> = mutableStateOf(false),
     gameCRC: String?,
     loadedCheats: List<com.retroplay.cheat.CheatManager.Cheat>,
     overlaysVisible: MutableState<Boolean>,
@@ -3410,6 +3487,7 @@ internal fun ComposeEmulatorScreen(
     onVariantChanged: (GamePadLayoutManager.LayoutVariant) -> Unit,
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
+    onDeleteSlot: (Int) -> Unit,  // Delete save slot
     onFinishActivity: () -> Unit,
     onHotkey: (String) -> Unit,  // Callback pour hotkeys
     onHotkeyChange: (String, Boolean) -> Unit = { _, _ -> },
@@ -3820,6 +3898,7 @@ internal fun ComposeEmulatorScreen(
                                         com.retroplay.overlay.renderer.RetroArchOverlayScreen(
                                         layout = overlayLayout,
                                         overlayName = overlayPreference.overlayName,
+                                        customCfgName = overlayPreference.customCfgName,
                                         assetManager = assetManager,
                                         showDebug = debugModeState.value,
                                         swapAnalogSticks = overlayPreference.swapAnalogSticks,
@@ -3834,7 +3913,10 @@ internal fun ComposeEmulatorScreen(
                                         dpadDiagonalSensitivity = advancedSettings.dpadDiagonalSensitivity,
                                         abxyDiagonalSensitivity = advancedSettings.abxyDiagonalSensitivity,
                                         showInputsMode = advancedSettings.showInputs,
+                                        showInputsPort = advancedSettings.showInputsPort,
+                                        retroView = retroView,
                                         hideWhenGamepadConnected = advancedSettings.hideWhenGamepadConnected,
+                                        hideWhenGamepadConnectedPort0Only = advancedSettings.hideWhenGamepadConnectedPort0Only,
                                         analogRecenterZone = advancedSettings.analogRecenterZone,
                                         aspectAdjust = advancedSettings.aspectAdjust,
                                         isZapperGame = isZapperGame,  // Passer le flag Zapper!
@@ -4166,6 +4248,14 @@ internal fun ComposeEmulatorScreen(
                             closeQuickMenuWithCooldown()  // Fermer avec cooldown
                             onLoadState(slot)
                         },
+                        onSaveStateClick = {
+                            closeQuickMenuWithCooldown()
+                            showSaveSlots = true
+                        },
+                        onLoadStateClick = {
+                            closeQuickMenuWithCooldown()
+                            showLoadSlots = true
+                        },
                         onQuit = {
                             showQuickMenu.value = false
                             retroView.onPause()
@@ -4222,6 +4312,14 @@ internal fun ComposeEmulatorScreen(
                             showMainMenu.value = false
                             showLoadSlots = true
                         },
+                        onSaveStateClick = { 
+                            showMainMenu.value = false
+                            showSaveSlots = true
+                        },
+                        onLoadStateClick = { 
+                            showMainMenu.value = false
+                            showLoadSlots = true
+                        },
                         onGamePadSettings = {
                             showMainMenu.value = false
                             showGamePadSettings.value = true
@@ -4266,6 +4364,10 @@ internal fun ComposeEmulatorScreen(
                             showMainMenu.value = false
                             onOpenGallery()
                         },
+                        onTurboSettings = {
+                            showMainMenu.value = false
+                            showTurboSettings.value = true
+                        },
                         hasGameInfo = (gameCRC?.isNotEmpty() == true),
                         hasDipSwitches = dipSwitches.isNotEmpty(),
                         hasCoreOptions = coreOptions.isNotEmpty(),
@@ -4283,6 +4385,9 @@ internal fun ComposeEmulatorScreen(
                         onSlotSelected = { slot ->
                             showSaveSlots = false
                             onSaveState(slot)
+                        },
+                        onDeleteSlot = { slot ->
+                            onDeleteSlot(slot)
                         }
                     )
                 }
@@ -4297,7 +4402,27 @@ internal fun ComposeEmulatorScreen(
                         onSlotSelected = { slot ->
                             showLoadSlots = false
                             onLoadState(slot)
+                        },
+                        onDeleteSlot = { slot ->
+                            onDeleteSlot(slot)
                         }
+                    )
+                }
+                
+                // Turbo Settings Dialog
+                if (showTurboSettings.value) {
+                    TurboSettingsDialog(
+                        onDismiss = { showTurboSettings.value = false },
+                        onSave = { settings ->
+                            android.widget.Toast.makeText(retroView.context, "Turbo settings saved", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+                
+                // Quick Turbo Menu
+                if (showQuickTurbo.value) {
+                    QuickTurboMenu(
+                        onDismiss = { showQuickTurbo.value = false }
                     )
                 }
                 
@@ -4318,9 +4443,52 @@ internal fun ComposeEmulatorScreen(
                         onRewindEnabledChanged = onRewindEnabledChanged,
                         onAspectRatioChanged = onAspectRatioChanged,
                         onOpenAdvancedOverlaySettings = {
-                    showGamePadSettings.value = false
-                    showAdvancedOverlaySettings.value = true
-                }
+                            showGamePadSettings.value = false
+                            showAdvancedOverlaySettings.value = true
+                        },
+                        onPsxAnalogModeChanged = { enabled ->
+                            // Appliquer immédiatement sans redémarrer le jeu
+                            if (console.equals("psx", ignoreCase = true)) {
+                                try {
+                                    val controllers = retroView.getControllers()
+                                    
+                                    if (enabled) {
+                                        // Activer DualShock (analog)
+                                        if (controllers.isNotEmpty() && controllers[0].isNotEmpty()) {
+                                            val dualshock = controllers[0].firstOrNull { 
+                                                it.description?.contains("dualshock", ignoreCase = true) == true
+                                            } ?: controllers[0].firstOrNull {
+                                                it.description?.contains("analog", ignoreCase = true) == true
+                                            }
+                                            
+                                            if (dualshock != null) {
+                                                retroView.setControllerType(0, dualshock.id)
+                                                android.util.Log.i("ComposeEmulator", "[PSX] Analog mode ON - DualShock activated (id=${dualshock.id})")
+                                            }
+                                        }
+                                    } else {
+                                        // Désactiver analog - revenir au pad standard
+                                        if (controllers.isNotEmpty() && controllers[0].isNotEmpty()) {
+                                            val standardPad = controllers[0].firstOrNull { 
+                                                it.description?.contains("standard", ignoreCase = true) == true ||
+                                                it.description?.contains("digital", ignoreCase = true) == true
+                                            }
+                                            
+                                            if (standardPad != null) {
+                                                retroView.setControllerType(0, standardPad.id)
+                                                android.util.Log.i("ComposeEmulator", "[PSX] Analog mode OFF - Standard pad activated (id=${standardPad.id})")
+                                            } else {
+                                                // Fallback: utiliser le premier contrôleur (probablement standard)
+                                                retroView.setControllerType(0, controllers[0][0].id)
+                                                android.util.Log.i("ComposeEmulator", "[PSX] Analog mode OFF - Default pad activated (id=${controllers[0][0].id})")
+                                            }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("ComposeEmulator", "[PSX] Error changing analog mode: ${e.message}")
+                                }
+                            }
+                        }
                     )
                 }
                 
@@ -4335,6 +4503,34 @@ internal fun ComposeEmulatorScreen(
                         context = retroView.context,
                         prefs = prefs,
                         currentOrientation = orientationForDialog
+                    )
+                }
+                
+                // File Browser Custom pour .cfg (évite problèmes SAF Android)
+                if (showCfgBrowser.value) {
+                    com.retroplay.overlay.ui.OverlayCfgBrowserDialog(
+                        onDismiss = { showCfgBrowser.value = false },
+                        onCfgSelected = { overlayName, cfgName ->
+                            // Sauvegarder le custom overlay sélectionné
+                            val pref = com.retroplay.overlay.models.OverlayPreference(
+                                enabled = true,
+                                overlayName = overlayName,
+                                customCfgName = cfgName,
+                                landscapeLayout = "landscape-A",
+                                portraitLayout = "portrait-A",
+                                autoRotate = true
+                            )
+                            com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
+                            com.retroplay.overlay.models.OverlayPreferenceManager.saveCustomBrowsed(prefs, console, "$overlayName/$cfgName")
+                            
+                            android.widget.Toast.makeText(
+                                retroView.context,
+                                "Custom overlay '$overlayName/$cfgName' loaded!",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                            
+                            android.util.Log.i("ComposeEmulator", "Custom overlay selected: $overlayName/$cfgName")
+                        }
                     )
                 }
                 
@@ -4550,6 +4746,8 @@ private fun MainMenuDialog(
     onDismiss: () -> Unit,
     onSaveGame: () -> Unit,
     onLoadGame: () -> Unit,
+    onSaveStateClick: () -> Unit,  // Open save slot dialog
+    onLoadStateClick: () -> Unit,  // Open load slot dialog
     onGamePadSettings: () -> Unit,
     onAdvancedSettings: () -> Unit = {},  // Nouveau callback
     onGameInfo: () -> Unit = {},
@@ -4561,6 +4759,7 @@ private fun MainMenuDialog(
     onDiskSwapper: () -> Unit = {},  // Disk Swapper callback
     onScreenshot: () -> Unit = {},  // Screenshot callback
     onOpenGallery: () -> Unit = {},
+    onTurboSettings: () -> Unit = {},  // Turbo Settings callback
     hasGameInfo: Boolean = false,
     hasDipSwitches: Boolean,
     hasCoreOptions: Boolean,
@@ -4653,6 +4852,14 @@ private fun MainMenuDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("GamePad Settings", color = Color.White)
+                    }
+                    
+                    // Turbo Settings
+                    TextButton(
+                        onClick = onTurboSettings,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Turbo Settings", color = Color(0xFF00BCD4))
                     }
                     
                     // DIP Switches (arcade only, if available)
@@ -4757,151 +4964,290 @@ private fun MainMenuDialog(
     }
 }
 
-// Slot Selection Dialog (Save/Load avec 5 slots par console)
+// Modern Slot Selection Dialog with Theme Colors
 @Composable
 private fun SlotSelectionDialog(
     title: String,
     console: String,
     gameName: String,
     onDismiss: () -> Unit,
-    onSlotSelected: (Int) -> Unit
+    onSlotSelected: (Int) -> Unit,
+    onDeleteSlot: ((Int) -> Unit)? = null
 ) {
+    var slotToDelete by remember { mutableStateOf<Int?>(null) }
+    
+    // Get theme colors
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val themeManager = remember { ThemeManager.getInstance(context) }
+    val primaryColor = remember { Color(themeManager.getPrimaryColor(context)) }
+    val headerBgColor = remember { Color(themeManager.getHeaderBackgroundColor(context)) }
+    
+    // Create gradient from theme primary color
+    val gradientColors = remember(primaryColor) {
+        listOf(
+            primaryColor.copy(alpha = 0.8f),
+            primaryColor
+        )
+    }
+    
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0x99000000)),
             contentAlignment = Alignment.Center
         ) {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth(0.95f)  // Pleine largeur (95% pour petites marges)
-                    .wrapContentHeight(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xDD000000))
+                    .fillMaxWidth(0.96f)
+                    .fillMaxHeight(0.88f),
+                colors = CardDefaults.cardColors(containerColor = headerBgColor),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    // Titre avec console
-                    Text(
-                        "$title - ${console.uppercase()}",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White
-                    )
+                    // Header with theme gradient
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                    colors = gradientColors
+                                )
+                            )
+                            .padding(24.dp)
+                    ) {
+                        Column {
+                            Text(
+                                title.uppercase(),
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = Color.White,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                            androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "${console.uppercase()} - $gameName",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFE0E0E0)
+                            )
+                        }
+                    }
                     
-                    Text(
-                        gameName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.LightGray
-                    )
-                    
-                    androidx.compose.material3.HorizontalDivider(color = Color.Gray)
-                    
-                    // 5 slots avec infos détaillées
-                    for (slot in 1..5) {
-                        val saveFile = java.io.File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/${gameName}.state")
-                        val thumbnailFile = java.io.File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/thumbnail.png")
-                        val isOccupied = saveFile.exists()
-                        val hasThumbnail = thumbnailFile.exists()
-                        
-                        TextButton(
-                            onClick = { onSlotSelected(slot) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    // Slots grid
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        for (slot in 1..5) {
+                            val saveFile = java.io.File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/${gameName}.state")
+                            val thumbnailFile = java.io.File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/thumbnail.png")
+                            val isOccupied = saveFile.exists()
+                            val hasThumbnail = thumbnailFile.exists()
+                            val thumbnailTimestamp = if (hasThumbnail) thumbnailFile.lastModified() else 0L
+                            
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSlotSelected(slot) },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isOccupied) 
+                                        headerBgColor.copy(alpha = 0.7f) 
+                                    else 
+                                        headerBgColor.copy(alpha = 0.4f)
+                                ),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                             ) {
-                                // Thumbnail (si disponible)
-                                if (hasThumbnail) {
-                                    val thumbnailBitmap = remember(thumbnailFile.absolutePath) {
-                                        android.graphics.BitmapFactory.decodeFile(thumbnailFile.absolutePath)
-                                    }
-                                    thumbnailBitmap?.let { bitmap ->
-                                        androidx.compose.foundation.Image(
-                                            bitmap = bitmap.asImageBitmap(),
-                                            contentDescription = "Slot $slot thumbnail",
-                                            modifier = Modifier
-                                                .size(80.dp)
-                                                .clip(MaterialTheme.shapes.small),
-                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                        )
-                                    } ?: Spacer(modifier = Modifier.size(80.dp))
-                                } else {
-                                    // Placeholder si pas de thumbnail
-                                    Box(
-                                        modifier = Modifier
-                                            .size(80.dp)
-                                            .background(Color(0xFF333333), MaterialTheme.shapes.small),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            "Slot $slot",
-                                            color = Color.Gray,
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                }
-                                
-                                // Infos du slot
-                                Column(
-                                    modifier = Modifier.weight(1f)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Ligne 1 : Slot + Status
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    // Thumbnail
+                                    if (hasThumbnail) {
+                                        val thumbnailBitmap = remember(thumbnailFile.absolutePath, thumbnailTimestamp) {
+                                            android.graphics.BitmapFactory.decodeFile(thumbnailFile.absolutePath)
+                                        }
+                                        thumbnailBitmap?.let { bitmap ->
+                                            androidx.compose.foundation.Image(
+                                                bitmap = bitmap.asImageBitmap(),
+                                                contentDescription = "Slot $slot",
+                                                modifier = Modifier
+                                                    .size(100.dp)
+                                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                                                    .border(
+                                                        2.dp,
+                                                        primaryColor,
+                                                        androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                                                    ),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                        } ?: EmptySlotPlaceholder(slot, headerBgColor, primaryColor)
+                                    } else {
+                                        EmptySlotPlaceholder(slot, headerBgColor, primaryColor)
+                                    }
+                                    
+                                    // Info
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Text(
-                                            "Slot $slot",
-                                            color = Color.White,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "SLOT $slot",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = if (isOccupied) primaryColor else Color.Gray,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                            )
+                                            
+                                            if (isOccupied && onDeleteSlot != null) {
+                                                androidx.compose.material3.IconButton(
+                                                    onClick = { slotToDelete = slot },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Text("🗑️", fontSize = 18.sp)
+                                                }
+                                            }
+                                        }
                                         
                                         if (isOccupied) {
+                                            val lastModified = saveFile.lastModified()
+                                            val sizeKB = saveFile.length() / 1024
+                                            val dateFormat = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault())
+                                            val dateStr = dateFormat.format(java.util.Date(lastModified))
+                                            
                                             Text(
-                                                "[Occupied]",
-                                                color = Color(0xFF4CAF50),
-                                                style = MaterialTheme.typography.bodySmall
+                                                "📅 $dateStr",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFFB0B0B0)
+                                            )
+                                            Text(
+                                                "💾 ${sizeKB}KB",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFFB0B0B0)
                                             )
                                         } else {
                                             Text(
-                                                "[Empty]",
+                                                "Slot vide",
+                                                style = MaterialTheme.typography.bodySmall,
                                                 color = Color.Gray,
-                                                style = MaterialTheme.typography.bodySmall
+                                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                                             )
                                         }
-                                    }
-                                    
-                                    // Ligne 2 : Infos détaillées (si occupé)
-                                    if (isOccupied) {
-                                        val lastModified = saveFile.lastModified()
-                                        val sizeKB = saveFile.length() / 1024
-                                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-                                        val dateStr = dateFormat.format(java.util.Date(lastModified))
-                                        
-                                        Text(
-                                            "$dateStr - ${sizeKB}KB",
-                                            color = Color(0xFFAAAAAA),
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
                                     }
                                 }
                             }
                         }
                     }
                     
-                    androidx.compose.material3.HorizontalDivider(color = Color.Gray)
-                    
-                    // Cancel
-                    TextButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.fillMaxWidth()
+                    // Close button
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(headerBgColor)
+                            .padding(16.dp)
                     ) {
-                        Text("Cancel", color = Color.Gray)
+                        androidx.compose.material3.Button(
+                            onClick = onDismiss,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = headerBgColor.copy(alpha = 0.5f),
+                                contentColor = Color.White
+                            ),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                        ) {
+                            Text("FERMER", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        }
                     }
                 }
             }
         }
+        
+        // Confirmation dialog for deletion
+        slotToDelete?.let { slot ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { slotToDelete = null },
+                containerColor = headerBgColor,
+                title = { 
+                    Text(
+                        "Supprimer Slot $slot ?",
+                        color = Color.White,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
+                },
+                text = { 
+                    Text(
+                        "Cette action est irréversible. Le fichier de sauvegarde et sa capture d'écran seront supprimés.",
+                        color = Color(0xFFE0E0E0)
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            onDeleteSlot?.invoke(slot)
+                            slotToDelete = null
+                        },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFDC2626)
+                        )
+                    ) {
+                        Text("SUPPRIMER", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { slotToDelete = null }
+                    ) {
+                        Text("ANNULER", color = Color(0xFFB0B0B0))
+                    }
+                }
+            )
+        }
+    }
+}
+
+// Empty slot placeholder composable with theme colors
+@Composable
+private fun EmptySlotPlaceholder(slot: Int, headerBgColor: Color, primaryColor: Color) {
+    val placeholderGradient = remember(headerBgColor) {
+        listOf(
+            headerBgColor.copy(alpha = 0.6f),
+            headerBgColor.copy(alpha = 0.3f)
+        )
+    }
+    
+    Box(
+        modifier = Modifier
+            .size(100.dp)
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    colors = placeholderGradient
+                ),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+            )
+            .border(
+                1.dp,
+                primaryColor.copy(alpha = 0.3f),
+                androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            "$slot",
+            style = MaterialTheme.typography.displayMedium,
+            color = primaryColor.copy(alpha = 0.3f),
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+        )
     }
 }
 
@@ -5334,6 +5680,8 @@ private fun QuickMenuDialog(
     onCheats: () -> Unit = {},  // NEW: Show cheats dialog
     onSaveState: (Int) -> Unit,
     onLoadState: (Int) -> Unit,
+    onSaveStateClick: () -> Unit,  // Open save slot dialog
+    onLoadStateClick: () -> Unit,  // Open load slot dialog
     onQuit: () -> Unit,
     onToggleFastForward: () -> Unit = {},  // Quick Win #1
     onToggleAudioMute: () -> Unit = {},    // Quick Win #2
@@ -5423,26 +5771,26 @@ private fun QuickMenuDialog(
                     )
                 }
                 
-                // Bouton Save State (Quick Save Slot 1)
+                // Bouton Save State
                 androidx.compose.material3.Button(
-                    onClick = { onSaveState(1) },
+                    onClick = onSaveStateClick,
                     modifier = Modifier.fillMaxWidth(),
                     colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFFF9800)
                     )
                 ) {
-                    Text("SAVE STATE (Slot 1)", color = Color.White)
+                    Text("SAUVEGARDER", color = Color.White)
                 }
                 
-                // Bouton Load State (Quick Load Slot 1)
+                // Bouton Load State
                 androidx.compose.material3.Button(
-                    onClick = { onLoadState(1) },
+                    onClick = onLoadStateClick,
                     modifier = Modifier.fillMaxWidth(),
                     colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF9C27B0)
                     )
                 ) {
-                    Text("LOAD STATE (Slot 1)", color = Color.White)
+                    Text("CHARGER", color = Color.White)
                 }
                 
                 // Quick Win #1: Fast Forward Toggle

@@ -67,6 +67,7 @@ object SmartConfigManager {
      * Size depends on:
      * - Savestate size (varies by console)
      * - How long to keep history (varies by genre)
+     * - Maximum duration limit (60 seconds) to prevent OOM crashes
      * 
      * @return Buffer size in bytes
      * 
@@ -74,7 +75,28 @@ object SmartConfigManager {
      * PSX savestate: ~500KB → 10MB = ~20 frames (0.3 seconds at 60fps)
      */
     fun getOptimalRewindBuffer(gameInfo: GameInfo, console: String): Int {
-        // Base size by console (savestate size varies significantly)
+        // Estimate average savestate size per console (in KB)
+        val avgSavestateKB = when (console) {
+            "nes", "gb", "gbc" -> 10          // ~10 KB
+            "snes", "gba" -> 50                // ~50 KB
+            "genesis", "sms", "gg" -> 70      // ~70 KB
+            "psx", "ps1", "playstation" -> 500 // ~500 KB
+            "n64" -> 800                       // ~800 KB
+            "saturn", "dc", "dreamcast" -> 1000 // ~1 MB
+            "psp" -> 1200                      // ~1.2 MB
+            else -> 200                        // Conservative default
+        }
+        
+        // Get granularity for this console (frames between captures)
+        val granularity = getOptimalRewindGranularity(console)
+        
+        // Calculate max buffer for 60 seconds at 60 fps
+        // 60 seconds * 60 fps = 3600 frames total
+        // Captures = 3600 frames / granularity
+        val maxCaptures = (60 * 60) / granularity  // 60 seconds max
+        val maxBufferBytes = maxCaptures * avgSavestateKB * 1024
+        
+        // Base size by console (legacy limits, now capped by duration)
         val baseSize = when (console) {
             "nes" -> 20 * 1024 * 1024      // 20MB (small savestates ~10KB)
             "snes" -> 15 * 1024 * 1024     // 15MB
@@ -113,8 +135,13 @@ object SmartConfigManager {
             else -> 1.0f
         }
         
-        val finalSize = (baseSize * multiplier).toInt()
-        Log.d(TAG, "[REWIND] ${gameInfo.name} ($console, ${gameInfo.genre}) → ${finalSize / 1024 / 1024}MB")
+        // Use the SMALLER of: (base * multiplier) or (60-second limit)
+        val requestedSize = (baseSize * multiplier).toInt()
+        val finalSize = minOf(requestedSize, maxBufferBytes)
+        
+        val durationSeconds = (finalSize / (avgSavestateKB * 1024)) * granularity / 60f
+        Log.d(TAG, "[REWIND] ${gameInfo.name} ($console, ${gameInfo.genre}) → ${finalSize / 1024 / 1024}MB (~${String.format("%.1f", durationSeconds)}s)")
+        
         return finalSize
     }
     

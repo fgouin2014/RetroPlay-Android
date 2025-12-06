@@ -1136,9 +1136,10 @@ public class GameDetailsActivity extends AppCompatActivity {
     private void showSlotSelectionDialog() {
         String console = game.getConsole();
         String gameName = game.getName();
+        String romPath = resolveRomPath();  // Get the real ROM path
         
         // Utiliser le nouveau dialog Compose moderne
-        GameDetailsDialogHelperKt.showModernSlotDialogFromDetails(this, console, gameName);
+        GameDetailsDialogHelperKt.showModernSlotDialogFromDetails(this, console, gameName, romPath);
     }
     
     private void checkAndShowLoadSaveButton() {

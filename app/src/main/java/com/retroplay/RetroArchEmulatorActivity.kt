@@ -3846,20 +3846,14 @@ internal fun ComposeEmulatorScreen(
                             // IMPORTANT: Dépendre aussi de overlayPreference.landscapeLayout et portraitLayout pour recomposer !
                             val requestedLayoutName = currentRetroArchLayout ?: run {
                                 if (overlayPreference.autoRotate) {
-                                    val selected = if (isLandscape) overlayPreference.landscapeLayout else overlayPreference.portraitLayout
-                                    android.util.Log.d("ComposeEmulator", "Auto-rotate: isLandscape=$isLandscape, selected layout='$selected'")
-                                    selected
+                                    if (isLandscape) overlayPreference.landscapeLayout else overlayPreference.portraitLayout
                                 } else {
-                                    // Si pas auto-rotate, utiliser le layout selon l'orientation actuelle
-                                    val selected = if (isLandscape) overlayPreference.landscapeLayout else overlayPreference.portraitLayout
-                                    android.util.Log.d("ComposeEmulator", "Manual mode: isLandscape=$isLandscape, selected layout='$selected'")
-                                    selected
+                                    if (isLandscape) overlayPreference.landscapeLayout else overlayPreference.portraitLayout
                                 }
                             }
                             
                             // Trouver le layout (avec fallback si le nom exact n'existe pas)
                             val layoutName = overlayConfig?.layouts?.get(requestedLayoutName)?.let { 
-                                android.util.Log.d("ComposeEmulator", "Using requested layout: '$requestedLayoutName'")
                                 requestedLayoutName 
                             }
                                 ?: run {

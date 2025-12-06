@@ -137,11 +137,11 @@ fun TurboSettingsDialog(
                         "up" to "UP", "down" to "DOWN", "left" to "LEFT", "right" to "RIGHT"
                     )
                     
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         availableButtons.chunked(4).forEach { rowButtons ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 rowButtons.forEach { (action, label) ->
                                     val isSelected = action in settings.enabledButtons
@@ -153,14 +153,19 @@ fun TurboSettingsDialog(
                                                 settings.copy(enabledButtons = settings.enabledButtons + action)
                                             }
                                         },
-                                        modifier = Modifier.weight(1f).height(45.dp),
+                                        modifier = Modifier.weight(1f).height(48.dp),
                                         enabled = settings.enabled,
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = if (isSelected) Color(0xFF00BCD4) else Color(0xFF424242),
                                             disabledContainerColor = Color(0xFF2A2A2A)
-                                        )
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp)
                                     ) {
-                                        Text(label, fontSize = 12.sp, maxLines = 1)
+                                        Text(
+                                            text = label,
+                                            fontSize = 10.sp,
+                                            maxLines = 1
+                                        )
                                     }
                                 }
                             }

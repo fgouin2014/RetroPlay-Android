@@ -274,17 +274,13 @@ fun RetroArchOverlayScreen(
     }
     
     // Listener pour changements de config turbo
-    DisposableEffect(Unit) {
+    LaunchedEffect(Unit) {
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key?.startsWith("turbo_") == true) {
                 turboSettings.value = TurboPreferenceManager.load(turboPrefs)
             }
         }
         turboPrefs.registerOnSharedPreferenceChangeListener(listener)
-        
-        onDispose {
-            turboPrefs.unregisterOnSharedPreferenceChangeListener(listener)
-        }
     }
     
     // P3: Charger positions sauvegardées pour boutons déplaçables au démarrage

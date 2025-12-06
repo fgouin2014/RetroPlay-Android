@@ -351,11 +351,26 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         // Get optimal values from SmartConfigManager (safe limits for each console)
         val optimalGranularity = com.retroplay.database.SmartConfigManager.getOptimalRewindGranularity(console)
-        val optimalBufferSize = com.retroplay.database.SmartConfigManager.getOptimalRewindBuffer(gameInfo, console)
+        
+        // Calculate ABSOLUTE maximum buffer size (60 seconds) to prevent OOM
+        // This is different from optimalBufferSize which is a recommendation based on genre
+        val avgSavestateKB = when (console) {
+            "nes", "gb", "gbc" -> 10
+            "snes", "gba" -> 50
+            "genesis", "sms", "gg" -> 70
+            "psx", "ps1", "playstation" -> 500
+            "n64" -> 800
+            "saturn", "dc", "dreamcast" -> 1000
+            "psp" -> 1200
+            else -> 200
+        }
+        val maxCaptures60s = (60 * 60) / optimalGranularity  // 60 seconds at 60 fps
+        val absoluteMaxBufferBytes = maxCaptures60s * avgSavestateKB * 1024
         
         // Use SmartConfig values if enabled, otherwise apply SAFE LIMITS to prevent OOM
         val effectiveGranularity = if (config.smartConfigEnabled && config.smartConfigAutoRewind) {
-            Log.i(TAG, "[REWIND] SmartConfig ENABLED: using optimal granularity for $console: $optimalGranularity frames")
+            val optimalBufferSize = com.retroplay.database.SmartConfigManager.getOptimalRewindBuffer(gameInfo, console)
+            Log.i(TAG, "[REWIND] SmartConfig ENABLED: using optimal granularity for $console: $optimalGranularity frames, buffer: ${optimalBufferSize / 1024 / 1024}MB")
             optimalGranularity
         } else {
             // Apply MINIMUM granularity to prevent crash (never lower than optimal)
@@ -367,15 +382,17 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
         
         val effectiveBufferSize = if (config.smartConfigEnabled && config.smartConfigAutoRewind) {
+            val optimalBufferSize = com.retroplay.database.SmartConfigManager.getOptimalRewindBuffer(gameInfo, console)
             Log.i(TAG, "[REWIND] SmartConfig ENABLED: using optimal buffer for $console: ${optimalBufferSize / 1024 / 1024}MB (~60s max)")
             optimalBufferSize
         } else {
-            // Apply MAXIMUM buffer size to prevent crash (never higher than 60s limit)
-            val safeBufferSize = minOf(config.rewindBufferSize, optimalBufferSize)
+            // Apply ABSOLUTE MAXIMUM buffer size (60 seconds) to prevent crash
+            // Only cap if config exceeds the 60s safety limit, otherwise keep user's choice
+            val safeBufferSize = minOf(config.rewindBufferSize, absoluteMaxBufferBytes)
             if (safeBufferSize != config.rewindBufferSize) {
-                Log.w(TAG, "[REWIND] SAFETY: Buffer capped from ${config.rewindBufferSize / 1024 / 1024}MB to ${safeBufferSize / 1024 / 1024}MB for $console (prevent OOM)")
+                Log.w(TAG, "[REWIND] SAFETY: Buffer capped from ${config.rewindBufferSize / 1024 / 1024}MB to ${safeBufferSize / 1024 / 1024}MB for $console (60s limit: ${absoluteMaxBufferBytes / 1024 / 1024}MB)")
             } else {
-                Log.i(TAG, "[REWIND] Manual config: ${config.rewindBufferSize / 1024 / 1024}MB buffer, granularity=$effectiveGranularity for $console")
+                Log.i(TAG, "[REWIND] Manual config: ${config.rewindBufferSize / 1024 / 1024}MB buffer, granularity=$effectiveGranularity for $console (max allowed: ${absoluteMaxBufferBytes / 1024 / 1024}MB)")
             }
             safeBufferSize
         }

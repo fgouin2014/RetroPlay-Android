@@ -350,9 +350,34 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             config.rewindGranularity
         }
         
+        // Use SmartConfig buffer size if auto-rewind is enabled (capped at 60s to prevent OOM)
+        val effectiveBufferSize = if (config.smartConfigEnabled && config.smartConfigAutoRewind) {
+            // Need gameInfo for SmartConfig calculation
+            val gameInfo = try {
+                val db = com.retroplay.database.RetroPlayDatabase.getInstance(this)
+                db.gameInfoDao().getGameByName(gameName, console) ?: com.retroplay.database.GameInfo(
+                    name = gameName,
+                    console = console,
+                    genre = "Unknown"
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "[REWIND] Failed to load gameInfo for SmartConfig, using defaults", e)
+                com.retroplay.database.GameInfo(
+                    name = gameName,
+                    console = console,
+                    genre = "Unknown"
+                )
+            }
+            val smartBufferSize = com.retroplay.database.SmartConfigManager.getOptimalRewindBuffer(gameInfo, console)
+            Log.i(TAG, "[REWIND] Using SmartConfig buffer size for $console: ${smartBufferSize / 1024 / 1024}MB (max 60s)")
+            smartBufferSize
+        } else {
+            config.rewindBufferSize
+        }
+        
         manager.configure(
             enabled = config.rewindEnable || (config.smartConfigEnabled && config.smartConfigAutoRewind),
-            bufferSizeBytes = config.rewindBufferSize,
+            bufferSizeBytes = effectiveBufferSize,
             granularity = effectiveGranularity
         )
     }

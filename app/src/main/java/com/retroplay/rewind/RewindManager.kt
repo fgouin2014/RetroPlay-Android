@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
 
 /**
  * Gestionnaire Rewind pour RetroPlay.
@@ -31,6 +32,7 @@ class RewindManager(
         private const val TAG = "RewindManager"
         private const val DEFAULT_REWIND_STEP_DELAY_MS = 16L
         private const val MIN_BUFFER_BYTES = 1 * 1024 * 1024 // 1 MB
+        private const val BUFFER_CLEAR_INTERVAL_SECONDS = 30L // Clear buffer every 30 seconds
     }
 
     private val states = ArrayDeque<ByteArray>()
@@ -44,6 +46,8 @@ class RewindManager(
     private var maxBufferBytes: Int = 10 * 1024 * 1024
     private var rewindJob: Job? = null
     private var supportChecked = false
+    private var bufferClearJob: Job? = null
+    private var firstCaptureTime: Long = 0L
 
     private val _isSupported = MutableStateFlow(true)
     val isSupported: StateFlow<Boolean> = _isSupported.asStateFlow()
@@ -63,9 +67,12 @@ class RewindManager(
         this.granularity = granularity.coerceAtLeast(1)
         if (!enabled) {
             stopRewind()
+            stopBufferClearTimer()
             clearBuffer()
             supportChecked = false
             _isSupported.value = true
+        } else {
+            startBufferClearTimer()
         }
     }
 
@@ -101,6 +108,7 @@ class RewindManager(
 
     fun reset() {
         stopRewind()
+        stopBufferClearTimer()
         clearBuffer()
         frameCounter = 0
         supportChecked = false
@@ -242,6 +250,11 @@ class RewindManager(
         }
 
         mutex.withLock {
+            // Track first capture time for 30s timer
+            if (firstCaptureTime == 0L) {
+                firstCaptureTime = System.currentTimeMillis()
+            }
+            
             states.addLast(state)
             totalBytes += state.size
             while (totalBytes > maxBufferBytes && states.isNotEmpty()) {
@@ -258,8 +271,46 @@ class RewindManager(
                 states.clear()
                 totalBytes = 0
                 _availableStates.value = 0
+                firstCaptureTime = 0L // Reset timer
             }
         }
+    }
+    
+    /**
+     * Start periodic buffer clearing every 30 seconds to prevent memory accumulation
+     */
+    private fun startBufferClearTimer() {
+        stopBufferClearTimer() // Stop existing timer if any
+        if (!_enabled.value) return
+        
+        bufferClearJob = scope.launch(Dispatchers.Default) {
+            while (isActive && _enabled.value) {
+                delay(BUFFER_CLEAR_INTERVAL_SECONDS * 1000L)
+                
+                if (!_enabled.value || _isRewinding.value) {
+                    continue
+                }
+                
+                val shouldClear = mutex.withLock {
+                    if (firstCaptureTime == 0L) {
+                        false // No captures yet, don't clear
+                    } else {
+                        val elapsedSeconds = (System.currentTimeMillis() - firstCaptureTime) / 1000L
+                        elapsedSeconds >= BUFFER_CLEAR_INTERVAL_SECONDS
+                    }
+                }
+                
+                if (shouldClear) {
+                    Log.i(TAG, "Clearing rewind buffer after ${BUFFER_CLEAR_INTERVAL_SECONDS}s to prevent memory accumulation")
+                    clearBuffer()
+                }
+            }
+        }
+    }
+    
+    private fun stopBufferClearTimer() {
+        bufferClearJob?.cancel()
+        bufferClearJob = null
     }
 }
 

@@ -22,6 +22,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import android.view.KeyEvent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +67,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.compose.runtime.LaunchedEffect
 import java.io.File
 import java.io.FileOutputStream
@@ -81,6 +84,11 @@ import com.retroplay.runahead.RunAheadManager
 import com.retroplay.gallery.ScreenshotRepository
 import com.retroplay.rewind.RewindManager
 import com.retroplay.CoreConfigManager
+
+import androidx.activity.viewModels
+import com.retroplay.input.NativeControllerManager
+import com.retroplay.input.ZapperManager
+import com.retroplay.viewmodels.NativeEmulatorViewModel
 
 /**
  * Native Compose Emulator Activity
@@ -128,6 +136,10 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
     }
     
+    private val viewModel: NativeEmulatorViewModel by viewModels()
+    private lateinit var controllerManager: NativeControllerManager
+    private lateinit var zapperManager: ZapperManager
+
     private lateinit var retroView: GLRetroView
     private lateinit var console: String
     private lateinit var romPath: String
@@ -142,57 +154,42 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     private var runAheadFramesConfig: Int = 0
     private var rewindManager: RewindManager? = null
     
-    // Zapper support (NES light gun)
-    private var isZapperGame: Boolean = false
-    private var zapperPort: Int = 1  // Port par défaut: 1 (index) = Port 2 NES. 0 = Port 1 pour Chiller
+    // UI State Delegates (Forwarding to ViewModel for minimal code changes)
+    private val showMainMenu get() = viewModel.showMainMenu
+    private val showGamePadSettings get() = viewModel.showGamePadSettings
+    private val showAdvancedRadialSettings get() = viewModel.showAdvancedRadialSettings
+    private val showQuickMenu get() = viewModel.showQuickMenu
+    private val overlaysVisible get() = viewModel.overlaysVisible
+    private val showSmartConfigDialog get() = viewModel.showSmartConfigDialog
+    private val showGameInfoDialog get() = viewModel.showGameInfoDialog
+    private val showDiskSwapperDialog get() = viewModel.showDiskSwapperDialog
+    private val showCoreErrorDialog get() = viewModel.showCoreErrorDialog
+    private val showCoreSelectorFromError get() = viewModel.showCoreSelectorFromError
+    // Fix property delegation by using delegates directly
+    private var failedCoreName by viewModel.failedCoreName
+    private var coreChangeConfirmMessage by viewModel.coreChangeConfirmMessage
+    private val showCoreChangeConfirmDialog get() = viewModel.showCoreChangeConfirmDialog
+    private val quickActionsBarVisible get() = viewModel.quickActionsBarVisible
+    private val quickActionsBarAutoHideEnabled get() = viewModel.quickActionsBarAutoHideEnabled
+    private val quickActionsBarAutoHideTimer get() = viewModel.quickActionsBarAutoHideTimer
+    private val isFastForwardActive get() = viewModel.isFastForwardActive
+    private val audioMuted get() = viewModel.audioMuted
+    private var fastForwardRatio by viewModel.fastForwardRatio // ViewModel defines this as Float
+
     
-    // P3: Quick tap detection - Compatible RetroArch android_check_quick_tap()
-    // Stocke le timestamp du dernier tap pour détecter les taps rapides (< 200ms)
-    private var lastZapperTapTime: Long = 0
-    private var quickTapResetHandler: android.os.Handler? = null
-    private val quickTapResetRunnable = Runnable {
-        // Reset après 200ms si aucun nouveau tap (compatible RetroArch ligne 809-811)
-        if (lastZapperTapTime > 0) {
-            val timeSinceLastTap = android.os.SystemClock.elapsedRealtime() - lastZapperTapTime
-            if (timeSinceLastTap >= 200) {
-                lastZapperTapTime = 0
-                Log.d(TAG, "[ZAPPER] Quick tap timer reset (>200ms)")
-            }
-        }
-    }
+    // DIP Switches and Core Options
+    private val showDipSwitchDialog get() = viewModel.showDipSwitchDialog
+    private val showCoreOptionsDialog get() = viewModel.showCoreOptionsDialog
+    private val allCoreVariables get() = viewModel.allCoreVariables
+    private val dipSwitches get() = viewModel.dipSwitches
+    private val coreOptions get() = viewModel.coreOptions
+    private val availableDisksState get() = viewModel.availableDisksState
+    private val currentDiskState get() = viewModel.currentDiskState
     
-    // État pour mode d'affichage du crosshair Zapper (MutableState pour reactivity Compose)
-    private val crosshairMode = mutableStateOf(CrosshairMode.RETROPLAY_ONLY)
-    
-    // États des menus
-    private val showMainMenu = mutableStateOf(false)
-    private val showGamePadSettings = mutableStateOf(false)
-    private val showAdvancedRadialSettings = mutableStateOf(false)
-    private val showQuickMenu = mutableStateOf(false)
-    private val overlaysVisible = mutableStateOf(true)
-    private val showSmartConfigDialog = mutableStateOf(false)
-    private val showGameInfoDialog = mutableStateOf(false)
-    private val showDiskSwapperDialog = mutableStateOf(false)
-    private val showCoreErrorDialog = mutableStateOf(false)
-    private val showCoreSelectorFromError = mutableStateOf(false)
-    private var failedCoreName = ""
-    private val showCoreChangeConfirmDialog = mutableStateOf(false)
-    private var coreChangeConfirmMessage = ""
-    private val quickActionsBarVisible = mutableStateOf(true)
-    private val quickActionsBarAutoHideEnabled = mutableStateOf(true)  // Auto-hide activé par défaut
-    private val quickActionsBarAutoHideTimer = mutableStateOf(0L)  // Timer pour auto-hide
-    private val isFastForwardActive = mutableStateOf(false)
-    private val audioMuted = mutableStateOf(false)
-    private var fastForwardRatio = 2
-    
-    // États pour DIP Switches et Core Options
-    private val showDipSwitchDialog = mutableStateOf(false)
-    private val showCoreOptionsDialog = mutableStateOf(false)
-    private var allCoreVariables = mutableStateListOf<CoreVariable>()
-    private val dipSwitches = mutableStateListOf<CoreVariable>()
-    private val coreOptions = mutableStateListOf<CoreVariable>()
-    private val availableDisksState = mutableIntStateOf(0)
-    private val currentDiskState = mutableIntStateOf(0)
+    // Zapper Manager Delegates
+    private val crosshairMode get() = zapperManager.crosshairMode
+    private val isZapperGame get() = zapperManager.isZapperGame
+    private val zapperPort get() = zapperManager.zapperPort
     
     private var gameCRC: String? = null
     
@@ -308,10 +305,6 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                                 "Screenshot saved",
                                 Toast.LENGTH_SHORT
                             ).show()
-                            Log.i(TAG, "Screenshot saved: ${result.screenshotPath}")
-                            result.thumbnailPath?.let { thumb ->
-                                Log.i(TAG, "Thumbnail saved: $thumb")
-                            }
                         } else {
                             Toast.makeText(
                                 this@NativeComposeEmulatorActivity,
@@ -320,30 +313,17 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                             ).show()
                         }
                     }
-                } ?: withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@NativeComposeEmulatorActivity,
-                        "Failed to capture screenshot",
-                        Toast.LENGTH_SHORT
-                    ).show()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Screenshot error", e)
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@NativeComposeEmulatorActivity,
-                        "Screenshot error: ${e.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
             }
         }
     }
     
     private fun toggleFastForward() {
         isFastForwardActive.value = !isFastForwardActive.value
-        val speed = if (isFastForwardActive.value) fastForwardRatio else 1
-        retroView.frameSpeed = speed
+        val speed = if (isFastForwardActive.value) fastForwardRatio else 1f
+        retroView.frameSpeed = speed.toInt()
         Log.i(
             TAG,
             "[FAST_FORWARD_NATIVE] ${if (isFastForwardActive.value) "ENABLED (${fastForwardRatio}x)" else "DISABLED (1x)"}"
@@ -381,125 +361,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
      * Appelé depuis FrameRendered event (timing optimal)
      */
     private fun configureControllersAfterGameLoaded() {
-        try {
-            // Vérifier si le jeu a échoué à charger
-            if (showCoreErrorDialog.value) {
-                Log.w(TAG, "[CONTROLLER] Game failed to load, skipping controller configuration")
-                return
-            }
-            
-            // Vérifier que retroView est dans un état valide
-            try {
-                val testControllers = retroView.getControllers()
-                if (testControllers.isEmpty()) {
-                    Log.w(TAG, "[CONTROLLER] No controllers available, game may not be loaded yet")
-                    return
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "[CONTROLLER] Cannot access controllers, game not loaded: ${e.message}")
-                return
-            }
-            
-            // Configurer le type de contrôleur pour PSX (DualShock pour analog sticks)
-            // TEMPORAIREMENT DÉSACTIVÉ pour tester si c'est la cause du crash
-            /*
-            if (console.equals("psx", ignoreCase = true)) {
-                try {
-                    val controllers = retroView.getControllers()
-                    Log.i(TAG, "[PSX] Available controllers: ${controllers.getOrNull(0)?.map { "id=${it.id} desc='${it.description}'" }}")
-                    
-                    if (controllers.isNotEmpty() && controllers[0].isNotEmpty()) {
-                        // Chercher le contrôleur DualShock (essayer "dualshock" en priorité)
-                        val dualshock = controllers[0].firstOrNull { 
-                            it.description?.contains("dualshock", ignoreCase = true) == true
-                        } ?: controllers[0].firstOrNull {
-                            it.description?.contains("analog", ignoreCase = true) == true
-                        }
-                        
-                        if (dualshock != null) {
-                            try {
-                                retroView.setControllerType(0, dualshock.id)
-                                Log.i(TAG, "[PSX] Controller type set to DualShock (id=${dualshock.id}, desc='${dualshock.description}')")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "[PSX] Failed to set DualShock controller type: ${e.message}")
-                            }
-                        } else {
-                            Log.w(TAG, "[PSX] DualShock controller not found. Using default.")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "[PSX] Error configuring controller type", e)
-                }
-            }
-            */
-            Log.i(TAG, "[PSX] Controller configuration DISABLED for testing")
-            
-            // Configuration des ports contrôleurs
-            // 1. Vérifier d'abord s'il y a une configuration manuelle (override détection auto)
-            // 2. Sinon, utiliser la détection automatique (Zapper, etc.)
-            var hasManualConfig = false
-            
-            // Lire depuis console_config (comme ConsoleConfigActivity) OU compose_gamepad_settings (comme RetroArchSettingsDialog)
-            val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
-            val composePrefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
-            
-            // Vérifier chaque port (0-3) pour une configuration manuelle
-            for (port in 0..3) {
-                // Priorité: console_config (ConsoleConfigActivity) puis compose_gamepad_settings (RetroArchSettingsDialog)
-                var manualControllerType = consoleConfigPrefs.getInt("controller_port_${console}_port${port}", -1)
-                if (manualControllerType == -1) {
-                    manualControllerType = composePrefs.getInt("controller_port_${console}_port${port}", -1)
-                }
-                
-                if (manualControllerType != -1) {
-                    // Configuration manuelle trouvée pour ce port
-                    hasManualConfig = true
-                    try {
-                        retroView.setControllerType(port, manualControllerType)
-                        val controllerName = when (manualControllerType) {
-                            0 -> "None"
-                            1 -> "Joypad"
-                            4 -> "Lightgun"
-                            6 -> "Pointer"
-                            258 -> "Zapper"
-                            else -> "Type $manualControllerType"
-                        }
-                        Log.i(TAG, "[CONTROLLER] Port ${port + 1} manually configured as: $controllerName (id=$manualControllerType)")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "[CONTROLLER] Failed to set controller type for port ${port + 1}: ${e.message} - Continuing with other ports")
-                        // ✅ CONTINUER au lieu de return (amélioration gestion erreurs)
-                    }
-                }
-            }
-            
-            // Si pas de configuration manuelle, utiliser la détection automatique
-            if (!hasManualConfig && isZapperGame) {
-                // Configuration automatique pour les jeux Zapper
-                // CRITIQUE: FCEUmm nécessite RETRO_DEVICE_ZAPPER (258) pour appeler get_mouse_input()
-                // Mais ensuite, en mode RetroPointer (touchscreen), get_mouse_input() lit RETRO_DEVICE_POINTER
-                // Donc on DOIT configurer RETRO_DEVICE_ZAPPER (258) pour que get_mouse_input() soit appelé!
-                // Chiller utilise le port 0 (Port 1), les autres jeux utilisent le port 1 (Port 2)
-                try {
-                    retroView.setControllerType(zapperPort, 258)  // Port configuré selon le jeu
-                    Log.i(TAG, "[ZAPPER] Auto-detected: Zapper configured as RETRO_DEVICE_ZAPPER (258) on port ${zapperPort + 1} (index $zapperPort)")
-                    Log.i(TAG, "[ZAPPER] FCEUmm will call get_mouse_input() which reads RETRO_DEVICE_POINTER in RetroPointer mode")
-                    
-                    runOnUiThread {
-                        Toast.makeText(
-                            this@NativeComposeEmulatorActivity,
-                            "Zapper detected! Port ${zapperPort + 1} (index $zapperPort)\nTouch game area to shoot",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "[ZAPPER] Failed to set Zapper controller type: ${e.message}")
-                }
-            } else if (hasManualConfig) {
-                Log.i(TAG, "[CONTROLLER] Manual port configuration applied (auto-detection overridden)")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "[CONTROLLER] Error in configureControllersAfterGameLoaded: ${e.message}", e)
-        }
+        if (!::controllerManager.isInitialized) return
+        controllerManager.configureControllers(console, isZapperGame, zapperPort)
     }
     
     /**
@@ -507,71 +370,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
      * Appelé depuis FrameRendered event (timing optimal)
      */
     private fun configureN64ExtensionsAfterGameLoaded() {
-        try {
-            Log.i(TAG, "[N64] Configuring controller extensions...")
-
-            // Charger les paramètres depuis SharedPreferences (console_config, comme ConsoleConfigActivity)
-            val prefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
-            val prefix = "n64_"
-
-            // Mapping des positions spinner vers les valeurs Libretro :
-            // Spinner position 0 = "Controller Pak" → Libretro ID 1
-            // Spinner position 1 = "Rumble Pak" → Libretro ID 2
-            // Spinner position 2 = "Transfer Pak" → Libretro ID 5
-            val pakValues = intArrayOf(1, 2, 5)
-
-            // Collecter les extensions configurées pour logging
-            val configuredExtensions = mutableListOf<Pair<Int, String>>()
-            
-            // Configurer les extensions pour chaque port (0-3)
-            // TEMPORAIREMENT DÉSACTIVÉ pour tester si c'est la cause du crash
-            /*
-            for (port in 0..3) {  // 4 ports maximum pour N64
-                try {
-                    // pakPosition: 0 = Controller Pak, 1 = Rumble Pak, 2 = Transfer Pak (positions spinner)
-                    val pakPosition = prefs.getInt(prefix + "pak_port" + (port + 1), 0) // Default: 0 = Controller Pak
-                    
-                    // Vérifier que pakPosition est valide (0-2)
-                    if (pakPosition >= 0 && pakPosition < pakValues.size) {
-                        val pakValue = pakValues[pakPosition] // ID Libretro (1, 2, ou 5)
-
-                        val pakName = when (pakPosition) {
-                            0 -> "Controller Pak"
-                            1 -> "Rumble Pak"
-                            2 -> "Transfer Pak"
-                            else -> "Unknown"
-                        }
-                        
-                        // Configurer l'extension via setControllerType()
-                        try {
-                            retroView.setControllerType(port, pakValue)
-                            Log.i(TAG, "[N64] Extension configured for port ${port + 1}: $pakName (id=$pakValue) via setControllerType()")
-                            configuredExtensions.add(Pair(port + 1, pakName))
-                        } catch (e: Exception) {
-                            Log.w(TAG, "[N64] Failed to set extension for port ${port + 1} via setControllerType(): ${e.message}")
-                            Log.w(TAG, "[N64] Port ${port + 1}: $pakName (id=$pakValue) - configuration failed, continuing with other ports")
-                            // ✅ CONTINUER au lieu de return (amélioration gestion erreurs)
-                        }
-                    } else {
-                        Log.d(TAG, "[N64] Port ${port + 1}: Invalid pak position ($pakPosition), skipping")
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "[N64] Could not configure extension for port ${port + 1}: ${e.message} - Continuing")
-                    // ✅ CONTINUER au lieu de return (amélioration gestion erreurs)
-                }
-            }
-            */
-            Log.i(TAG, "[N64] Extension configuration DISABLED for testing")
-            
-            // Log récapitulatif
-            if (configuredExtensions.isNotEmpty()) {
-                Log.i(TAG, "[N64] Successfully configured ${configuredExtensions.size} extensions: ${configuredExtensions.joinToString { "Port ${it.first}=${it.second}" }}")
-            } else {
-                Log.i(TAG, "[N64] No extensions configured")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "[N64] Error configuring controller extensions: ${e.message}", e)
-        }
+        if (!::controllerManager.isInitialized) return
+        controllerManager.configureN64Extensions()
     }
     
     private fun toggleQuickActionsBar() {
@@ -582,97 +382,31 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
     }
     
     // Toggle Crosshair Mode (Cycle entre RetroPlay / FCEUmm / Both / None)
+    // Toggle Crosshair Mode (Cycle entre RetroPlay / FCEUmm / Both / None)
     private fun toggleCrosshairMode() {
-        crosshairMode.value = crosshairMode.value.next()
-        Log.i(TAG, "[CROSSHAIR] Mode: ${crosshairMode.value.displayName}")
-        
-        // Sauvegarder dans SharedPreferences
-        prefs.edit().putString("emulation_crosshair_mode", crosshairMode.value.name).apply()
+        if (!::zapperManager.isInitialized) return
+        zapperManager.toggleCrosshairMode()
         
         // Si on est en jeu NES, mettre à jour la config du core dynamiquement
+        // TODO: Move this logic to ZapperManager or specific NES handler if possible
         if (console == "nes" || console.equals("famicom", ignoreCase = true)) {
+            // Re-read value from manager
             val config = CoreConfigManager.loadConfig(this, "FCEUmm").toMutableMap()
-            config["fceumm_show_crosshair"] = if (crosshairMode.value.showFCEUmmCrosshair()) "enabled" else "disabled"
+            config["fceumm_show_crosshair"] = if (zapperManager.crosshairMode.value.showFCEUmmCrosshair()) "enabled" else "disabled"
             CoreConfigManager.saveConfig(this, "FCEUmm", config)
             
             // Appliquer au core sans redémarrer
-            val nesVariables = config.map { (key, value) -> com.swordfish.libretrodroid.Variable(key, value) }.toTypedArray()
+            val nesVariables = config.map { (key, value) -> Variable(key, value) }.toTypedArray()
             retroView.updateVariables(*nesVariables)
             Log.i(TAG, "[CROSSHAIR] Updated fceumm_show_crosshair = ${config["fceumm_show_crosshair"]}")
-        }
-
-        runOnUiThread {
-            Toast.makeText(
-                this,
-                "Crosshair: ${crosshairMode.value.displayName}",
-                Toast.LENGTH_SHORT
-            ).show()
         }
     }
     
     // Configure Zapper manuellement (pour debug/test)
+    // Configure Zapper manuellement (pour debug/test)
     private fun configureZapperManually() {
-        try {
-            Log.i(TAG, "[ZAPPER] Manual configuration triggered (hot config)!")
-            
-            // Vérifier que le jeu est chargé avant de configurer
-            try {
-                val testControllers = retroView.getControllers()
-                if (testControllers.isEmpty()) {
-                    Log.w(TAG, "[ZAPPER] No controllers available, game may not be loaded")
-                    runOnUiThread {
-                        Toast.makeText(
-                            this@NativeComposeEmulatorActivity,
-                            "Game not loaded. Cannot configure Zapper.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                    return
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "[ZAPPER] Cannot access controllers, game not loaded: ${e.message}")
-                runOnUiThread {
-                    Toast.makeText(
-                        this@NativeComposeEmulatorActivity,
-                        "Game not loaded. Cannot configure Zapper.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                return
-            }
-            
-            // Configurer Port 1 (index 0) = Gamepad explicitement
-            try {
-                retroView.setControllerType(0, 1)  // RETRO_DEVICE_JOYPAD = 1
-                Log.i(TAG, "[ZAPPER] Port 1 configured as GAMEPAD (1)")
-            } catch (e: Exception) {
-                Log.e(TAG, "[ZAPPER] Failed to set Port 1 as GAMEPAD: ${e.message}")
-                throw e
-            }
-            
-            // Configurer Port 2 (index 1) = Zapper
-            try {
-                retroView.setControllerType(1, 258)  // RETRO_DEVICE_ZAPPER = 258
-                Log.i(TAG, "[ZAPPER] Port 2 configured as ZAPPER (258)")
-            } catch (e: Exception) {
-                Log.e(TAG, "[ZAPPER] Failed to set Port 2 as ZAPPER: ${e.message}")
-                throw e
-            }
-            
-            // Afficher confirmation
-            android.widget.Toast.makeText(
-                this,
-                "Zapper configured! Port 1=Gamepad, Port 2=Zapper (hot config)",
-                android.widget.Toast.LENGTH_LONG
-            ).show()
-        } catch (e: Exception) {
-            Log.e(TAG, "[ZAPPER] Error during manual configuration", e)
-            android.widget.Toast.makeText(
-                this,
-                "Error: ${e.message}",
-                android.widget.Toast.LENGTH_LONG
-            ).show()
-        }
+        if (!::zapperManager.isInitialized) return
+        zapperManager.configureZapperManually()
     }
 
     private fun handleHotkeyChange(action: String, pressed: Boolean) {
@@ -771,194 +505,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         triggerOnTouch: Boolean = false,
         allowOffscreen: Boolean = true
     ): Boolean {
-        if (!isZapperGame) {
-            return false
-        }
-        
-        // Vérifier si bounds disponibles
-        val bounds = gameViewBounds
-        if (bounds == null) {
-            Log.w(TAG, "[ZAPPER] GLRetroView bounds not available yet, ignoring touch")
-            return false
-        }
-        
-        // Touch coordinates (écran)
-        val touchX = event.x
-        val touchY = event.y
-        
-        // Vérifier si touch est DANS le GLRetroView (zone de jeu)
-        val isInGameArea = touchX >= bounds.left && touchX <= bounds.right &&
-                          touchY >= bounds.top && touchY <= bounds.bottom
-        
-        if (!isInGameArea) {
-            // Touch hors zone de jeu (dans les overlays, bars, etc.)
-            if (!allowOffscreen) {
-                Log.d(TAG, "[ZAPPER] Touch OUTSIDE game area and allowOffscreen=false - ignored")
-                return false
-            }
-            // Si allowOffscreen=true, clamp aux bounds
-            Log.d(TAG, "[ZAPPER] Touch OUTSIDE game area, clamping to bounds")
-        }
-        
-        // CORRECTION VIEWPORT: LibretroDroid retourne (0,0,1,1) même avec letterboxing!
-        // Il faut calculer le VRAI viewport en tenant compte du ratio d'aspect du core
-        
-        // Convertir touch en coordonnées VIEW (bounds peuvent être négatifs si View déborde)
-        val touchXInView = touchX - bounds.left
-        val touchYInView = touchY - bounds.top
-        
-        // Récupérer le ratio d'aspect du core
-        val coreAspectRatio = try {
-            retroView.getAspectRatio()
-        } catch (e: Exception) {
-            Log.w(TAG, "[ZAPPER] Cannot get aspect ratio from core, using NES default (256:240)")
-            256f / 240f  // Fallback NES
-        }
-        
-        val screenAspectRatio = bounds.width / bounds.height
-        
-        // Calculer le viewport réel (zone de jeu visible, sans letterboxing)
-        val actualViewport = if (screenAspectRatio > coreAspectRatio) {
-            // Écran plus large que le jeu → Bandes noires à gauche/droite
-            val gameWidth = bounds.height * coreAspectRatio
-            val letterboxWidth = (bounds.width - gameWidth) / 2f
-            val left = letterboxWidth / bounds.width
-            val right = 1f - left
-            android.graphics.RectF(left, 0f, right, 1f)
-        } else {
-            // Écran plus haut que le jeu → Bandes noires en haut/bas (portrait typique)
-            val gameHeight = bounds.width / coreAspectRatio
-            val letterboxHeight = (bounds.height - gameHeight) / 2f
-            val top = letterboxHeight / bounds.height
-            val bottom = 1f - top
-            android.graphics.RectF(0f, top, 1f, bottom)
-        }
-        
-        // Appliquer le viewport CORRIGÉ (si letterboxing)
-        val viewportTop = actualViewport.top * bounds.height
-        val viewportBottom = actualViewport.bottom * bounds.height
-        val viewportLeft = actualViewport.left * bounds.width
-        val viewportRight = actualViewport.right * bounds.width
-        
-        val clampedX = touchXInView.coerceIn(viewportLeft, viewportRight)
-        val clampedY = touchYInView.coerceIn(viewportTop, viewportBottom)
-        
-        val viewportWidth = viewportRight - viewportLeft
-        val viewportHeight = viewportBottom - viewportTop
-        
-        // CRITIQUE: LibretroDroid attend [0, 1] et fait la conversion [-0x7fff, +0x7fff] lui-même
-        // Formule dans input.cpp: (pointerScreenXAxis - 0.5f) * 2.0 * 0x7fff
-        // POINTER_PRESSED = (X >= 0 && Y >= 0) donc on DOIT envoyer [0, 1] !
-        val relativeX = (clampedX - viewportLeft) / viewportWidth
-        val relativeY = (clampedY - viewportTop) / viewportHeight
-        
-        when (event.actionMasked) {
-            android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
-                // Envoyer position POINTER au core
-                // MOTION_SOURCE_POINTER = 3 (de LibretroDroid.java)
-                // IMPORTANT: Envoyer [0, 1] (pas [-1, 1]) car LibretroDroid fait la conversion
-                // Utiliser le port configuré pour ce jeu (0 pour Chiller, 1 pour les autres)
-                retroView.sendMotionEvent(
-                    com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
-                    relativeX,  // 0.0 à 1.0 (LibretroDroid convertit en [-0x7fff, +0x7fff])
-                    relativeY,  // 0.0 à 1.0
-                    zapperPort  // Port configuré selon le jeu (0 pour Chiller, 1 pour les autres)
-                )
-                
-                if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-                    // P3: Quick tap detection - Compatible RetroArch android_check_quick_tap() (lignes 805-815)
-                    val currentTime = android.os.SystemClock.elapsedRealtime()
-                    val timeSinceLastTap = if (lastZapperTapTime > 0) currentTime - lastZapperTapTime else Long.MAX_VALUE
-                    val isQuickTap = timeSinceLastTap < 200
-                    lastZapperTapTime = currentTime
-                    
-                    // Reset le handler précédent et programmer un nouveau reset après 200ms
-                    quickTapResetHandler?.removeCallbacks(quickTapResetRunnable)
-                    quickTapResetHandler = android.os.Handler(android.os.Looper.getMainLooper())
-                    quickTapResetHandler?.postDelayed(quickTapResetRunnable, 200)
-                    
-                    if (isQuickTap && timeSinceLastTap != Long.MAX_VALUE) {
-                        Log.d(TAG, "[ZAPPER] Quick tap detected (${timeSinceLastTap}ms < 200ms)")
-                    }
-                    
-                    Log.i(TAG, "[ZAPPER] ===== TOUCH DOWN =====")
-                    Log.i(TAG, "[ZAPPER] Screen touch: (${touchX.toInt()}, ${touchY.toInt()})")
-                    Log.i(TAG, "[ZAPPER] Bounds: left=${bounds.left.toInt()}, top=${bounds.top.toInt()}, width=${bounds.width.toInt()}, height=${bounds.height.toInt()}")
-                    Log.i(TAG, "[ZAPPER] Clamped: (${clampedX.toInt()}, ${clampedY.toInt()})")
-                    Log.i(TAG, "[ZAPPER] Relative [0-1]: ($relativeX, $relativeY)")
-                    Log.i(TAG, "[ZAPPER] Sending POINTER to port ${zapperPort + 1} (index $zapperPort)")
-                    Log.i(TAG, "[ZAPPER] LibretroDroid will store: pointer[0].screenX=$relativeX, pointer[0].screenY=$relativeY")
-                    Log.i(TAG, "[ZAPPER] LibretroDroid will set: pointer[0].active = ${relativeX >= 0f && relativeY >= 0f}")
-                    Log.i(TAG, "[ZAPPER] FCEUmm will read: input_cb(port=$zapperPort, RETRO_DEVICE_POINTER, index=0, POINTER_PRESSED)")
-                    Log.i(TAG, "[ZAPPER] Expected POINTER_PRESSED = ${if (relativeX >= 0f && relativeY >= 0f) "TRUE (1)" else "FALSE (0)"}")
-                    
-                    // CRITIQUE: En mode RetroPointer, FCEUmm lit POINTER_PRESSED pour le trigger
-                    // Mais pour être sûr, on envoie aussi MOUSE_BUTTON_LEFT comme RetroArchEmulatorActivity
-                    // Cela fonctionne en double: POINTER_PRESSED ET MOUSE_BUTTON_LEFT
-                    if (triggerOnTouch) {
-                        Log.i(TAG, "[ZAPPER] Sending MOUSE_BUTTON_LEFT pressed on port ${zapperPort + 1} (triggerOnTouch=true${if (isQuickTap) ", quick tap" else ""})")
-                        
-                        // Optimisation quick tap: Pulse réduit pour meilleure réactivité
-                        val pulseDuration = if (isQuickTap) 8 else 16  // 8ms pour quick taps, 16ms normal (1 frame)
-                        
-                        retroView.sendMouseButton(
-                            com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                            true,  // Pressed
-                            zapperPort  // Port configuré selon le jeu
-                        )
-                        
-                        // Maintenir le trigger pendant pulseDuration pour meilleure détection
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            retroView.sendMouseButton(
-                                com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                                false,  // Released
-                                zapperPort
-                            )
-                            Log.d(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT released after ${pulseDuration}ms pulse${if (isQuickTap) " (quick tap optimized)" else ""}")
-                        }, pulseDuration.toLong())
-                        
-                        Log.i(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT sent on port ${zapperPort + 1}")
-                    } else {
-                        Log.i(TAG, "[ZAPPER] triggerOnTouch=false, will fire on ACTION_UP${if (isQuickTap) ", quick tap" else ""}")
-                    }
-                    Log.i(TAG, "[ZAPPER] =========================")
-                }
-                return true
-            }
-            
-            android.view.MotionEvent.ACTION_UP -> {
-                // Si triggerOnTouch = false, déclencher le trigger MAINTENANT (au release)
-                if (!triggerOnTouch) {
-                    retroView.sendMouseButton(
-                        com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                        true,  // Pressed
-                        zapperPort  // Port configuré selon le jeu
-                    )
-                    Log.i(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT pressed on port ${zapperPort + 1} (triggerOnTouch=false, firing on UP)")
-                }
-                
-                // Release POINTER - envoyer position avec valeurs négatives pour désactiver POINTER_PRESSED
-                // LibretroDroid: POINTER_PRESSED = (X >= 0 && Y >= 0)
-                // En envoyant (-1, -1), POINTER_PRESSED devient false
-                retroView.sendMotionEvent(
-                    com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
-                    -1f,  // Valeur négative = POINTER_PRESSED = false
-                    -1f,
-                    zapperPort  // Port configuré selon le jeu
-                )
-                
-                // Release MOUSE_BUTTON_LEFT
-                retroView.sendMouseButton(
-                    com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                    false,  // Released
-                    zapperPort  // Port configuré selon le jeu
-                )
-                Log.i(TAG, "[ZAPPER] Touch UP - POINTER released (sent -1, -1), MOUSE_BUTTON_LEFT released on port ${zapperPort + 1}")
-                return true
-            }
-            
-            else -> return false
-        }
+        if (!::zapperManager.isInitialized) return false
+        return zapperManager.handleZapperTouch(event, gameViewBounds, triggerOnTouch, allowOffscreen)
     }
     
     /**
@@ -1064,17 +612,20 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         
         // Détecter les jeux Zapper AVANT la création de GLRetroViewData
         // pour pouvoir passer les variables initiales au core
-        isZapperGame = ZapperGameDetector.isZapperGame(gameName, console)
-        if (isZapperGame) {
+        // Détecter les jeux Zapper AVANT la création de GLRetroViewData
+        val isZapperGameDetected = ZapperGameDetector.isZapperGame(gameName, console)
+        var zapperPortDetected = 1
+        
+        if (isZapperGameDetected) {
             Log.i(TAG, "[ZAPPER] Zapper game detected EARLY: $gameName")
             
             // Chiller utilise le port 0 (Port 1 NES), les autres jeux utilisent le port 1 (Port 2 NES)
             val normalizedName = gameName.lowercase().replace(Regex("[^a-z0-9]"), "")
             if (normalizedName.contains("chiller")) {
-                zapperPort = 0  // Port 1 NES
+                zapperPortDetected = 0  // Port 1 NES
                 Log.i(TAG, "[ZAPPER] Chiller detected - using port 0 (Port 1 NES)")
             } else {
-                zapperPort = 1  // Port 2 NES (défaut)
+                zapperPortDetected = 1  // Port 2 NES (défaut)
                 Log.i(TAG, "[ZAPPER] Standard Zapper game - using port 1 (Port 2 NES)")
             }
             
@@ -1104,12 +655,12 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
         // Note: fastForwardRatio est sauvegardé comme Float dans EmulationSettingsDialog
         fastForwardRatio = try {
-            prefs.getFloat("emulation_fast_forward_ratio", 2.0f).toInt().coerceIn(1, 10)
+            prefs.getFloat("emulation_fast_forward_ratio", 2.0f).coerceIn(1.0f, 10.0f)
         } catch (e: ClassCastException) {
             // Migration: si c'était un Int avant, le lire comme Int puis migrer vers Float
             val oldValue = prefs.getInt("emulation_fast_forward_ratio", 2)
             prefs.edit().putFloat("emulation_fast_forward_ratio", oldValue.toFloat()).apply()
-            oldValue.coerceIn(1, 10)
+            oldValue.toFloat().coerceIn(1.0f, 10.0f)
         }
         isFastForwardActive.value = prefs.getBoolean("emulation_fast_forward_active", false)
         audioMuted.value = prefs.getBoolean("emulation_audio_muted", false)
@@ -1424,11 +975,18 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         }
         
         retroView = GLRetroView(this, data)
+        
+        // Initialize Managers
+        controllerManager = NativeControllerManager(this, retroView)
+        zapperManager = ZapperManager(this, retroView).apply {
+            isZapperGame = isZapperGameDetected
+            zapperPort = zapperPortDetected
+        }
         rewindManager = RewindManager(retroView, lifecycleScope)
         applyRewindSettings()
         retroView.audioEnabled = !audioMuted.value
         if (isFastForwardActive.value) {
-            retroView.frameSpeed = fastForwardRatio
+            retroView.frameSpeed = fastForwardRatio.toInt()
         }
         runAheadManager = RunAheadManager(retroView)
         applyRunAheadSettings()
@@ -1454,14 +1012,7 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                                 configureN64ExtensionsAfterGameLoaded()
                             }
                             
-                            if (System.currentTimeMillis() % 1000 < 17) {
-                                val disks = retroView.getAvailableDisks()
-                                val current = retroView.getCurrentDisk()
-                                if (disks != availableDisksState.intValue || current != currentDiskState.intValue) {
-                                    availableDisksState.intValue = disks
-                                    currentDiskState.intValue = current
-                                }
-                            }
+
                         }
                         is GLRetroView.GLRetroEvents.SurfaceCreated -> {
                             runAheadManager?.onSurfaceReady()
@@ -1470,6 +1021,25 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error collecting GLRetroEvents: ${e.message}")
+            }
+        }
+        
+        // Poll for multi-disc changes safely (every 2 seconds)
+        lifecycleScope.launch {
+            while (isActive) {
+                try {
+                    if (::retroView.isInitialized && retroView.isGameLoaded()) {
+                        val disks = retroView.getAvailableDisks()
+                        val current = retroView.getCurrentDisk()
+                        if (disks != availableDisksState.intValue || current != currentDiskState.intValue) {
+                            availableDisksState.intValue = disks
+                            currentDiskState.intValue = current
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error polling disk status: ${e.message}")
+                }
+                delay(2000)
             }
         }
         
@@ -2298,7 +1868,7 @@ private fun ComposeEmulatorScreen(
     onDiskSelected: (Int) -> Unit,
     onTakeScreenshot: () -> Unit = {},
     onOpenGallery: () -> Unit = {},
-    fastForwardRatio: Int,
+    fastForwardRatio: Float,
     onRewindPress: () -> Unit = {},
     onRewindRelease: () -> Unit = {},
     rewindManager: RewindManager? = null,
@@ -2482,7 +2052,7 @@ private fun ComposeEmulatorScreen(
                         rewindActive = isRewindActive,
                         rewindSeconds = if (isRewindAvailable) rewindSeconds else 0f,
                         fastForwardActive = isFastForwardActive,
-                        fastForwardRatio = fastForwardRatio.toFloat(),
+                        fastForwardRatio = fastForwardRatio,
                         audioMuted = audioMuted,
                         autoSmartConfig = smartConfigAutoRunAhead
                     ),
@@ -4190,7 +3760,7 @@ private fun QuickMenuDialog(
     onConfigureZapper: () -> Unit = {},    // Configure Zapper manuellement
     onToggleCrosshairMode: () -> Unit = {},  // Toggle Crosshair mode (RetroPlay/FCEUmm/Both/None)
     quickActionsBarVisible: Boolean,
-    fastForwardRatio: Int,
+    fastForwardRatio: Float,
     isZapperGame: Boolean = false,
     crosshairMode: CrosshairMode = CrosshairMode.RETROPLAY_ONLY,
     hasGameInfo: Boolean = false,

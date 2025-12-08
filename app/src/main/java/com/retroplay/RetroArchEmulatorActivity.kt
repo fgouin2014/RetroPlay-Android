@@ -62,6 +62,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.compose.runtime.LaunchedEffect
 import java.io.File
 import java.io.FileOutputStream
@@ -173,8 +174,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private var allCoreVariables = mutableStateListOf<CoreVariable>()
     private val dipSwitches = mutableStateListOf<CoreVariable>()
     private val coreOptions = mutableStateListOf<CoreVariable>()
-    private var availableDisks = 0
-    private var currentDisk = 0
+    private var availableDisks = mutableIntStateOf(0)
+    private var currentDisk = mutableIntStateOf(0)
     
     // File picker pour custom .cfg (initialisé AVANT onCreate avec lateinit)
     private lateinit var pickCustomCfgLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
@@ -1874,7 +1875,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         retroView = GLRetroView(this, data)
         rewindManager = RewindManager(retroView, lifecycleScope)
-        applyRewindSettings()
+        configureRewindManager()
         lifecycle.addObserver(retroView)
         
         // Quick Wins: Appliquer l'état audio au démarrage (après création de retroView)
@@ -1892,16 +1893,29 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                             controllerConfigurationDone = true
                             configureControllersAfterGameLoaded()
                         }
-                        
-                        // Refresh disk info periodically (every 60 frames ~1 second)
-                        if (System.currentTimeMillis() % 1000 < 17) {
-                            availableDisks = retroView.getAvailableDisks()
-                            currentDisk = retroView.getCurrentDisk()
-                        }
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error collecting GLRetroEvents for disk info: ${e.message}")
+            }
+        }
+        
+        // Poll for multi-disc changes safely (every 2 seconds)
+        lifecycleScope.launch {
+            while (isActive) {
+                try {
+                    if (::retroView.isInitialized && retroView.isGameLoaded()) {
+                        val disks = retroView.getAvailableDisks()
+                        val current = retroView.getCurrentDisk()
+                        if (disks != availableDisks.intValue || current != currentDisk.intValue) {
+                            availableDisks.intValue = disks
+                            currentDisk.intValue = current
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error polling disk status: ${e.message}")
+                }
+                delay(2000)
             }
         }
         
@@ -2142,8 +2156,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 showDiskSwapperDialog = showDiskSwapperDialog,
                 showN64ExtensionsDialog = showN64ExtensionsDialog,
                 n64ExtensionsInfo = n64ExtensionsInfo,
-                availableDisks = availableDisks,
-                currentDisk = currentDisk,
+                availableDisks = availableDisks.intValue,
+                currentDisk = currentDisk.intValue,
                 onTakeScreenshot = {
                     takeScreenshot()
                 },
@@ -2517,15 +2531,15 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             }
             
             // === DISK SWAPPER DIALOG ===
-            if (showDiskSwapperDialog.value && availableDisks > 1) {
+            if (showDiskSwapperDialog.value && availableDisks.intValue > 1) {
                 DiskSwapperDialog(
-                    availableDisks = availableDisks,
-                    currentDiskIndex = currentDisk,
+                    availableDisks = availableDisks.intValue,
+                    currentDiskIndex = currentDisk.intValue,
                     onDiskSelected = { diskIndex ->
                         lifecycleScope.launch {
                             try {
                                 retroView.changeDisk(diskIndex)
-                                currentDisk = diskIndex
+                                currentDisk.intValue = diskIndex
                                 Toast.makeText(
                                     this@RetroArchEmulatorActivity, 
                                     "Swapped to Disk ${diskIndex + 1}", 
@@ -3332,6 +3346,38 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 Toast.LENGTH_SHORT
             ).show()
         }
+    }
+    private fun configureRewindManager() {
+        val manager = rewindManager ?: return
+        
+        // Load preferences
+        val isEnabled = prefs.getBoolean("enable_rewind", true)
+        
+        // Determine safe settings based on console
+        // PSX/N64 are heavy state-wise (>2MB per state), so we must be conservative
+        val isHeavyConsole = console.equals("psx", ignoreCase = true) || 
+                            console.equals("n64", ignoreCase = true) ||
+                            console.equals("files", ignoreCase = true) // Arcade/MAME potentially
+        
+        // Granularity: How many frames to skip between states
+        // 1 = every frame (smooth but RAM heavy)
+        // 30 = every 0.5s (ok)
+        // 60 = every 1s (safe for heavy consoles)
+        val granularity = if (isHeavyConsole) 60 else 1
+        
+        // Buffer size: Max memory for rewind buffer (in bytes)
+        // 20MB is default, maybe increase for heavy consoles if unstable?
+        // Actually, reducing it prevents OOM, but increasing it allows longer rewind.
+        // Let's stick to 20MB (20 * 1024 * 1024)
+        val bufferSize = 20 * 1024 * 1024
+        
+        Log.i(TAG, "[REWIND] Configuring: enabled=$isEnabled, granularity=$granularity (heavy=$isHeavyConsole), buffer=${bufferSize/1024/1024}MB")
+        
+        manager.configure(
+            enabled = isEnabled,
+            bufferSizeBytes = bufferSize,
+            granularity = granularity
+        )
     }
 }
 

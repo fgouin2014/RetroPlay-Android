@@ -16,6 +16,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+
 
 /**
  * Gestionnaire Rewind pour RetroPlay.
@@ -89,14 +93,16 @@ class RewindManager(
             return false
         }
         
-        val state = withContext(Dispatchers.IO) {
-            try {
+        // Run on GL Thread to avoid race conditions with core execution
+        val state = try {
+            runOnGLThread {
                 retroView.serializeState()
-            } catch (e: Exception) {
-                Log.e(TAG, "serializeState failed during support check", e)
-                ByteArray(0)
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "serializeState failed during support check", e)
+            ByteArray(0)
         }
+
         val supported = state.isNotEmpty()
         _isSupported.value = supported
         if (!supported) {
@@ -121,7 +127,7 @@ class RewindManager(
         }
         if (!supportChecked) {
             if (checkingSupport.compareAndSet(false, true)) {
-                scope.launch(Dispatchers.IO) {
+                scope.launch {
                     try {
                         ensureSupport()
                     } finally {
@@ -141,7 +147,7 @@ class RewindManager(
         if (!captureInFlight.compareAndSet(false, true)) {
             return
         }
-        scope.launch(Dispatchers.IO) {
+        scope.launch {
             try {
                 captureState()
             } finally {
@@ -156,7 +162,7 @@ class RewindManager(
         }
         if (!supportChecked) {
             if (checkingSupport.compareAndSet(false, true)) {
-                scope.launch(Dispatchers.IO) {
+                scope.launch {
                     try {
                         ensureSupport()
                     } finally {
@@ -193,13 +199,15 @@ class RewindManager(
                     break
                 }
 
-                val success = withContext(Dispatchers.IO) {
-                    try {
+                // Run on GL Thread
+                val success = try {
+                    runOnGLThread {
                         retroView.unserializeState(state)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "unserializeState failed during rewind", e)
-                        false
+                        true
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "unserializeState failed during rewind", e)
+                    false
                 }
 
                 if (!success) {
@@ -235,8 +243,11 @@ class RewindManager(
             return
         }
         
+        // Run on GL Thread
         val state = try {
-            retroView.serializeState()
+            runOnGLThread {
+                retroView.serializeState()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "serializeState failed during capture", e)
             ByteArray(0)
@@ -311,6 +322,25 @@ class RewindManager(
     private fun stopBufferClearTimer() {
         bufferClearJob?.cancel()
         bufferClearJob = null
+    }
+
+    /**
+     * Executes a block on the GL Thread and waits for the result.
+     * This is critical for Native/JNI calls that interact with the core loop (rewind, save state).
+     */
+    private suspend fun <T> runOnGLThread(block: () -> T): T = suspendCancellableCoroutine { cont ->
+        retroView.queueEvent {
+            try {
+                if (cont.isActive) {
+                    val result = block()
+                    cont.resume(result)
+                }
+            } catch (e: Exception) {
+                if (cont.isActive) {
+                    cont.resumeWithException(e)
+                }
+            }
+        }
     }
 }
 

@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -67,6 +68,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import androidx.compose.runtime.LaunchedEffect
+import com.retroplay.viewmodels.RetroArchEmulatorViewModel
 import java.io.File
 import java.io.FileOutputStream
 import android.graphics.Bitmap
@@ -87,6 +89,9 @@ import com.retroplay.config.RetroPlayConfigManager
  * - NO Radial/Lemuroid gamepads
  */
 class RetroArchEmulatorActivity : ComponentActivity() {
+    
+    // ViewModel for UI state management
+    private val viewModel: RetroArchEmulatorViewModel by viewModels()
     
     companion object {
         private const val TAG = "RetroArchEmulator"
@@ -134,7 +139,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private var gameCRC: String? = null  // Database CRC (if available)
     private var loadedCheats = mutableListOf<com.retroplay.cheat.CheatManager.Cheat>()  // Cheats loaded for current game
     private var rewindManager: RewindManager? = null
+    private var runAheadManager: com.retroplay.runahead.RunAheadManager? = null
     private var retroPlayConfig: RetroPlayConfigManager.RetroPlayConfig = RetroPlayConfigManager.loadConfig()
+    private var runAheadEnabledConfig: Boolean = false
+    private var runAheadFramesConfig: Int = 0
     
     // Autoconfig system (RetroArch gamepad autoconfiguration)
     private lateinit var autoconfigManager: com.retroplay.input.AutoconfigManager
@@ -323,21 +331,20 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         retroPlayConfig = config
         applyRewindSettings()
+        applyRunAheadSettings()
+    }
 
-        // TODO: Apply config to emulator once APIs are available
-        // if (config.runAheadEnabled) {
-        //     retroView.setRunAheadFrames(config.runAheadFrames)
-        //     retroView.setRunAheadEnabled(true)
-        // }
-        // if (config.rewindEnable) {
-        //     retroView.setRewindEnabled(true)
-        //     retroView.setRewindBufferSize(config.rewindBufferSize)
-        // }
-        // retroView.setFastForwardRatio(config.fastforwardRatio)
-        // retroView.setVsyncEnabled(config.videoVsync)
+    private fun applyRunAheadSettings() {
+        val config = retroPlayConfig
+        runAheadEnabledConfig = config.runAheadEnabled
+        runAheadFramesConfig = config.runAheadFrames
+        runAheadManager?.configure(runAheadEnabledConfig, runAheadFramesConfig)
         
-        // For now, we just store the config for future use
-        // The config will be accessible when Run-Ahead/Rewind are implemented
+        if (runAheadEnabledConfig) {
+            Log.i(TAG, "[RUN_AHEAD] Configured: enabled=true frames=$runAheadFramesConfig")
+        } else {
+            Log.i(TAG, "[RUN_AHEAD] Configured: enabled=false")
+        }
     }
 
     private fun applyRewindSettings() {
@@ -1878,7 +1885,9 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         
         retroView = GLRetroView(this, data)
         rewindManager = RewindManager(retroView, lifecycleScope)
+        runAheadManager = com.retroplay.runahead.RunAheadManager(retroView)
         configureRewindManager()
+        applyRunAheadSettings()
         lifecycle.addObserver(retroView)
         
         // Quick Wins: Appliquer l'état audio au démarrage (après création de retroView)
@@ -1890,6 +1899,11 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 retroView.getGLRetroEvents().collect { event ->
                     if (event is GLRetroView.GLRetroEvents.FrameRendered) {
                         rewindManager?.onFrameRendered()
+                        
+                        // Initialize Run-Ahead after first frame (game is loaded)
+                        if (!controllerConfigurationDone) {
+                            runAheadManager?.onSurfaceReady()
+                        }
                         
                         // Configure controllers after first frame is rendered (game is loaded and running)
                         if (!controllerConfigurationDone && !showCoreErrorDialog.value) {
@@ -2123,6 +2137,19 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 },
                 onLightgunAction = { action ->
                     handleLightgunAction(action)
+                },
+                onTurboSettings = {
+                    showTurboSettings.value = true
+                },
+                onSmartConfig = {
+                    showSmartConfigDialog.value = true
+                },
+                onPerGameConfig = {
+                    if (gameCRC != null) {
+                        perGameConfigCRC = gameCRC
+                        perGameConfigGameName = gameName
+                        showPerGameConfigDialog.value = true
+                    }
                 },
                 // Quick Wins callbacks
                 onRewindPress = {
@@ -3384,27 +3411,39 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                             console.equals("n64", ignoreCase = true) ||
                             console.equals("files", ignoreCase = true) // Arcade/MAME potentially
         
-        // Allow rewind for all consoles, but with strict limits for heavy ones
-        val defaultEnabled = true // User can disable if needed
+        // Allow rewind for all consoles
+        val defaultEnabled = true
         val isEnabled = prefs.getBoolean("enable_rewind", defaultEnabled)
         
+        // USER-CONFIGURABLE REWIND DURATION
+        // Preference: "rewind_duration_seconds" with options: 10, 30, 60
+        // Default: 10 seconds for safety
+        val rewindDurationSeconds = prefs.getInt("rewind_duration_seconds", 10).coerceIn(10, 60)
+        
         // Granularity: How many frames to skip between states
-        // Heavy consoles: 60 frames = 1 second per state (10 states for 10 seconds)
+        // Heavy consoles: 60 frames = 1 second per state
         // Light consoles: 1 frame = smooth rewind
         val granularity = if (isHeavyConsole) 60 else 1
         
-        // Buffer size: STRICT LIMIT for heavy consoles
-        // PSX/N64: 25MB = ~10 states × 2.5MB = 10 SECONDS max rewind
-        // Light consoles: 10MB = ~200 states × 50KB = 3+ seconds of smooth rewind
+        // Buffer size: Calculate based on user's chosen duration
+        // PSX/N64: duration(s) × 2.5MB/state = buffer size
+        // Light consoles: Fixed 10MB (good for 3+ seconds)
         val bufferSize = if (isHeavyConsole) {
-            25 * 1024 * 1024 // 25MB for 10 seconds
+            // Calculate: states needed = duration in seconds (since granularity=60 = 1 state/sec)
+            // PSX: ~2.5MB per state
+            val statesNeeded = rewindDurationSeconds // 1 state per second
+            val bytesPerState = (2.5 * 1024 * 1024).toInt() // 2.5MB
+            (statesNeeded * bytesPerState).coerceAtLeast(25 * 1024 * 1024) // Min 25MB
         } else {
             10 * 1024 * 1024 // 10MB for light consoles
         }
         
-        val rewindDuration = if (isHeavyConsole) "10 seconds" else "3+ seconds"
         val statusMsg = if (isEnabled) {
-            "ENABLED ($rewindDuration max)"
+            if (isHeavyConsole) {
+                "ENABLED (${rewindDurationSeconds}s max, user-configurable)"
+            } else {
+                "ENABLED (3+ seconds)"
+            }
         } else {
             "DISABLED by user"
         }
@@ -3593,7 +3632,7 @@ private fun N64ExtensionsDialog(
 }
 
 @Composable
-internal fun ComposeEmulatorScreen(
+fun ComposeEmulatorScreen(
     retroView: GLRetroView,
     console: String,
     gameName: String,
@@ -3623,6 +3662,7 @@ internal fun ComposeEmulatorScreen(
     onHotkey: (String) -> Unit,  // Callback pour hotkeys
     onHotkeyChange: (String, Boolean) -> Unit = { _, _ -> },
     onLightgunAction: (String) -> Unit = {},  // Callback pour lightgun actions
+
     showDipSwitchDialog: MutableState<Boolean>,
     showCoreOptionsDialog: MutableState<Boolean>,
     dipSwitches: androidx.compose.runtime.snapshots.SnapshotStateList<CoreVariable>,
@@ -3664,7 +3704,10 @@ internal fun ComposeEmulatorScreen(
     onAudioMuteChanged: (Boolean) -> Unit = {},
     onVsyncChanged: (Boolean) -> Unit = {},
     onRewindEnabledChanged: (Boolean) -> Unit = {},
-    onAspectRatioChanged: (String) -> Unit = {}
+    onAspectRatioChanged: (String) -> Unit = {},
+    onTurboSettings: () -> Unit = {},
+    onSmartConfig: () -> Unit = {},
+    onPerGameConfig: () -> Unit = {},
 ) {
     // NO Radial/Lemuroid settings needed - RetroArch overlays only!
     
@@ -4424,8 +4467,9 @@ internal fun ComposeEmulatorScreen(
                 
                 // Main Menu (Save/Load/Settings/Cheats)
                 if (showMainMenu.value) {
-                    MainMenuDialog(
+                    com.retroplay.retroarch.RetroArchMainMenu(
                         gameName = gameName,
+                        gameCRC = gameCRC,
                         console = console,
                         prefs = prefs,
                         onDismiss = { showMainMenu.value = false },
@@ -4459,7 +4503,7 @@ internal fun ComposeEmulatorScreen(
                         },
                         onCheatCodes = {
                             showMainMenu.value = false
-                            showCheatCodes = true
+                            showCheatsDialog.value = true
                         },
                         onChangeCore = {
                             showMainMenu.value = false
@@ -4475,7 +4519,16 @@ internal fun ComposeEmulatorScreen(
                         },
                         onSmartConfig = {
                             closeQuickMenuWithCooldown()
-                            showSmartConfigDialog.value = true
+                            onSmartConfig()
+                        },
+                        onPerGameConfig = {
+                            if (gameCRC != null) {
+                                onPerGameConfig()
+                            }
+                        },
+                        onTurboSettings = {
+                            showMainMenu.value = false
+                            onTurboSettings()
                         },
                         onDiskSwapper = {
                             showMainMenu.value = false
@@ -4488,10 +4541,6 @@ internal fun ComposeEmulatorScreen(
                         onOpenGallery = {
                             showMainMenu.value = false
                             onOpenGallery()
-                        },
-                        onTurboSettings = {
-                            showMainMenu.value = false
-                            showTurboSettings.value = true
                         },
                         hasGameInfo = (gameCRC?.isNotEmpty() == true),
                         hasDipSwitches = dipSwitches.isNotEmpty(),
@@ -4866,6 +4915,7 @@ private fun buildLandscapeConstraints(): ConstraintSet {
 @Composable
 private fun MainMenuDialog(
     gameName: String,
+    gameCRC: String?,
     console: String,
     prefs: SharedPreferences,
     onDismiss: () -> Unit,
@@ -4881,6 +4931,7 @@ private fun MainMenuDialog(
     onDipSwitches: () -> Unit,
     onCoreOptions: () -> Unit,
     onSmartConfig: () -> Unit = {},  // Smart Config callback
+    onPerGameConfig: () -> Unit = {},  // Per-Game Config callback
     onDiskSwapper: () -> Unit = {},  // Disk Swapper callback
     onScreenshot: () -> Unit = {},  // Screenshot callback
     onOpenGallery: () -> Unit = {},
@@ -5021,6 +5072,28 @@ private fun MainMenuDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Smart Config", color = Color(0xFF4CAF50))
+                    }
+                    
+                    // Per-Game Config
+                    TextButton(
+                        onClick = onPerGameConfig,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = gameCRC != null
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Per-Game Config", 
+                                color = if (gameCRC != null) Color(0xFF2196F3) else Color(0xFF666666)
+                            )
+                            gameCRC?.let { crc ->
+                                if (com.retroplay.config.RetroPlayConfigManager.hasGameConfig(crc)) {
+                                    Text("●", color = Color(0xFFFF9800), fontSize = 8.sp)
+                                }
+                            }
+                        }
                     }
                     
                     // Disk Swapper (PSX multi-disc games)

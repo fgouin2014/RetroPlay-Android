@@ -53,11 +53,15 @@ import androidx.core.view.WindowInsetsCompat
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.Variable
-import com.swordfish.libretrodroid.ShaderConfig
+import com.swordfish.touchinput.radial.LemuroidPadTheme
+import com.swordfish.touchinput.radial.LocalLemuroidPadTheme
+import com.swordfish.touchinput.radial.layouts.*
 import com.swordfish.touchinput.radial.settings.TouchControllerSettingsManager
+import com.swordfish.libretrodroid.ShaderConfig
 import gg.padkit.PadKit
 import gg.padkit.inputevents.InputEvent
 import gg.padkit.ids.Id
+
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -146,6 +150,8 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     
     // Autoconfig system (RetroArch gamepad autoconfiguration)
     private lateinit var autoconfigManager: com.retroplay.input.AutoconfigManager
+    private lateinit var nativeControllerManager: com.retroplay.input.NativeControllerManager
+    private lateinit var zapperManager: com.retroplay.input.ZapperManager
     
     // Zapper support (NES light gun)
     private var isZapperGame: Boolean = false
@@ -1929,6 +1935,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         retroView = GLRetroView(this, data)
         rewindManager = RewindManager(retroView, lifecycleScope)
         runAheadManager = com.retroplay.runahead.RunAheadManager(retroView)
+        
+        // Initialize Native Managers (Radial/Zapper support)
+        nativeControllerManager = com.retroplay.input.NativeControllerManager(this, retroView)
+        zapperManager = com.retroplay.input.ZapperManager(this, retroView)
         configureRewindManager()
         applyRunAheadSettings()
         lifecycle.addObserver(retroView)
@@ -3788,6 +3798,11 @@ fun ComposeEmulatorScreen(
     var layoutVariant by remember {
         mutableStateOf(initialVariant)
     }
+
+    // Charger les settings du contrôleur Lemuroid (nécessaire pour le mode Radial)
+    var settings by remember(layoutVariant, console) {
+        mutableStateOf(com.retroplay.input.PadKitHelper.loadSettings(prefs, console))
+    }
     
     LaunchedEffect(console) {
         ensureRetroArchOverlayPreference(prefs, console, retroView.context)
@@ -4250,9 +4265,47 @@ fun ComposeEmulatorScreen(
                                 }
                             }
                         }
+                        }
+                } else {
+                    // Mode Lemuroid (Radial)
+                    CompositionLocalProvider(LocalLemuroidPadTheme provides LemuroidPadTheme()) {
+                        PadKit(
+                            onInputEvents = { event ->
+                                com.retroplay.input.PadKitHelper.handleInputEvents(event, retroView, showMainMenu, settings)
+                            }
+                        ) {
+                            ConstraintLayout(
+                                modifier = Modifier.fillMaxSize(),
+                                constraintSet = constraintSet
+                            ) {
+                                // Emulator View
+                                AndroidView(
+                                    factory = { retroView },
+                                    modifier = Modifier
+                                        .layoutId("gameView")
+                                        .onGloballyPositioned { layoutCoordinates ->
+                                            gameViewBounds.value = layoutCoordinates.boundsInWindow()
+                                        }
+                                        .pointerInteropFilter { event ->
+                                            if (isZapperGame) {
+                                                onZapperTouch(event)
+                                            }
+                                            false
+                                        }
+                                )
+                                
+                                // GamePads (affichés seulement si overlaysVisible est true)
+                                if (overlaysVisible.value) {
+                                    // Left GamePad
+                                    layout.left(this@PadKit, Modifier.layoutId("leftPad"), settings)
+                                    
+                                    // Right GamePad
+                                    layout.right(this@PadKit, Modifier.layoutId("rightPad"), settings)
+                                }
+                            }
+                        }
                     }
                 }
-                // NO ELSE - RetroArch mode ONLY in this activity!
                 
                 // Auto-hide: État de visibilité avec vérification périodique
                 // Si auto-hide est activé, la barre doit être cachée au démarrage
@@ -6189,6 +6242,7 @@ private fun QuickMenuDialog(
     }
 }
 
+
 /**
  * Mappe un layout demandé vers un layout compatible avec l'orientation physique du device
  * 
@@ -6374,3 +6428,7 @@ private fun computeDefaultLayoutsForOverlay(
         ?: landscape
     return landscape to portrait
 }
+
+
+
+

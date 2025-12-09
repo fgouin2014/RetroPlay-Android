@@ -1830,73 +1830,8 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
 }
 
 // Handle PadKit events (List of events from gamepads)
-private fun handlePadKitEvent(
-    events: List<InputEvent>,
-    retroView: GLRetroView,
-    showMainMenu: MutableState<Boolean>,
-    settings: TouchControllerSettingsManager.Settings
-) {
-    // Intercepter le bouton menu (comme Lemuroid le fait)
-    val menuEvent = events.firstOrNull { 
-        it is InputEvent.Button && it.id == KeyEvent.KEYCODE_BUTTON_MODE
-    }
-    
-    if (menuEvent != null && (menuEvent as InputEvent.Button).pressed) {
-        Log.i("NativeComposeEmulator", "Menu button pressed, opening main menu")
-        showMainMenu.value = true
-        return  // Ne pas envoyer l'événement menu à l'émulateur
-    }
-    
-    // Traiter tous les autres événements
-    events.forEach { event ->
-        when (event) {
-            is InputEvent.Button -> {
-                val keyCode = event.id
-                if (keyCode != KeyEvent.KEYCODE_BUTTON_MODE) {
-                    val action = if (event.pressed) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP
-                    retroView.sendKeyEvent(action, keyCode)
-                }
-            }
-            
-            is InputEvent.DiscreteDirection -> {
-                // D-Pad et directions discrètes
-                val source = when (event.id) {
-                    0 -> GLRetroView.MOTION_SOURCE_DPAD
-                    1 -> GLRetroView.MOTION_SOURCE_ANALOG_LEFT
-                    2 -> GLRetroView.MOTION_SOURCE_ANALOG_RIGHT
-                    else -> GLRetroView.MOTION_SOURCE_DPAD
-                }
-                retroView.sendMotionEvent(source, event.direction.x, -event.direction.y)
-            }
-            
-            is InputEvent.ContinuousDirection -> {
-                // Analog sticks (mouvements continus)
-                // Note: Dans ComposeTouchLayouts: MOTION_SOURCE_LEFT_STICK = 1, MOTION_SOURCE_RIGHT_STICK = 2
-                var stickId = event.id
-                
-                // Appliquer swap si demandé (1 et 2 seulement, pas le DPAD qui est 0)
-                if (settings.swapAnalogSticks && (stickId == 1 || stickId == 2)) {
-                    stickId = if (stickId == 1) 2 else 1
-                }
-                
-                val source = when (stickId) {
-                    1 -> GLRetroView.MOTION_SOURCE_ANALOG_LEFT   // ComposeTouchLayouts.MOTION_SOURCE_LEFT_STICK
-                    2 -> GLRetroView.MOTION_SOURCE_ANALOG_RIGHT  // ComposeTouchLayouts.MOTION_SOURCE_RIGHT_STICK
-                    else -> GLRetroView.MOTION_SOURCE_DPAD       // ID 0 = DPAD
-                }
-                
-                // Appliquer inversion Y si demandé
-                val invertY = when (stickId) {
-                    1 -> settings.invertAnalogLeftY
-                    2 -> settings.invertAnalogRightY
-                    else -> false
-                }
-                val yAxis = if (invertY) event.direction.y else -event.direction.y
-                retroView.sendMotionEvent(source, event.direction.x, yAxis)
-            }
-        }
-    }
-}
+// Handle PadKit events moved to PadKitHelper
+
 
 @Composable
 private fun ComposeEmulatorScreen(
@@ -2466,7 +2401,7 @@ private fun ComposeEmulatorScreen(
                     // Mode Lemuroid : Layout gauche/droite standard
                     PadKit(
                         onInputEvents = { event ->
-                            handlePadKitEvent(event, retroView, showMainMenu, settings)
+                            com.retroplay.input.PadKitHelper.handleInputEvents(event, retroView, showMainMenu, settings)
                         }
                     ) {
                         ConstraintLayout(

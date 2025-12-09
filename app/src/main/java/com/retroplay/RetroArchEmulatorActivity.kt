@@ -63,6 +63,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import androidx.compose.runtime.LaunchedEffect
 import java.io.File
 import java.io.FileOutputStream
@@ -2023,19 +2026,23 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         // IMPORTANT : Différer le chargement pour laisser le core s'initialiser
         if (loadSlot > 0) {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                val saveFile = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$loadSlot/$gameName.state")
-                if (saveFile.exists()) {
-                    try {
-                        retroView.unserializeState(saveFile.readBytes())
-                        Log.i(TAG, "[$console] Save state loaded from slot $loadSlot: ${saveFile.absolutePath}")
-                        Toast.makeText(this, "[$console] Loaded from Slot $loadSlot", Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "[$console] Error loading save from slot $loadSlot", e)
-                        Toast.makeText(this, "[$console] Error loading save", Toast.LENGTH_SHORT).show()
+                lifecycleScope.launch {
+                    val saveFile = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$loadSlot/$gameName.state")
+                    if (saveFile.exists()) {
+                        try {
+                            // CRITIQUE: Appel JNI doit être sur GL Thread
+                            val stateBytes = saveFile.readBytes()
+                            runOnGLThread { retroView.unserializeState(stateBytes) }
+                            Log.i(TAG, "[$console] Save state loaded from slot $loadSlot: ${saveFile.absolutePath}")
+                            Toast.makeText(this@RetroArchEmulatorActivity, "[$console] Loaded from Slot $loadSlot", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[$console] Error loading save from slot $loadSlot", e)
+                            Toast.makeText(this@RetroArchEmulatorActivity, "[$console] Error loading save", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Log.w(TAG, "[$console] No save found in slot $loadSlot")
+                        Toast.makeText(this@RetroArchEmulatorActivity, "[$console] No save in Slot $loadSlot", Toast.LENGTH_SHORT).show()
                     }
-                } else {
-                    Log.w(TAG, "[$console] No save found in slot $loadSlot")
-                    Toast.makeText(this, "[$console] No save in Slot $loadSlot", Toast.LENGTH_SHORT).show()
                 }
             }, 2000)  // Attendre 2 secondes pour que le core s'initialise complètement
         }
@@ -2774,73 +2781,95 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
     }
     
+    /**
+     * Helper pour exécuter du code sur le GL Thread de manière sûre
+     * CRITIQUE: Tous les appels JNI (serializeState, unserializeState, etc.) DOIVENT être exécutés sur le GL Thread
+     */
+    private suspend fun <T> runOnGLThread(block: () -> T): T = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        retroView.queueEvent {
+            try {
+                val result = block()
+                continuation.resume(result)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
+        }
+    }
+    
     // Sauvegarder l'état du jeu dans un slot (organisé par console/slot)
     private fun saveGameState(slot: Int) {
-        try {
-            // Vérifier que le core est chargé avant de sauvegarder
-            if (!retroView.isGameLoaded()) {
-                Log.w(TAG, "[$console] Cannot save state: game not loaded yet")
-                runOnUiThread {
-                    Toast.makeText(this, "Game not ready for saving", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                // Vérifier que le core est chargé avant de sauvegarder
+                if (!retroView.isGameLoaded()) {
+                    Log.w(TAG, "[$console] Cannot save state: game not loaded yet")
+                    runOnUiThread {
+                        Toast.makeText(this@RetroArchEmulatorActivity, "Game not ready for saving", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
                 }
-                return
-            }
-            
-            // Structure : saves/{console}/slot{slot}/{gameName}.state
-            val slotDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot")
-            if (!slotDir.exists()) {
-                slotDir.mkdirs()
-            }
-            
-            val saveFile = File(slotDir, "${gameName}.state")
-            val stateData = retroView.serializeState()
-            
-            // Vérifier que les données sont valides
-            if (stateData.isEmpty()) {
-                Log.w(TAG, "[$console] serializeState returned empty data")
-                runOnUiThread {
-                    Toast.makeText(this, "Save failed: empty state", Toast.LENGTH_SHORT).show()
+                
+                // Structure : saves/{console}/slot{slot}/{gameName}.state
+                val slotDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot")
+                if (!slotDir.exists()) {
+                    slotDir.mkdirs()
                 }
-                return
-            }
-            
-            saveFile.writeBytes(stateData)
-            
-            Log.i(TAG, "[$console] Game state saved to slot $slot: ${saveFile.absolutePath}")
-            runOnUiThread {
-                Toast.makeText(this, "[$console] Saved to Slot $slot", Toast.LENGTH_SHORT).show()
-                // Capture screenshot for slot thumbnail
-                captureSlotThumbnail(slot)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving game state to slot $slot", e)
-            runOnUiThread {
-                Toast.makeText(this, "Error saving game", Toast.LENGTH_SHORT).show()
+                
+                val saveFile = File(slotDir, "${gameName}.state")
+                // CRITIQUE: Appel JNI doit être sur GL Thread
+                val stateData = runOnGLThread { retroView.serializeState() }
+                
+                // Vérifier que les données sont valides
+                if (stateData.isEmpty()) {
+                    Log.w(TAG, "[$console] serializeState returned empty data")
+                    runOnUiThread {
+                        Toast.makeText(this@RetroArchEmulatorActivity, "Save failed: empty state", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                
+                saveFile.writeBytes(stateData)
+                
+                Log.i(TAG, "[$console] Game state saved to slot $slot: ${saveFile.absolutePath}")
+                runOnUiThread {
+                    Toast.makeText(this@RetroArchEmulatorActivity, "[$console] Saved to Slot $slot", Toast.LENGTH_SHORT).show()
+                    // Capture screenshot for slot thumbnail
+                    captureSlotThumbnail(slot)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving game state to slot $slot", e)
+                runOnUiThread {
+                    Toast.makeText(this@RetroArchEmulatorActivity, "Error saving game", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
     
     // Charger l'état du jeu depuis un slot (organisé par console/slot)
     private fun loadGameState(slot: Int) {
-        try {
-            // Structure : saves/{console}/slot{slot}/{gameName}.state
-            val saveFile = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/${gameName}.state")
-            if (saveFile.exists()) {
-                retroView.unserializeState(saveFile.readBytes())
-                Log.i(TAG, "[$console] Game state loaded from slot $slot: ${saveFile.absolutePath}")
-                runOnUiThread {
-                    Toast.makeText(this, "[$console] Loaded from Slot $slot", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                // Structure : saves/{console}/slot{slot}/{gameName}.state
+                val saveFile = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/${gameName}.state")
+                if (saveFile.exists()) {
+                    // CRITIQUE: Appel JNI doit être sur GL Thread
+                    val stateBytes = saveFile.readBytes()
+                    runOnGLThread { retroView.unserializeState(stateBytes) }
+                    Log.i(TAG, "[$console] Game state loaded from slot $slot: ${saveFile.absolutePath}")
+                    runOnUiThread {
+                        Toast.makeText(this@RetroArchEmulatorActivity, "[$console] Loaded from Slot $slot", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Log.w(TAG, "No save state found for slot $slot in $console")
+                    runOnUiThread {
+                        Toast.makeText(this@RetroArchEmulatorActivity, "[$console] No save in Slot $slot", Toast.LENGTH_SHORT).show()
+                    }
                 }
-            } else {
-                Log.w(TAG, "No save state found for slot $slot in $console")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading game state from slot $slot", e)
                 runOnUiThread {
-                    Toast.makeText(this, "[$console] No save in Slot $slot", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@RetroArchEmulatorActivity, "Error loading game", Toast.LENGTH_SHORT).show()
                 }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading game state from slot $slot", e)
-            runOnUiThread {
-                Toast.makeText(this, "Error loading game", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -3350,28 +3379,37 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private fun configureRewindManager() {
         val manager = rewindManager ?: return
         
-        // Load preferences
-        val isEnabled = prefs.getBoolean("enable_rewind", true)
-        
-        // Determine safe settings based on console
-        // PSX/N64 are heavy state-wise (>2MB per state), so we must be conservative
+        // Determine if this is a heavy console FIRST
         val isHeavyConsole = console.equals("psx", ignoreCase = true) || 
                             console.equals("n64", ignoreCase = true) ||
                             console.equals("files", ignoreCase = true) // Arcade/MAME potentially
         
+        // Allow rewind for all consoles, but with strict limits for heavy ones
+        val defaultEnabled = true // User can disable if needed
+        val isEnabled = prefs.getBoolean("enable_rewind", defaultEnabled)
+        
         // Granularity: How many frames to skip between states
-        // 1 = every frame (smooth but RAM heavy)
-        // 30 = every 0.5s (ok)
-        // 60 = every 1s (safe for heavy consoles)
+        // Heavy consoles: 60 frames = 1 second per state (10 states for 10 seconds)
+        // Light consoles: 1 frame = smooth rewind
         val granularity = if (isHeavyConsole) 60 else 1
         
-        // Buffer size: Max memory for rewind buffer (in bytes)
-        // 20MB is default, maybe increase for heavy consoles if unstable?
-        // Actually, reducing it prevents OOM, but increasing it allows longer rewind.
-        // Let's stick to 20MB (20 * 1024 * 1024)
-        val bufferSize = 20 * 1024 * 1024
+        // Buffer size: STRICT LIMIT for heavy consoles
+        // PSX/N64: 25MB = ~10 states × 2.5MB = 10 SECONDS max rewind
+        // Light consoles: 10MB = ~200 states × 50KB = 3+ seconds of smooth rewind
+        val bufferSize = if (isHeavyConsole) {
+            25 * 1024 * 1024 // 25MB for 10 seconds
+        } else {
+            10 * 1024 * 1024 // 10MB for light consoles
+        }
         
-        Log.i(TAG, "[REWIND] Configuring: enabled=$isEnabled, granularity=$granularity (heavy=$isHeavyConsole), buffer=${bufferSize/1024/1024}MB")
+        val rewindDuration = if (isHeavyConsole) "10 seconds" else "3+ seconds"
+        val statusMsg = if (isEnabled) {
+            "ENABLED ($rewindDuration max)"
+        } else {
+            "DISABLED by user"
+        }
+        
+        Log.i(TAG, "[REWIND] Configuring: $statusMsg, granularity=$granularity, buffer=${bufferSize/1024/1024}MB (heavy=$isHeavyConsole)")
         
         manager.configure(
             enabled = isEnabled,

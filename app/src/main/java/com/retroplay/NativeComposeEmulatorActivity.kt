@@ -259,19 +259,76 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         val manager = rewindManager ?: return
         val config = retroPlayConfig
         
-        // Use SmartConfig granularity if auto-rewind is enabled (adapts to console)
-        // PSX/N64 need higher granularity (30-60) to avoid OOM from large savestates
-        val effectiveGranularity = if (config.smartConfigEnabled && config.smartConfigAutoRewind) {
-            val smartGranularity = com.retroplay.database.SmartConfigManager.getOptimalRewindGranularity(console)
-            Log.i(TAG, "[REWIND] Using SmartConfig granularity for $console: $smartGranularity frames")
-            smartGranularity
+        // SAFETY: Calculate optimal settings to prevent OOM crashes
+        // Try to get REAL GameInfo from DB for accurate SmartConfig (Genre-based)
+        var realGameInfo: com.retroplay.database.GameInfo? = null
+        if (!gameCRC.isNullOrEmpty()) {
+            realGameInfo = com.retroplay.database.DatabaseManager.lookupGame(gameCRC!!, console)
+        }
+        if (realGameInfo == null) {
+            realGameInfo = com.retroplay.database.DatabaseManager.lookupGameByName(gameName, console)
+        }
+
+        if (realGameInfo != null) {
+             Log.i(TAG, "[SmartConfig] Using Metadata: ${realGameInfo.name} [${realGameInfo.genre}]")
         } else {
-            config.rewindGranularity
+             Log.w(TAG, "[SmartConfig] Metadata not found, using generic Action profile")
+        }
+
+        val gameInfo = realGameInfo ?: com.retroplay.database.GameInfo(
+            name = gameName,
+            crc = "",
+            console = console,
+            genre = "Action"
+        )
+        
+        // Get optimal values from SmartConfigManager
+        val optimalGranularity = com.retroplay.database.SmartConfigManager.getOptimalRewindGranularity(console)
+        
+        // Calculate ABSOLUTE maximum buffer size (60 seconds) to prevent OOM
+        val avgSavestateKB = when (console) {
+            "nes", "gb", "gbc" -> 10
+            "snes", "gba" -> 50
+            "genesis", "sms", "gg" -> 70
+            "psx", "ps1", "playstation" -> 500
+            "n64" -> 800
+            "saturn", "dc", "dreamcast" -> 1000
+            "psp" -> 1200
+            else -> 200
+        }
+        val maxCaptures60s = (60 * 60) / optimalGranularity
+        val absoluteMaxBufferBytes = maxCaptures60s * avgSavestateKB * 1024
+        
+        // Use SmartConfig values if enabled, otherwise apply SAFE LIMITS
+        val effectiveGranularity = if (config.smartConfigEnabled && config.smartConfigAutoRewind) {
+            val optimalBufferSize = com.retroplay.database.SmartConfigManager.getOptimalRewindBuffer(gameInfo, console)
+            Log.i(TAG, "[REWIND] SmartConfig ENABLED: using optimal granularity for $console: $optimalGranularity frames")
+            optimalGranularity
+        } else {
+            // Apply MINIMUM granularity to prevent crash
+            val safeGranularity = maxOf(config.rewindGranularity, optimalGranularity)
+            if (safeGranularity != config.rewindGranularity) {
+                Log.w(TAG, "[REWIND] SAFETY: Granularity increased from ${config.rewindGranularity} to $safeGranularity for $console")
+            }
+            safeGranularity
+        }
+        
+        val effectiveBufferSize = if (config.smartConfigEnabled && config.smartConfigAutoRewind) {
+            val optimalBufferSize = com.retroplay.database.SmartConfigManager.getOptimalRewindBuffer(gameInfo, console)
+            Log.i(TAG, "[REWIND] SmartConfig ENABLED: using optimal buffer for $console: ${optimalBufferSize / 1024 / 1024}MB")
+            optimalBufferSize
+        } else {
+            // Cap manual buffer size to absolute max
+            val safeBufferSize = minOf(config.rewindBufferSize, absoluteMaxBufferBytes)
+            if (safeBufferSize != config.rewindBufferSize) {
+                 Log.w(TAG, "[REWIND] SAFETY: Buffer capped from ${config.rewindBufferSize} to $safeBufferSize bytes")
+            }
+            safeBufferSize
         }
         
         manager.configure(
             enabled = config.rewindEnable || (config.smartConfigEnabled && config.smartConfigAutoRewind),
-            bufferSizeBytes = config.rewindBufferSize,
+            bufferSizeBytes = effectiveBufferSize,
             granularity = effectiveGranularity
         )
     }
@@ -607,8 +664,28 @@ class NativeComposeEmulatorActivity : ComponentActivity() {
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
         val galleryGameId = screenshotGameId
         val activityRef = this
+        
+        // MODULAR IDENTITY RESOLUTION:
+        val psxSerial = intent.getStringExtra("psxSerial")
+        val intentConfigId = intent.getStringExtra("configId")
 
-        applyPerGameConfig(gameCRC)
+        // Resolve Identity via ViewModel (Prioritizes Serial > CRC > Name)
+        val resolvedId = viewModel.resolveGameIdentity(
+             gameName, 
+             gameCRC, 
+             console, 
+             romPath,
+             overrideConfigId = intentConfigId,
+             overridePsxSerial = psxSerial
+        )
+        
+        // Update local variables from ViewModel state
+        gameCRC = viewModel.gameCRC
+        
+        // Update local gameCRC to be the "Identity ID" used for Config?
+        // Actually, let's keep gameCRC as the DB CRC if possible, but for Config we use resolvedId
+        // applyPerGameConfig takes a string key.
+        applyPerGameConfig(resolvedId)
         
         // Détecter les jeux Zapper AVANT la création de GLRetroViewData
         // pour pouvoir passer les variables initiales au core

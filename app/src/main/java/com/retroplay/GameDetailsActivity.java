@@ -41,7 +41,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     private static final String GAME_INFO_DIALOG_EVENT_KEY = "event";
     private static final String GAME_INFO_DIALOG_EVENT_SHOW = "show";
     private static final String GAME_INFO_DIALOG_EVENT_DISMISS = "dismiss";
-    
+
     private Game game;
     private ImageView gameImage;
     private ImageView gameScreenshot;
@@ -68,30 +68,31 @@ public class GameDetailsActivity extends AppCompatActivity {
     private FrameLayout pillNative;
     private LinearLayout nativeButtonsContainer;
     private FavoritesManager favoritesManager;
-    
+
     private String currentGameCRC;
+    private String currentPsxSerial;
     private GameInfo currentGameInfo;
     private boolean isGameInfoDialogVisible;
     private String currentGalleryGameId;
-    
+
     // Emulator Mode Toggle
     private SwitchMaterial emulatorModeSwitch;
     private TextView consoleDefaultInfo;
     private String currentConsole;
     private String currentGameId;
-    
+
     // Database loading progress
     private android.app.ProgressDialog progressDialog;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
+
         // Mode plein écran - masquer barre d'état et navigation
         setupFullscreenMode();
-        
+
         setContentView(R.layout.activity_game_details_modern);
-        
+
         // Récupérer le jeu depuis l'intent
         game = (Game) getIntent().getSerializableExtra("game");
         if (game == null) {
@@ -99,48 +100,47 @@ public class GameDetailsActivity extends AppCompatActivity {
             finish();
             return;
         }
-        
+
         Log.i(TAG, "Affichage des détails pour: " + game.getName());
-        
+
         // Initialiser les variables console et gameId
         currentConsole = game.getConsole();
         currentGameId = game.getId();
         currentGalleryGameId = ScreenshotRepository.sanitizeGameKey(game.getName());
-        
+
         // Initialiser le manager des favoris
         favoritesManager = FavoritesManager.getInstance(this);
-        
+
         registerGameInfoDialogCallbacks();
-        
+
         setupHeader();
         setupViews();
         populateGameDetails();
         setupButtons();
         setupEmulatorModeToggle();
-        
+
         syncGameInfoDialogState();
-        
+
         // Appliquer le thème
         applyTheme();
     }
-    
+
     private void setupFullscreenMode() {
         // Masquer la barre d'état et la navigation
         getWindow().getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-        );
-        
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+
         // Garder l'écran allumé
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        
+
         // Laisser visible notre en-tête personnalisé
     }
-    
+
     private void setupHeader() {
         headerBackButton = findViewById(R.id.headerBackButton);
         headerSettingsButton = findViewById(R.id.headerSettingsButton);
@@ -148,27 +148,27 @@ public class GameDetailsActivity extends AppCompatActivity {
         gameInfoButton = findViewById(R.id.game_info_button);
         favoriteButton = findViewById(R.id.favorite_button);
         headerTitle = findViewById(R.id.headerTitle);
-        
+
         headerTitle.setText(game.getName());
         headerBackButton.setOnClickListener(v -> finish());
         headerSettingsButton.setOnClickListener(this::showSettingsMenu);
-        
+
         if (headerEditButton != null) {
             headerEditButton.setOnClickListener(v -> showEditGameMetadataDialog());
         }
-        
+
         if (gameInfoButton != null) {
             gameInfoButton.setCheckable(true);
             gameInfoButton.setOnClickListener(v -> handleGameInfoAction());
             updateGameInfoButtonState();
         }
-        
+
         if (favoriteButton != null) {
             updateFavoriteButton();
             favoriteButton.setOnClickListener(v -> toggleFavorite());
         }
     }
-    
+
     private void setupViews() {
         gameImage = findViewById(R.id.game_image);
         gameTitle = findViewById(R.id.game_title);
@@ -188,12 +188,12 @@ public class GameDetailsActivity extends AppCompatActivity {
         pillLoad = findViewById(R.id.pill_load);
         pillNative = findViewById(R.id.pill_native);
         nativeButtonsContainer = findViewById(R.id.native_buttons_container);
-        
+
         // Emulator Mode Toggle
         emulatorModeSwitch = findViewById(R.id.emulatorModeSwitch);
         consoleDefaultInfo = findViewById(R.id.consoleDefaultInfo);
     }
-    
+
     /**
      * Popule les détails du jeu depuis le gamelist.json (pas de lookup runtime)
      * Style ES: toutes les métadonnées sont dans le gamelist.json
@@ -202,14 +202,51 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Titre du jeu
         gameTitle.setText(game.getName());
         gameTitle.setTypeface(null, Typeface.BOLD);
-        
+
         // Images (load immediately)
         loadGameImages();
-        
+
         // Afficher les métadonnées directement depuis le Game object (gamelist.json)
         updateGameDetailsFromGamelist();
     }
-    
+
+    /**
+     * Update game details UI avec métadonnées du gamelist.json
+     * Style ES: toutes les métadonnées sont déjà dans le gamelist.json
+     */
+
+    /**
+     * Helper to asynchronously fetch and display PSX Serial if applicable
+     */
+    private void fetchAndDisplayPsxSerial() {
+        if (game == null)
+            return;
+        String console = game.getConsole().toLowerCase();
+        // Check for PSX console variants
+        if (!console.equals("psx") && !console.equals("ps1") && !console.equals("playstation")) {
+            return;
+        }
+
+        new Thread(() -> {
+            String romPath = resolveRomPath();
+            if (romPath != null) {
+                // Use Kotlin object instance from Java
+                String serial = com.retroplay.util.PsxSerialExtractor.INSTANCE.extractSerial(romPath);
+                if (serial != null) {
+                    runOnUiThread(() -> {
+                        currentPsxSerial = serial; // Store for Per-Game Config
+                        String currentDesc = gameDescription.getText().toString();
+                        if (!currentDesc.contains("Serial: " + serial)) {
+                            // Append Serial to description
+                            gameDescription.setText(currentDesc + "\n💿 Serial: " + serial);
+                            Log.i(TAG, "[PSX] Displaying Serial: " + serial);
+                        }
+                    });
+                }
+            }
+        }).start();
+    } // End of updateGameDetailsFromGamelist (conceptually, but placed as new method)
+
     /**
      * Update game details UI avec métadonnées du gamelist.json
      * Style ES: toutes les métadonnées sont déjà dans le gamelist.json
@@ -219,24 +256,27 @@ public class GameDetailsActivity extends AppCompatActivity {
         currentGameCRC = game.getHash();
         currentGameInfo = null; // Plus de lookup runtime
         updateGameInfoButtonState();
-        
+
         // Description
-        String description = (game.getDesc() != null && !game.getDesc().isEmpty()) 
-            ? game.getDesc() 
-            : "No description available";
-        
+        String description = (game.getDesc() != null && !game.getDesc().isEmpty())
+                ? game.getDesc()
+                : "No description available";
+
         // Ajouter hash si disponible
         if (game.getHash() != null) {
             description += "\n\n💾 Hash: " + game.getHash();
         }
         gameDescription.setText(description);
-        
+
+        // Try to fetch and display PSX Serial
+        fetchAndDisplayPsxSerial();
+
         // Genre
         String displayGenre = (game.getGenre() != null && !game.getGenre().isEmpty())
-            ? "🎭 " + game.getGenre()
-            : "🎭 Unknown";
+                ? "🎭 " + game.getGenre()
+                : "🎭 Unknown";
         gameGenre.setText(displayGenre);
-        
+
         // Nombre de joueurs
         String playersText = "👥 ";
         if (game.getPlayers() != null && !game.getPlayers().isEmpty()) {
@@ -245,18 +285,18 @@ public class GameDetailsActivity extends AppCompatActivity {
             playersText += "1";
         }
         gamePlayers.setText(playersText);
-        
+
         // Date de sortie
         String releaseDate = formatReleaseDate(game.getReleasedate());
         if (game.getDeveloper() != null && !game.getDeveloper().isEmpty()) {
             releaseDate += " • 🏢 " + game.getDeveloper();
-                                }
-        if (game.getPublisher() != null && !game.getPublisher().isEmpty() && 
-            !game.getPublisher().equals(game.getDeveloper())) {
+        }
+        if (game.getPublisher() != null && !game.getPublisher().isEmpty() &&
+                !game.getPublisher().equals(game.getDeveloper())) {
             releaseDate += " • 📦 " + game.getPublisher();
         }
         gameReleaseDate.setText(releaseDate);
-        
+
         // Rating si disponible
         if (gameRating != null) {
             if (game.getRating() != null && !game.getRating().isEmpty()) {
@@ -267,7 +307,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             }
         }
     }
-    
+
     /**
      * DEPRECATED: Résout le chemin de la ROM pour le calcul du CRC32
      * Plus utilisé - les métadonnées sont dans le gamelist.json
@@ -277,7 +317,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         final String baseDir = "/storage/emulated/0/GameLibrary-Data/";
         final String consoleDir = getRealConsoleDirectory(game.getConsole());
         final String console = game.getConsole().toLowerCase();
-        
+
         // Utiliser DIRECTEMENT game.getPath() (chemin local, pas URL HTTP)
         // Format: "./mario.zip" ou "mario.zip"
         String rawPath = game.getPath();
@@ -285,94 +325,138 @@ public class GameDetailsActivity extends AppCompatActivity {
             Log.e(TAG, "[DB] game.getPath() is null or empty");
             return null;
         }
-        
+
         // Nettoyer le chemin (enlever "./" si présent)
         String cleanPath = rawPath.startsWith("./") ? rawPath.substring(2) : rawPath;
-        
+
         // Construire le chemin complet local
         String localPath = baseDir + consoleDir + "/" + cleanPath;
         Log.d(TAG, "[DB] Using local file path (not HTTP): " + localPath);
-        
+
         // Extraire juste le nom du fichier pour le cache
         String fileName = cleanPath;
         int lastSlash = cleanPath.lastIndexOf("/");
         if (lastSlash >= 0) {
             fileName = cleanPath.substring(lastSlash + 1);
         }
-        
+
         // Normaliser le nom de console AVANT de détecter le type de fichier
         String canonicalId = ConsoleNameMapper.normalizeToCanonical(console);
         Log.d(TAG, "[DB] Console: " + console + " -> Canonical: " + canonicalId);
-        
+
         // Détecter si c'est une archive qui serait extraite en cache
-        boolean isNativeCompressedFormat = 
-            fileName.endsWith(".pbp") || fileName.endsWith(".chd") || 
-            fileName.endsWith(".cso") || fileName.endsWith(".daa");
-        boolean isArcadeZip = (console.startsWith("fbneo") || 
-                               console.equals("arcade") || 
-                               console.equals("mame") || 
-                               console.equals("neogeo")) && 
-                              fileName.endsWith(".zip");
+        boolean isNativeCompressedFormat = fileName.endsWith(".pbp") || fileName.endsWith(".chd") ||
+                fileName.endsWith(".cso") || fileName.endsWith(".daa");
+        boolean isArcadeZip = (console.startsWith("fbneo") ||
+                console.equals("arcade") ||
+                console.equals("mame") ||
+                console.equals("neogeo")) &&
+                fileName.endsWith(".zip");
         boolean isArchive = (fileName.endsWith(".zip") || fileName.endsWith(".7z")) && !isArcadeZip;
-        
+
         // TOUTES les consoles: vérifier le cache d'abord si c'est une archive
-        // (même pour les consoles non listées dans le switch, elles utiliseront .bin par défaut)
+        // (même pour les consoles non listées dans le switch, elles utiliseront .bin
+        // par défaut)
         if (isArchive && !isNativeCompressedFormat) {
             // Construire le chemin du cache (MÊME logique que extractToCacheAsync)
-            // Utiliser le cache interne de l'application (pas de permissions spéciales nécessaires)
+            // Utiliser le cache interne de l'application (pas de permissions spéciales
+            // nécessaires)
             final java.io.File appCacheDir = getCacheDir();
             final String cacheDir = appCacheDir.getAbsolutePath() + "/roms/" + consoleDir;
-            
+
             // Déterminer l'extension cible selon la console
             // IMPORTANT: Le default utilise .bin pour TOUTES les consoles non listées
             final String targetExtension;
             switch (canonicalId) {
-                case "lynx": targetExtension = ".lnx"; break;
-                case "atari2600": targetExtension = ".a26"; break;
+                case "lynx":
+                    targetExtension = ".lnx";
+                    break;
+                case "atari2600":
+                    targetExtension = ".a26";
+                    break;
                 case "atari5200":
-                case "a5200": targetExtension = ".a52"; break;
+                case "a5200":
+                    targetExtension = ".a52";
+                    break;
                 case "atari7800":
-                case "a7800": targetExtension = ".a78"; break;
+                case "a7800":
+                    targetExtension = ".a78";
+                    break;
                 case "nes":
                 case "famicom":
-                case "fc": targetExtension = ".nes"; break;
+                case "fc":
+                    targetExtension = ".nes";
+                    break;
                 case "snes":
                 case "sfc":
-                case "superfamicom": targetExtension = ".sfc"; break;
-                case "n64": targetExtension = ".z64"; break;
-                case "gb": targetExtension = ".gb"; break;
-                case "gbc": targetExtension = ".gbc"; break;
-                case "gba": targetExtension = ".gba"; break;
+                case "superfamicom":
+                    targetExtension = ".sfc";
+                    break;
+                case "n64":
+                    targetExtension = ".z64";
+                    break;
+                case "gb":
+                    targetExtension = ".gb";
+                    break;
+                case "gbc":
+                    targetExtension = ".gbc";
+                    break;
+                case "gba":
+                    targetExtension = ".gba";
+                    break;
                 case "genesis":
                 case "megadrive":
-                case "md": targetExtension = ".bin"; break;
+                case "md":
+                    targetExtension = ".bin";
+                    break;
                 case "mastersystem":
-                case "sms": targetExtension = ".sms"; break;
+                case "sms":
+                    targetExtension = ".sms";
+                    break;
                 case "gamegear":
-                case "gg": targetExtension = ".gg"; break;
-                case "32x": targetExtension = ".32x"; break;
-                case "ngp": targetExtension = ".ngp"; break;
+                case "gg":
+                    targetExtension = ".gg";
+                    break;
+                case "32x":
+                    targetExtension = ".32x";
+                    break;
+                case "ngp":
+                    targetExtension = ".ngp";
+                    break;
                 case "wonderswancolor":
-                case "ws": targetExtension = ".ws"; break;
-                case "pce": targetExtension = ".pce"; break;
+                case "ws":
+                    targetExtension = ".ws";
+                    break;
+                case "pce":
+                    targetExtension = ".pce";
+                    break;
                 case "psx":
                 case "ps1":
-                case "playstation": targetExtension = ".bin"; break; // PSX peut être .bin, .cue, .iso, etc.
-                case "psp": targetExtension = ".iso"; break;
+                case "playstation":
+                    targetExtension = ".bin";
+                    break; // PSX peut être .bin, .cue, .iso, etc.
+                case "psp":
+                    targetExtension = ".iso";
+                    break;
                 case "fbneo":
-                case "arcade": targetExtension = ".zip"; break;
+                case "arcade":
+                    targetExtension = ".zip";
+                    break;
                 // DEFAULT: Pour TOUTES les autres consoles non listées, utiliser .bin
-                // Cela garantit que toutes les consoles fonctionnent, même celles non explicitement listées
-                default: 
-                    targetExtension = ".bin"; 
+                // Cela garantit que toutes les consoles fonctionnent, même celles non
+                // explicitement listées
+                default:
+                    targetExtension = ".bin";
                     Log.d(TAG, "[DB] Console '" + canonicalId + "' not in switch, using default .bin extension");
                     break;
             }
-            
+
             // Nom du fichier extrait (sans région) - MÊME logique que extractToCacheAsync
-            // Normaliser le nom pour le cache: enlever les caractères spéciaux (!, :, etc.) qui causent des problèmes
+            // Normaliser le nom pour le cache: enlever les caractères spéciaux (!, :, etc.)
+            // qui causent des problèmes
             String simpleName = game.getName().replaceAll("\\s*\\(.*?\\)\\s*", "").trim();
-            // Remplacer les caractères spéciaux par des underscores pour éviter les problèmes de fichiers
+            // Remplacer les caractères spéciaux par des underscores pour éviter les
+            // problèmes de fichiers
             simpleName = simpleName.replaceAll("[^a-zA-Z0-9\\s\\-_]", "_");
             // Remplacer les espaces multiples par un seul underscore
             simpleName = simpleName.replaceAll("\\s+", "_");
@@ -381,30 +465,33 @@ public class GameDetailsActivity extends AppCompatActivity {
             // Enlever les underscores en début/fin
             simpleName = simpleName.replaceAll("^_+|_+$", "");
             String cachedRomPath = cacheDir + "/" + simpleName + targetExtension;
-            
+
             // Vérifier si déjà en cache (nom exact)
             java.io.File cachedRomFile = new java.io.File(cachedRomPath);
             if (cachedRomFile.exists()) {
                 Log.d(TAG, "[DB] Using cached ROM for CRC calculation: " + cachedRomPath);
                 return cachedRomPath;
             }
-            
+
             // Si pas trouvé, chercher dans le répertoire cache (variantes de noms)
             java.io.File cacheDirFile = new java.io.File(cacheDir);
             if (cacheDirFile.exists() && cacheDirFile.isDirectory()) {
                 java.io.File[] cacheFiles = cacheDirFile.listFiles();
                 if (cacheFiles != null) {
-                    Log.d(TAG, "[DB] Cache directory exists, searching for: " + simpleName + targetExtension + " (found " + cacheFiles.length + " files)");
+                    Log.d(TAG, "[DB] Cache directory exists, searching for: " + simpleName + targetExtension
+                            + " (found " + cacheFiles.length + " files)");
                     // Chercher un fichier avec la bonne extension
                     for (java.io.File file : cacheFiles) {
                         if (file.isFile() && file.getName().endsWith(targetExtension)) {
-                            // Vérifier si le nom correspond (sans tenir compte de la casse et des caractères spéciaux)
+                            // Vérifier si le nom correspond (sans tenir compte de la casse et des
+                            // caractères spéciaux)
                             String cacheFileName = file.getName().replace(targetExtension, "").toLowerCase();
                             String simpleNameLower = simpleName.toLowerCase();
-                            if (cacheFileName.equals(simpleNameLower) || 
-                                cacheFileName.contains(simpleNameLower) || 
-                                simpleNameLower.contains(cacheFileName)) {
-                                Log.d(TAG, "[DB] Using cached ROM (variant name) for CRC calculation: " + file.getAbsolutePath());
+                            if (cacheFileName.equals(simpleNameLower) ||
+                                    cacheFileName.contains(simpleNameLower) ||
+                                    simpleNameLower.contains(cacheFileName)) {
+                                Log.d(TAG, "[DB] Using cached ROM (variant name) for CRC calculation: "
+                                        + file.getAbsolutePath());
                                 return file.getAbsolutePath();
                             }
                         }
@@ -415,7 +502,7 @@ public class GameDetailsActivity extends AppCompatActivity {
                 Log.d(TAG, "[DB] Cache directory does not exist: " + cacheDir);
             }
         }
-        
+
         // Sinon, utiliser le chemin local direct (pas d'URL HTTP)
         // DatabaseManager.calculateCRC32() gère l'extraction depuis ZIP automatiquement
         java.io.File localFile = new java.io.File(localPath);
@@ -430,12 +517,12 @@ public class GameDetailsActivity extends AppCompatActivity {
             if (fallbackFile.exists()) {
                 Log.d(TAG, "[DB] Using fallback path: " + fallbackPath);
                 return fallbackPath;
-        }
+            }
             Log.e(TAG, "[DB] Neither localPath nor fallbackPath exist");
             return localPath; // Retourner quand même pour que calculateCRC32() gère l'erreur
         }
     }
-    
+
     private void loadGameImages() {
         // Screenshot image (top)
         ImageView screenshotBackground = findViewById(R.id.game_screenshot_background);
@@ -444,7 +531,7 @@ public class GameDetailsActivity extends AppCompatActivity {
                 .placeholder(android.R.drawable.ic_menu_gallery)
                 .error(android.R.drawable.ic_menu_gallery)
                 .into(screenshotBackground);
-        
+
         // Box2D image (bottom) - icône avec fallback
         Glide.with(this)
                 .load(game.getImageWithFallback())
@@ -452,51 +539,52 @@ public class GameDetailsActivity extends AppCompatActivity {
                 .error(android.R.drawable.ic_menu_gallery)
                 .into(gameImage);
     }
-    
+
     private void setupButtons() {
         // Play button (WASM)
         playButton.setOnClickListener(v -> launchGame());
-        
+
         // Play native button (cores natifs)
-        playNativeButton.setOnClickListener(v -> launchGameNative(0));  // 0 = nouvelle partie
-        
+        playNativeButton.setOnClickListener(v -> launchGameNative(0)); // 0 = nouvelle partie
+
         // Load save button (ouvre menu de sélection de slot)
         loadSaveButton.setOnClickListener(v -> showSlotSelectionDialog());
-        
+
         // Cheat button (ouvre interface de codes de triche)
         cheatButton.setOnClickListener(v -> openCheatActivity());
-        
+
         // Core override button (change le core utilisé pour ce jeu)
         coreOverrideButton.setOnClickListener(v -> showCoreOverrideDialog());
         updateCoreOverrideButton();
-        
+
         viewGalleryButton.setOnClickListener(v -> openScreenshotGallery());
-        
+
         // Afficher les boutons natifs pour TOUTES les consoles
-        // L'utilisateur peut maintenant choisir entre WASM et NATIVE pour n'importe quelle console
+        // L'utilisateur peut maintenant choisir entre WASM et NATIVE pour n'importe
+        // quelle console
         String console = game.getConsole().toLowerCase();
         nativeButtonsContainer.setVisibility(View.VISIBLE);
-        
+
         // Vérifier si des sauvegardes existent dans les slots
         checkAndShowLoadSaveButton();
-        
+
         // Dual/Triple-Color Pill - WASM (Red), LOAD (Blue), and Native (Green)
         pillWasm.setOnClickListener(v -> {
             Log.i(TAG, "WASM pill clicked - launching EmulatorJS");
             launchGame();
         });
-        
+
         pillLoad.setOnClickListener(v -> {
             Log.i(TAG, "LOAD pill clicked - opening slot selection");
             showSlotSelectionDialog();
         });
-        
+
         pillNative.setOnClickListener(v -> {
             Log.i(TAG, "NATIVE pill clicked - launching RetroArch");
-            launchGameNative(0);  // 0 = new game
+            launchGameNative(0); // 0 = new game
         });
     }
-    
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -507,17 +595,18 @@ public class GameDetailsActivity extends AppCompatActivity {
             updateFavoriteButton();
         }
         syncGameInfoDialogState();
-        
+
         // Réappliquer le thème au cas où il aurait changé
         applyTheme();
     }
-    
+
     private void launchGame() {
         Log.i(TAG, "Lancement du jeu (WASM): " + game.getName());
-        
-        // Get console configuration (options avancées non accessibles dans EmulatorJS GUI)
+
+        // Get console configuration (options avancées non accessibles dans EmulatorJS
+        // GUI)
         ConsoleConfigActivity.ConsoleConfig config = ConsoleConfigActivity.getConfig(this, game.getConsole());
-        
+
         // Get core override if exists
         // Extraire le nom de fichier depuis le chemin local
         String fileName = game.getPath();
@@ -531,7 +620,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
         String consoleDir = getRealConsoleDirectory(game.getConsole());
         String relativePath = consoleDir + "/" + fileName;
-        
+
         CoreOverrideManager manager = CoreOverrideManager.getInstance();
         String coreOverride = null;
         if (manager.hasOverride(relativePath)) {
@@ -539,7 +628,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             coreOverride = override.getCoreId();
             Log.i(TAG, "Using core override for EmulatorJS: " + coreOverride);
         }
-        
+
         // PSP utilise Chrome Custom Tabs pour SharedArrayBuffer et multi-threading
         if (game.getConsole().equals("psp")) {
             Log.i(TAG, "Launching PSP with Chrome Custom Tabs (for threads support)");
@@ -559,13 +648,14 @@ public class GameDetailsActivity extends AppCompatActivity {
                 intent.putExtra("core", coreOverride);
             }
             // PSX D-Pad option
-            if (config.useDpad && (game.getConsole().equals("psx") || game.getConsole().equals("ps1") || game.getConsole().equals("playstation"))) {
+            if (config.useDpad && (game.getConsole().equals("psx") || game.getConsole().equals("ps1")
+                    || game.getConsole().equals("playstation"))) {
                 intent.putExtra("useDpad", true);
             }
             startActivity(intent);
         }
     }
-    
+
     /**
      * Count number of cheats in a .cht file
      */
@@ -585,7 +675,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
         return 0;
     }
-    
+
     /**
      * Mappe le nom de console au vrai nom de repertoire sur le device
      * Resout les problemes de duplication (lynx/atarilynx, sms/mastersystem, etc.)
@@ -596,37 +686,39 @@ public class GameDetailsActivity extends AppCompatActivity {
         // mais le nom du répertoire reste celui de l'utilisateur
         return consoleName.toLowerCase();
     }
-    
+
     private long lastNativeLaunchTime = 0;
     private static final long MIN_NATIVE_LAUNCH_INTERVAL_MS = 1000; // Minimum 1 seconde entre deux lancements natifs
-    
+
     private void launchGameNative(int slot) {
         // Vérifier le délai minimum entre deux lancements natifs
-        // Nécessaire car LibretroDroid ne peut pas charger le même core si l'ancien n'est pas libéré
+        // Nécessaire car LibretroDroid ne peut pas charger le même core si l'ancien
+        // n'est pas libéré
         long currentTime = System.currentTimeMillis();
         long timeSinceLastLaunch = currentTime - lastNativeLaunchTime;
-        
+
         if (timeSinceLastLaunch < MIN_NATIVE_LAUNCH_INTERVAL_MS) {
             long remainingDelay = MIN_NATIVE_LAUNCH_INTERVAL_MS - timeSinceLastLaunch;
             Log.w(TAG, "⏳ Too fast! Waiting " + remainingDelay + "ms before launching (core cleanup)");
-            
+
             Toast.makeText(this, "Please wait...", Toast.LENGTH_SHORT).show();
-            
+
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                 launchGameNative(slot);
             }, remainingDelay);
             return;
         }
-        
+
         lastNativeLaunchTime = currentTime;
-        
+
         String slotInfo = (slot == 0) ? "[NEW GAME]" : "[LOAD SLOT " + slot + "]";
         Log.i(TAG, "Lancement du jeu (NATIVE COMPOSE): " + game.getName() + " " + slotInfo);
-        
-        // Utiliser resolveRomPath() pour gérer correctement les caractères spéciaux (!, +, &, etc.)
+
+        // Utiliser resolveRomPath() pour gérer correctement les caractères spéciaux (!,
+        // +, &, etc.)
         String romPath = resolveRomPath();
         Log.i(TAG, "Resolved ROM path (handles special chars): " + romPath);
-        
+
         // Vérifier que le fichier existe
         java.io.File romFile = new java.io.File(romPath);
         if (!romFile.exists()) {
@@ -634,62 +726,76 @@ public class GameDetailsActivity extends AppCompatActivity {
             Toast.makeText(this, "Error: ROM file not found: " + romPath, Toast.LENGTH_LONG).show();
             return;
         }
-        
-        // Extraire le nom du fichier depuis le chemin résolu pour les vérifications de format
+
+        // Extraire le nom du fichier depuis le chemin résolu pour les vérifications de
+        // format
         String fileName = romPath;
         int lastSlash = romPath.lastIndexOf("/");
         if (lastSlash >= 0) {
             fileName = romPath.substring(lastSlash + 1);
         }
         Log.i(TAG, "ROM filename: " + fileName);
-        
+
         // DETECTION INTELLIGENTE DES FORMATS (comme PSX)
         String console = game.getConsole().toLowerCase();
         android.content.SharedPreferences composePrefs = getSharedPreferences("compose_gamepad_settings", MODE_PRIVATE);
         android.content.SharedPreferences consoleConfigPrefs = getSharedPreferences("console_config", MODE_PRIVATE);
         String consolePrefix = console + "_";
-        
+
         // Formats compressés natifs supportés par les cores (comme PSX .pbp, .chd)
         // Ces formats ne nécessitent PAS d'extraction
-        boolean isNativeCompressedFormat = 
-            fileName.endsWith(".pbp") ||   // PSX PSP format
-            fileName.endsWith(".chd") ||   // Compressed Hunks of Data (PSX, SegaCD, Saturn, etc.)
-            fileName.endsWith(".cso") ||   // PSP compressed ISO
-            fileName.endsWith(".daa");     // PowerISO compressed
-        
+        boolean isNativeCompressedFormat = fileName.endsWith(".pbp") || // PSX PSP format
+                fileName.endsWith(".chd") || // Compressed Hunks of Data (PSX, SegaCD, Saturn, etc.)
+                fileName.endsWith(".cso") || // PSP compressed ISO
+                fileName.endsWith(".daa"); // PowerISO compressed
+
         // Exception: FBNeo/Arcade/MAME ROMs en .zip ne doivent PAS être extraites
         // Le core lit les .zip directement (ROM sets MAME)
         // Supporter aussi les sous-consoles (fbneo/sega, fbneo/taito, etc.)
-        boolean isArcadeZip = (console.toLowerCase().startsWith("fbneo") || 
-                               console.equals("arcade") || 
-                               console.equals("mame") || 
-                               console.equals("neogeo")) && 
-                              fileName.endsWith(".zip");
-        
+        boolean isArcadeZip = (console.toLowerCase().startsWith("fbneo") ||
+                console.equals("arcade") ||
+                console.equals("mame") ||
+                console.equals("neogeo")) &&
+                fileName.endsWith(".zip");
+
         // Archives nécessitant extraction (.zip, .7z comme Lemuroid)
         // TOUTES les consoles sauf arcade peuvent extraire les .zip
         boolean isArchive = (fileName.endsWith(".zip") || fileName.endsWith(".7z")) && !isArcadeZip;
-        
+
         if (isNativeCompressedFormat) {
             Log.i(TAG, console + ": Native compressed format detected, loading directly: " + fileName);
             // Charger directement sans extraction (le core supporte ce format)
         } else if (isArcadeZip) {
             Log.i(TAG, console + ": Arcade ROM .zip detected, loading directly (core reads .zip natively)");
-            // Charger directement (les ROMs arcade sont en .zip et ne doivent PAS être extraites)
+            // Charger directement (les ROMs arcade sont en .zip et ne doivent PAS être
+            // extraites)
         } else if (isArchive) {
-            // Toujours extraire les archives vers le cache (les cores ne peuvent pas charger les ZIP directement)
+            // Toujours extraire les archives vers le cache (les cores ne peuvent pas
+            // charger les ZIP directement)
             Log.i(TAG, console + ": Archive detected (" + fileName + "), extracting to cache...");
             extractToCacheAsync(romPath, fileName, slot, console);
-            return;  // L'extraction lancera l'Activity une fois terminee
+            return; // L'extraction lancera l'Activity une fois terminee
         }
-        
+
         Log.i(TAG, "ROM path: " + romPath);
-        
+
+        // PSX Serial Support: Display Serial if available, but DO NOT overwrite gameCRC
+        // here.
+        // RetroArchEmulatorActivity will extract it internally for Config.
+        if (game.getConsole().equals("psx") || game.getConsole().equals("ps1")
+                || game.getConsole().equals("playstation")) {
+            String serial = com.retroplay.util.PsxSerialExtractor.INSTANCE.extractSerial(romPath);
+            if (serial != null) {
+                Log.i(TAG, "[PSX] Serial found: " + serial);
+            }
+        }
+
         // === DATABASE LOOKUP (NEW) ===
         // Calculate CRC32 and lookup game metadata
         String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
-        
-        // Fallback: Si le calcul échoue, utiliser le hash du gamelist.json si c'est un CRC32 (8 caractères hex)
+
+        // Fallback: Si le calcul échoue, utiliser le hash du gamelist.json si c'est un
+        // CRC32 (8 caractères hex)
         if (gameCRC == null && game.getHash() != null && !game.getHash().isEmpty()) {
             String hash = game.getHash();
             // CRC32 = 8 caractères hexadécimaux (ex: "A1B2C3D4")
@@ -698,11 +804,12 @@ public class GameDetailsActivity extends AppCompatActivity {
                 Log.i(TAG, "Using CRC32 from gamelist.json: " + gameCRC);
             }
         }
-        
+
         if (gameCRC != null) {
             Log.i(TAG, "ROM CRC32: " + gameCRC);
-            
-            com.retroplay.database.GameInfo gameInfo = com.retroplay.database.DatabaseManager.INSTANCE.lookupGame(gameCRC, game.getConsole());
+
+            com.retroplay.database.GameInfo gameInfo = com.retroplay.database.DatabaseManager.INSTANCE
+                    .lookupGame(gameCRC, game.getConsole());
             if (gameInfo != null) {
                 Log.i(TAG, "✅ Game identified from database:");
                 Log.i(TAG, "  Name: " + gameInfo.getName());
@@ -710,17 +817,18 @@ public class GameDetailsActivity extends AppCompatActivity {
                 Log.i(TAG, "  Developer: " + gameInfo.getDeveloper());
                 Log.i(TAG, "  Year: " + gameInfo.getReleaseYear());
                 Log.i(TAG, "  " + gameInfo.getDisplayInfo());
-                
+
                 // Check cheats available
-                java.io.File cheatFile = com.retroplay.database.DatabaseManager.INSTANCE.getCheatsPath(gameInfo, game.getConsole());
+                java.io.File cheatFile = com.retroplay.database.DatabaseManager.INSTANCE.getCheatsPath(gameInfo,
+                        game.getConsole());
                 if (cheatFile != null && cheatFile.exists()) {
                     int cheatCount = countCheatsInFile(cheatFile);
                     Log.i(TAG, "  🎮 " + cheatCount + " cheats available!");
-                    
+
                     // Show notification
-                    Toast.makeText(this, 
-                        cheatCount + " cheats available • " + gameInfo.getDisplayInfo(), 
-                        Toast.LENGTH_LONG).show();
+                    Toast.makeText(this,
+                            cheatCount + " cheats available • " + gameInfo.getDisplayInfo(),
+                            Toast.LENGTH_LONG).show();
                 }
             } else {
                 Log.w(TAG, "⚠️ Game not found in database (CRC: " + gameCRC + ")");
@@ -728,43 +836,79 @@ public class GameDetailsActivity extends AppCompatActivity {
         } else {
             Log.w(TAG, "⚠️ Could not determine CRC32 for game (ROM calculation failed and no CRC32 in gamelist.json)");
         }
-        
+
         // Determine which emulator activity to use based on user preference
         Class<?> emulatorActivity = getEmulatorActivityClass(game.getConsole());
-        
+
         Intent intent = new Intent(this, emulatorActivity);
         intent.putExtra("romPath", romPath);
         intent.putExtra("gameName", game.getName());
         intent.putExtra("gameId", currentGalleryGameId);
         intent.putExtra("console", game.getConsole());
-        intent.putExtra("loadSlot", slot);  // 0 = nouvelle partie, 1-5 = charger slot
-        
+        intent.putExtra("loadSlot", slot); // 0 = nouvelle partie, 1-5 = charger slot
+
         // Pass database metadata if available
         if (gameCRC != null) {
             intent.putExtra("gameCRC", gameCRC);
         }
-        
+
+        // Pass Config ID (Priority: Serial > CRC > Name)
+        // This is what the user meant: determine identity HERE, not in emulator
+        String configId = gameCRC;
+        // In launchGameNative, Serial is extracted locally (lines 780-790) as 'serial'
+        // variable?
+        // Wait, line 785 extracts it but doesn't store in class field
+        // But we have 'currentPsxSerial' from fetchAndDisplayPsxSerial which runs on
+        // load
+        // Let's use currentPsxSerial which is class-level and persistent
+        if (currentPsxSerial != null) {
+            configId = currentPsxSerial;
+            intent.putExtra("psxSerial", currentPsxSerial);
+        } else if (configId == null) {
+            // Check if we extracted it locally in this method and missed saving it?
+            // Actually lines 780+ in launchGameNative do extract it but only log it.
+            // Let's ALSO check the local extraction in case fetchAndDisplay hasn't finished
+            // (race condition)
+            if ((game.getConsole().equals("psx") || game.getConsole().equals("ps1")
+                    || game.getConsole().equals("playstation"))) {
+                String localSerial = com.retroplay.util.PsxSerialExtractor.INSTANCE.extractSerial(romPath);
+                if (localSerial != null) {
+                    configId = localSerial;
+                    intent.putExtra("psxSerial", localSerial);
+                }
+            }
+
+            if (configId == null) {
+                String safeName = game.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
+                configId = safeName;
+            }
+        }
+        intent.putExtra("configId", configId);
+        Log.i(TAG, "🚀 Launching emulator (Native) with Config ID: " + configId);
+
         startActivity(intent);
     }
-    
+
     /**
      * Extrait un .zip dans le cache en arriere-plan (evite ANR)
      * Toutes les consoles supportees (optionnel, active par l'utilisateur)
      * Par defaut: DESACTIVE (charge ROM directement)
      * Si probleme: L'utilisateur active le cache dans le menu
      */
-    private void extractToCacheAsync(final String zipPath, final String zipFileName, final int slot, final String console) {
+    private void extractToCacheAsync(final String zipPath, final String zipFileName, final int slot,
+            final String console) {
         // Mapper au vrai nom de répertoire
         final String realConsoleDir = getRealConsoleDirectory(console);
-        
-        // Utiliser le cache interne de l'application (pas de permissions spéciales nécessaires)
+
+        // Utiliser le cache interne de l'application (pas de permissions spéciales
+        // nécessaires)
         // Format: /data/data/com.retroplay/cache/roms/{console}/
         final java.io.File appCacheDir = getCacheDir();
         final String cacheDir = appCacheDir.getAbsolutePath() + "/roms/" + realConsoleDir;
-        
+
         // Normaliser le nom de console avec ConsoleNameMapper
         final String canonicalId = ConsoleNameMapper.normalizeToCanonical(console);
-        
+
         // Determiner l'extension cible selon la console (utilise ID canonique)
         final String targetExtension;
         switch (canonicalId) {
@@ -783,16 +927,16 @@ public class GameDetailsActivity extends AppCompatActivity {
             case "a7800":
                 targetExtension = ".a78";
                 break;
-            
+
             // Nintendo (accepter aussi .bin comme fallback)
             case "nes":
                 targetExtension = ".nes";
                 break;
             case "snes":
-                targetExtension = ".sfc";  // Ou .smc
+                targetExtension = ".sfc"; // Ou .smc
                 break;
             case "n64":
-                targetExtension = ".z64";  // Ou .n64, .v64
+                targetExtension = ".z64"; // Ou .n64, .v64
                 break;
             case "gb":
                 targetExtension = ".gb";
@@ -803,10 +947,10 @@ public class GameDetailsActivity extends AppCompatActivity {
             case "gba":
                 targetExtension = ".gba";
                 break;
-            
+
             // Sega
             case "genesis":
-                targetExtension = ".bin";  // Ou .smd, .md, .gen
+                targetExtension = ".bin"; // Ou .smd, .md, .gen
                 break;
             case "mastersystem":
                 targetExtension = ".sms";
@@ -817,7 +961,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             case "32x":
                 targetExtension = ".32x";
                 break;
-            
+
             // Other
             case "ngp":
                 targetExtension = ".ngp";
@@ -828,23 +972,25 @@ public class GameDetailsActivity extends AppCompatActivity {
             case "pce":
                 targetExtension = ".pce";
                 break;
-            
+
             // Arcade (FBNeo) - garde .zip (ROM sets)
             case "fbneo":
             case "arcade":
-                targetExtension = ".zip";  // Les ROMs arcade restent en .zip
+                targetExtension = ".zip"; // Les ROMs arcade restent en .zip
                 break;
-            
+
             // Default
             default:
                 targetExtension = ".bin";
                 break;
         }
-        
+
         // Nom du fichier extrait (sans region)
-        // Normaliser le nom pour le cache: enlever les caractères spéciaux (!, :, etc.) qui causent des problèmes
+        // Normaliser le nom pour le cache: enlever les caractères spéciaux (!, :, etc.)
+        // qui causent des problèmes
         String simpleName = game.getName().replaceAll("\\s*\\(.*?\\)\\s*", "").trim();
-        // Remplacer les caractères spéciaux par des underscores pour éviter les problèmes de fichiers
+        // Remplacer les caractères spéciaux par des underscores pour éviter les
+        // problèmes de fichiers
         // Garder seulement lettres, chiffres, espaces, tirets et underscores
         simpleName = simpleName.replaceAll("[^a-zA-Z0-9\\s\\-_]", "_");
         // Remplacer les espaces multiples par un seul underscore
@@ -854,7 +1000,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Enlever les underscores en début/fin
         simpleName = simpleName.replaceAll("^_+|_+$", "");
         final String cachedRomPath = cacheDir + "/" + simpleName + targetExtension;
-        
+
         // Verifier si deja en cache (rapide, sur UI thread)
         java.io.File cachedRomFile = new java.io.File(cachedRomPath);
         if (cachedRomFile.exists()) {
@@ -862,14 +1008,14 @@ public class GameDetailsActivity extends AppCompatActivity {
             launchWithCachedRom(cachedRomPath, slot);
             return;
         }
-        
+
         // Afficher dialogue de progression
         final android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
         progressDialog.setMessage("Extracting " + console.toUpperCase() + " ROM...");
         progressDialog.setIndeterminate(true);
         progressDialog.setCancelable(false);
         progressDialog.show();
-        
+
         // Extraire en arriere-plan
         new Thread(() -> {
             try {
@@ -888,7 +1034,7 @@ public class GameDetailsActivity extends AppCompatActivity {
                 }
                 Log.i(TAG, console + ": Cache directory ready: " + cacheDir);
                 Log.i(TAG, console + ": Cached ROM path (normalized): " + cachedRomPath);
-                
+
                 // Extraire archive (.zip, .7z comme Lemuroid)
                 java.io.File archiveFile = new java.io.File(zipPath);
                 if (!archiveFile.exists()) {
@@ -898,58 +1044,58 @@ public class GameDetailsActivity extends AppCompatActivity {
                     });
                     return;
                 }
-                
+
                 boolean extracted = false;
-                
+
                 // Traitement différent selon le type d'archive
                 if (zipPath.endsWith(".7z")) {
                     // .7z nécessite SevenZFile (pas de streaming)
-                    org.apache.commons.compress.archivers.sevenz.SevenZFile sevenZFile = 
-                        new org.apache.commons.compress.archivers.sevenz.SevenZFile(archiveFile);
-                    
+                    org.apache.commons.compress.archivers.sevenz.SevenZFile sevenZFile = new org.apache.commons.compress.archivers.sevenz.SevenZFile(
+                            archiveFile);
+
                     org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry entry;
                     while ((entry = sevenZFile.getNextEntry()) != null) {
                         String entryName = entry.getName().toLowerCase();
-                        
+
                         if (isValidRomFormat(entryName, canonicalId)) {
                             // Lire depuis sevenZFile
                             java.io.FileOutputStream out = new java.io.FileOutputStream(cachedRomFile);
-                            
+
                             byte[] buffer = new byte[65536];
                             int bytesRead;
                             while ((bytesRead = sevenZFile.read(buffer)) != -1) {
                                 out.write(buffer, 0, bytesRead);
                             }
-                            
+
                             out.close();
                             extracted = true;
                             Log.i(TAG, console + ": Found ROM in .7z: " + entryName);
                             break;
                         }
                     }
-                    
+
                     sevenZFile.close();
-                    
+
                 } else {
                     // .zip avec java.util.zip.ZipFile (simple et rapide)
                     java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(archiveFile);
                     java.util.Enumeration<? extends java.util.zip.ZipEntry> zipEntries = zipFile.entries();
-                    
+
                     while (zipEntries.hasMoreElements()) {
                         java.util.zip.ZipEntry zipEntry = zipEntries.nextElement();
                         String entryName = zipEntry.getName().toLowerCase();
-                        
+
                         if (isValidRomFormat(entryName, canonicalId)) {
                             // Lire depuis zipFile
                             java.io.InputStream in = zipFile.getInputStream(zipEntry);
                             java.io.FileOutputStream out = new java.io.FileOutputStream(cachedRomFile);
-                            
+
                             byte[] buffer = new byte[65536];
                             int bytesRead;
                             while ((bytesRead = in.read(buffer)) != -1) {
                                 out.write(buffer, 0, bytesRead);
                             }
-                            
+
                             out.close();
                             in.close();
                             extracted = true;
@@ -957,10 +1103,10 @@ public class GameDetailsActivity extends AppCompatActivity {
                             break;
                         }
                     }
-                    
+
                     zipFile.close();
                 }
-                
+
                 if (extracted) {
                     Log.i(TAG, console + ": Extracted to cache: " + cachedRomPath);
                     runOnUiThread(() -> {
@@ -971,10 +1117,10 @@ public class GameDetailsActivity extends AppCompatActivity {
                     Log.w(TAG, console + ": No ROM file in .zip, trying .zip directly");
                     runOnUiThread(() -> {
                         progressDialog.dismiss();
-                        launchWithCachedRom(zipPath, slot);  // Fallback au .zip
+                        launchWithCachedRom(zipPath, slot); // Fallback au .zip
                     });
                 }
-                
+
             } catch (Exception e) {
                 Log.e(TAG, console + ": Error extracting .zip", e);
                 runOnUiThread(() -> {
@@ -984,7 +1130,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             }
         }).start();
     }
-    
+
     /**
      * Verifie si une extension de fichier est valide pour une console donnee
      * Utilise ConsoleNameMapper pour normaliser les noms alternatifs
@@ -992,7 +1138,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     private boolean isValidRomFormat(String entryName, String console) {
         // Normaliser avec ConsoleNameMapper
         String canonicalId = ConsoleNameMapper.normalizeToCanonical(console);
-        
+
         // Utiliser ID canonique pour la vérification
         switch (canonicalId) {
             // Lynx
@@ -1028,8 +1174,8 @@ public class GameDetailsActivity extends AppCompatActivity {
                 return entryName.endsWith(".gba") || entryName.endsWith(".agb");
             // Genesis / MegaDrive
             case "genesis":
-                return entryName.endsWith(".bin") || entryName.endsWith(".smd") || 
-                      entryName.endsWith(".md") || entryName.endsWith(".gen");
+                return entryName.endsWith(".bin") || entryName.endsWith(".smd") ||
+                        entryName.endsWith(".md") || entryName.endsWith(".gen");
             // Master System
             case "mastersystem":
                 return entryName.endsWith(".sms") || entryName.endsWith(".bin");
@@ -1051,13 +1197,13 @@ public class GameDetailsActivity extends AppCompatActivity {
             // Arcade (FBNeo) - ROMs en .zip (ROM sets)
             case "fbneo":
             case "arcade":
-                return entryName.endsWith(".zip");  // Les ROMs arcade sont en .zip
+                return entryName.endsWith(".zip"); // Les ROMs arcade sont en .zip
             // Fallback générique
             default:
                 return entryName.endsWith(".bin") || entryName.endsWith(".rom");
         }
     }
-    
+
     /**
      * Lance l'emulateur avec une ROM deja extraite ou en cache
      */
@@ -1065,8 +1211,9 @@ public class GameDetailsActivity extends AppCompatActivity {
         // === DATABASE LOOKUP (NEW) ===
         // Calculate CRC32 and lookup game metadata
         String gameCRC = com.retroplay.database.DatabaseManager.INSTANCE.calculateCRC32(romPath);
-        
-        // Fallback: Si le calcul échoue, utiliser le hash du gamelist.json si c'est un CRC32 (8 caractères hex)
+
+        // Fallback: Si le calcul échoue, utiliser le hash du gamelist.json si c'est un
+        // CRC32 (8 caractères hex)
         if (gameCRC == null && game.getHash() != null && !game.getHash().isEmpty()) {
             String hash = game.getHash();
             // CRC32 = 8 caractères hexadécimaux (ex: "A1B2C3D4")
@@ -1075,11 +1222,12 @@ public class GameDetailsActivity extends AppCompatActivity {
                 Log.i(TAG, "Using CRC32 from gamelist.json: " + gameCRC);
             }
         }
-        
+
         if (gameCRC != null) {
             Log.i(TAG, "ROM CRC32: " + gameCRC);
-            
-            com.retroplay.database.GameInfo gameInfo = com.retroplay.database.DatabaseManager.INSTANCE.lookupGame(gameCRC, game.getConsole());
+
+            com.retroplay.database.GameInfo gameInfo = com.retroplay.database.DatabaseManager.INSTANCE
+                    .lookupGame(gameCRC, game.getConsole());
             if (gameInfo != null) {
                 Log.i(TAG, "✅ Game identified from database:");
                 Log.i(TAG, "  Name: " + gameInfo.getName());
@@ -1087,17 +1235,18 @@ public class GameDetailsActivity extends AppCompatActivity {
                 Log.i(TAG, "  Developer: " + gameInfo.getDeveloper());
                 Log.i(TAG, "  Year: " + gameInfo.getReleaseYear());
                 Log.i(TAG, "  " + gameInfo.getDisplayInfo());
-                
+
                 // Check cheats available
-                java.io.File cheatFile = com.retroplay.database.DatabaseManager.INSTANCE.getCheatsPath(gameInfo, game.getConsole());
+                java.io.File cheatFile = com.retroplay.database.DatabaseManager.INSTANCE.getCheatsPath(gameInfo,
+                        game.getConsole());
                 if (cheatFile != null && cheatFile.exists()) {
                     int cheatCount = countCheatsInFile(cheatFile);
                     Log.i(TAG, "  🎮 " + cheatCount + " cheats available!");
-                    
+
                     // Show notification
-                    Toast.makeText(this, 
-                        cheatCount + " cheats available • " + gameInfo.getDisplayInfo(), 
-                        Toast.LENGTH_LONG).show();
+                    Toast.makeText(this,
+                            cheatCount + " cheats available • " + gameInfo.getDisplayInfo(),
+                            Toast.LENGTH_LONG).show();
                 }
             } else {
                 Log.w(TAG, "⚠️ Game not found in database (CRC: " + gameCRC + ")");
@@ -1105,57 +1254,72 @@ public class GameDetailsActivity extends AppCompatActivity {
         } else {
             Log.w(TAG, "⚠️ Could not determine CRC32 for game (ROM calculation failed and no CRC32 in gamelist.json)");
         }
-        
+
         // Determine which emulator activity to use based on user preference
         Class<?> emulatorActivity = getEmulatorActivityClass(game.getConsole());
-        
+
         Intent intent = new Intent(this, emulatorActivity);
         intent.putExtra("romPath", romPath);
         intent.putExtra("gameName", game.getName());
         intent.putExtra("gameId", currentGalleryGameId);
         intent.putExtra("console", game.getConsole());
         intent.putExtra("loadSlot", slot);
-        
+
         // Pass database metadata if available
         if (gameCRC != null) {
             intent.putExtra("gameCRC", gameCRC);
         }
-        
+
+        // Pass Config ID (Priority: Serial > CRC > Name)
+        // This is what the user meant: determine identity HERE, not in emulator
+        String configId = gameCRC;
+        if (currentPsxSerial != null) {
+            configId = currentPsxSerial;
+            intent.putExtra("psxSerial", currentPsxSerial); // Helpful context
+        } else if (configId == null) {
+            // Fallback for config ID if no CRC
+            String safeName = game.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
+            configId = safeName;
+        }
+        intent.putExtra("configId", configId);
+        Log.i(TAG, "🚀 Launching emulator with Config ID: " + configId);
+
         startActivity(intent);
     }
-    
+
     private void openCheatActivity() {
         Log.i(TAG, "Opening cheat codes for: " + game.getName());
-        
+
         Intent intent = new Intent(this, com.retroplay.cheat.CheatActivity.class);
         intent.putExtra("console", game.getConsole());
         intent.putExtra("gameName", game.getName());
         startActivity(intent);
     }
-    
+
     private void showSlotSelectionDialog() {
         String console = game.getConsole();
         String gameName = game.getName();
-        String romPath = resolveRomPath();  // Get the real ROM path
-        
+        String romPath = resolveRomPath(); // Get the real ROM path
+
         // Utiliser le nouveau dialog Compose moderne
         GameDetailsDialogHelperKt.showModernSlotDialogFromDetails(this, console, gameName, romPath);
     }
-    
+
     private void checkAndShowLoadSaveButton() {
         // Vérifier si des sauvegardes existent dans les slots
         String console = game.getConsole();
         String gameName = game.getName();
-        
+
         boolean hasAnySave = false;
         for (int slot = 1; slot <= 5; slot++) {
-            java.io.File saveFile = new java.io.File("/storage/emulated/0/GameLibrary-Data/saves/" + console + "/slot" + slot + "/" + gameName + ".state");
+            java.io.File saveFile = new java.io.File("/storage/emulated/0/GameLibrary-Data/saves/" + console + "/slot"
+                    + slot + "/" + gameName + ".state");
             if (saveFile.exists()) {
                 hasAnySave = true;
                 break;
             }
         }
-        
+
         if (hasAnySave) {
             // Afficher le bouton pill LOAD dans le dual pill container
             pillLoad.setVisibility(View.VISIBLE);
@@ -1169,70 +1333,70 @@ public class GameDetailsActivity extends AppCompatActivity {
             Log.d(TAG, "No save slots found for: " + gameName);
         }
     }
-    
+
     private void launchWithCustomTabs(ConsoleConfigActivity.ConsoleConfig config, String coreOverride) {
         try {
             // Custom Tabs s'exécute sur le device, donc on utilise TOUJOURS localhost
             // Cela permet d'activer les threads (COEP/COOP headers acceptés sur localhost)
             String gameSlug = generateSlug(game.getName());
-            
+
             // Construire l'URL avec option D-Pad si activée (comme PSX)
             StringBuilder urlBuilder = new StringBuilder();
             urlBuilder.append("http://localhost:7777/gamelibrary/emulator.html?slug=").append(gameSlug);
             urlBuilder.append("&console=").append(game.getConsole());
-            
+
             if (config.useDpad) {
                 urlBuilder.append("&dpad=true");
                 Log.i(TAG, "PSP with D-Pad controls (no analog sticks)");
             } else {
                 Log.i(TAG, "PSP with Analog controls (DualShock with sticks)");
             }
-            
+
             // Add core override if exists
             if (coreOverride != null) {
                 urlBuilder.append("&core=").append(coreOverride);
                 Log.i(TAG, "Using core override for EmulatorJS: " + coreOverride);
             }
-            
+
             String emulatorUrl = urlBuilder.toString();
             Log.i(TAG, "Launching fullscreen Custom Tabs: " + emulatorUrl);
-            
+
             // Lancer via FullscreenCustomTabsActivity pour rotation libre et mode immersif
             Intent intent = new Intent(this, FullscreenCustomTabsActivity.class);
             intent.putExtra("url", emulatorUrl);
             startActivity(intent);
-            
+
         } catch (Exception e) {
             Log.e(TAG, "Error launching Custom Tabs: " + e.getMessage());
             Toast.makeText(this, "Erreur lors du lancement: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
-    
+
     private String generateSlug(String name) {
         return name.toLowerCase()
-            .replaceAll("['\"`]", "")
-            .replaceAll("[^a-z0-9\\s-]", "")
-            .replaceAll("\\s+", "-")
-            .replaceAll("-+", "-")
-            .replaceAll("^-|-$", "");
+                .replaceAll("['\"`]", "")
+                .replaceAll("[^a-z0-9\\s-]", "")
+                .replaceAll("\\s+", "-")
+                .replaceAll("-+", "-")
+                .replaceAll("^-|-$", "");
     }
-    
+
     private void toggleFavorite() {
         if (favoritesManager == null) {
             return;
         }
-        
+
         // Toggle dans le manager et mettre à jour l'état du jeu
         boolean isFavorite = favoritesManager.toggleFavorite(game);
         game.setFavorite(isFavorite);
-        
+
         // Mettre à jour l'UI
         updateFavoriteButton();
-        
+
         // Afficher un message de confirmation
         String message = isFavorite ? "Added to favorites" : "Removed from favorites";
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        
+
         Log.i(TAG, "Toggle favorite for: " + game.getName() + " - isFavorite: " + isFavorite);
     }
 
@@ -1243,14 +1407,14 @@ public class GameDetailsActivity extends AppCompatActivity {
         intent.putExtra(com.retroplay.gallery.ScreenshotGalleryActivity.EXTRA_GAME_NAME, game.getName());
         startActivity(intent);
     }
-    
+
     private void applyTheme() {
         ThemeManager themeManager = ThemeManager.getInstance(this);
         int primaryColor = themeManager.getPrimaryColor(this);
         int headerBackgroundColor = themeManager.getHeaderBackgroundColor(this);
         int textPrimaryColor = themeManager.getTextPrimaryColor(this);
         int textSecondaryColor = themeManager.getTextSecondaryColor(this);
-        
+
         // Header buttons
         if (headerBackButton != null) {
             headerBackButton.setIconTint(ColorStateList.valueOf(primaryColor));
@@ -1258,39 +1422,40 @@ public class GameDetailsActivity extends AppCompatActivity {
             headerBackButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
             headerBackButton.setAlpha(1.0f);
         }
-        
+
         if (headerEditButton != null) {
             headerEditButton.setIconTint(ColorStateList.valueOf(primaryColor));
             headerEditButton.setBackgroundTintList(ColorStateList.valueOf(headerBackgroundColor));
             headerEditButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
             headerEditButton.setAlpha(1.0f);
         }
-        
+
         if (headerSettingsButton != null) {
             headerSettingsButton.setIconTint(ColorStateList.valueOf(primaryColor));
             headerSettingsButton.setBackgroundTintList(ColorStateList.valueOf(headerBackgroundColor));
             headerSettingsButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
             headerSettingsButton.setAlpha(1.0f);
         }
-        
+
         // Header title
         if (headerTitle != null) {
             headerTitle.setTextColor(primaryColor);
             headerTitle.setAlpha(1.0f);
         }
-        
+
         // Game title
         if (gameTitle != null) {
             gameTitle.setTextColor(primaryColor);
             gameTitle.setAlpha(1.0f);
         }
-        
+
         // Game info texts
         if (gameDescription != null) {
             gameDescription.setTextColor(textSecondaryColor);
             gameDescription.setAlpha(1.0f);
         }
-        // Les TextViews dans les cards (genre, players, release date) utilisent primaryColor pour être visibles
+        // Les TextViews dans les cards (genre, players, release date) utilisent
+        // primaryColor pour être visibles
         if (gameGenre != null) {
             gameGenre.setTextColor(primaryColor);
             gameGenre.setAlpha(1.0f);
@@ -1303,64 +1468,66 @@ public class GameDetailsActivity extends AppCompatActivity {
             gameReleaseDate.setTextColor(primaryColor);
             gameReleaseDate.setAlpha(1.0f);
         }
-        
+
         // Action buttons
         if (playNativeButton != null) {
             playNativeButton.setBackgroundTintList(ColorStateList.valueOf(primaryColor));
             playNativeButton.setIconTint(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_black)));
             playNativeButton.setAlpha(1.0f);
         }
-        
+
         if (loadSaveButton != null) {
             loadSaveButton.setBackgroundTintList(ColorStateList.valueOf(headerBackgroundColor));
             loadSaveButton.setIconTint(ColorStateList.valueOf(primaryColor));
             loadSaveButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
             loadSaveButton.setAlpha(1.0f);
         }
-        
+
         if (cheatButton != null) {
             cheatButton.setBackgroundTintList(ColorStateList.valueOf(headerBackgroundColor));
             cheatButton.setIconTint(ColorStateList.valueOf(primaryColor));
             cheatButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
             cheatButton.setAlpha(1.0f);
         }
-        
+
         if (coreOverrideButton != null) {
             coreOverrideButton.setBackgroundTintList(ColorStateList.valueOf(headerBackgroundColor));
             coreOverrideButton.setTextColor(primaryColor);
             coreOverrideButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
             coreOverrideButton.setAlpha(1.0f);
         }
-        
+
         if (viewGalleryButton != null) {
             viewGalleryButton.setBackgroundTintList(ColorStateList.valueOf(headerBackgroundColor));
             viewGalleryButton.setIconTint(ColorStateList.valueOf(primaryColor));
             viewGalleryButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
             viewGalleryButton.setAlpha(1.0f);
         }
-        
+
         // Play button (Button, not MaterialButton)
         if (playButton != null) {
             playButton.setTextColor(primaryColor);
             playButton.setAlpha(1.0f);
-            // Note: Button background is typically set via drawable, but we can set text color
+            // Note: Button background is typically set via drawable, but we can set text
+            // color
         }
-        
-        // Pills (FrameLayout) - these might have backgrounds set in XML, but we can ensure text colors
+
+        // Pills (FrameLayout) - these might have backgrounds set in XML, but we can
+        // ensure text colors
         // Note: Pills are typically styled via their child TextViews
-        
+
         // Console default info
         if (consoleDefaultInfo != null) {
             consoleDefaultInfo.setTextColor(textSecondaryColor);
             consoleDefaultInfo.setAlpha(1.0f);
         }
-        
+
         // Header background
         android.view.View detailsHeader = findViewById(R.id.details_header);
         if (detailsHeader != null) {
             detailsHeader.setBackgroundColor(headerBackgroundColor);
         }
-        
+
         // Game Info button
         if (gameInfoButton != null) {
             gameInfoButton.setIconTint(ColorStateList.valueOf(primaryColor));
@@ -1368,21 +1535,21 @@ public class GameDetailsActivity extends AppCompatActivity {
             gameInfoButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
             gameInfoButton.setAlpha(1.0f);
         }
-        
+
         // Emulator Mode Switch
         if (emulatorModeSwitch != null) {
             emulatorModeSwitch.setThumbTintList(ColorStateList.valueOf(primaryColor));
             emulatorModeSwitch.setTrackTintList(ColorStateList.valueOf(headerBackgroundColor));
         }
-        
+
         // MaterialCardView - appliquer le thème aux cards
         applyThemeToCards(primaryColor, headerBackgroundColor);
-        
+
         // Favorite and Game Info buttons are handled in their update methods
         updateFavoriteButton();
         updateGameInfoButtonState();
     }
-    
+
     /**
      * Applique le thème aux MaterialCardView de la page
      */
@@ -1393,28 +1560,29 @@ public class GameDetailsActivity extends AppCompatActivity {
             applyThemeToCardsRecursive((android.view.ViewGroup) rootView, primaryColor, headerBackgroundColor);
         }
     }
-    
-    private void applyThemeToCardsRecursive(android.view.ViewGroup parent, int primaryColor, int headerBackgroundColor) {
+
+    private void applyThemeToCardsRecursive(android.view.ViewGroup parent, int primaryColor,
+            int headerBackgroundColor) {
         for (int i = 0; i < parent.getChildCount(); i++) {
             android.view.View child = parent.getChildAt(i);
-            
+
             if (child instanceof com.google.android.material.card.MaterialCardView) {
                 com.google.android.material.card.MaterialCardView card = (com.google.android.material.card.MaterialCardView) child;
                 card.setStrokeColor(primaryColor);
                 card.setCardBackgroundColor(headerBackgroundColor);
             }
-            
+
             if (child instanceof android.view.ViewGroup) {
                 applyThemeToCardsRecursive((android.view.ViewGroup) child, primaryColor, headerBackgroundColor);
             }
         }
     }
-    
+
     private void updateFavoriteButton() {
         if (favoriteButton == null || favoritesManager == null) {
             return;
         }
-        
+
         ThemeManager themeManager = ThemeManager.getInstance(this);
         ColorStateList accent = ColorStateList.valueOf(themeManager.getPrimaryColor(this));
         ColorStateList headerBackground = ColorStateList.valueOf(themeManager.getHeaderBackgroundColor(this));
@@ -1430,7 +1598,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             game.setFavorite(false);
         }
     }
-    
+
     /**
      * Met à jour le texte du bouton core override selon l'état actuel
      */
@@ -1445,10 +1613,10 @@ public class GameDetailsActivity extends AppCompatActivity {
         if (lastSlash >= 0) {
             fileName = fileName.substring(lastSlash + 1);
         }
-        
+
         String consoleDir = getRealConsoleDirectory(game.getConsole());
         String relativePath = consoleDir + "/" + fileName;
-        
+
         CoreOverrideManager manager = CoreOverrideManager.getInstance();
         if (manager.hasOverride(relativePath)) {
             CoreOverride override = manager.getOverride(relativePath);
@@ -1459,29 +1627,36 @@ public class GameDetailsActivity extends AppCompatActivity {
             coreOverrideButton.setText("⚙ " + defaultCore);
         }
     }
-    
+
     /**
      * Obtient le nom du core par défaut pour une console
      */
     private String getDefaultCoreForConsole(String console) {
         String consoleKey = console.toLowerCase();
-        
+
         // Pour les sous-consoles, utiliser le parent
         if (consoleKey.contains("/")) {
             consoleKey = consoleKey.substring(0, consoleKey.indexOf("/"));
         }
-        
+
         switch (consoleKey) {
-            case "nes": return "FCEUmm";
-            case "snes": return "Snes9x";
-            case "n64": return "ParaLLEl N64";
+            case "nes":
+                return "FCEUmm";
+            case "snes":
+                return "Snes9x";
+            case "n64":
+                return "ParaLLEl N64";
             case "gb":
-            case "gbc": return "Gambatte";
-            case "gba": return "mGBA";
+            case "gbc":
+                return "Gambatte";
+            case "gba":
+                return "mGBA";
             case "psx":
             case "ps1":
-            case "playstation": return "PCSX ReARMed";
-            case "psp": return "PPSSPP";
+            case "playstation":
+                return "PCSX ReARMed";
+            case "psp":
+                return "PPSSPP";
             case "genesis":
             case "megadrive":
             case "md":
@@ -1490,37 +1665,54 @@ public class GameDetailsActivity extends AppCompatActivity {
             case "mastersystem":
             case "sms":
             case "gamegear":
-            case "gg": return "Genesis Plus GX";
+            case "gg":
+                return "Genesis Plus GX";
             case "32x":
-            case "sega32x": return "PicoDrive";
+            case "sega32x":
+                return "PicoDrive";
             case "atari2600":
-            case "a2600": return "Stella 2014";
+            case "a2600":
+                return "Stella 2014";
             case "atari5200":
-            case "a5200": return "Atari800";
+            case "a5200":
+                return "Atari800";
             case "atari7800":
-            case "a7800": return "ProSystem";
+            case "a7800":
+                return "ProSystem";
             case "atarilynx":
-            case "lynx": return "Handy";
+            case "lynx":
+                return "Handy";
             case "ngp":
-            case "ngpc": return "Mednafen NGP";
+            case "ngpc":
+                return "Mednafen NGP";
             case "wonderswan":
             case "wonderswancolor":
             case "ws":
-            case "wsc": return "Mednafen WonderSwan";
+            case "wsc":
+                return "Mednafen WonderSwan";
             case "pce":
-            case "pcengine": return "Mednafen PCE Fast";
+            case "pcengine":
+                return "Mednafen PCE Fast";
             // Arcade
-            case "arcade": return "FBNeo";
-            case "mame": return "MAME 2010";
-            case "fbneo": return "FBNeo";
-            case "cps1": return "FBalpha CPS1";
-            case "cps2": return "FBalpha CPS2";
-            case "cps3": return "FBNeo";
-            case "neogeo": return "FBNeo";
-            default: return "Default";
+            case "arcade":
+                return "FBNeo";
+            case "mame":
+                return "MAME 2010";
+            case "fbneo":
+                return "FBNeo";
+            case "cps1":
+                return "FBalpha CPS1";
+            case "cps2":
+                return "FBalpha CPS2";
+            case "cps3":
+                return "FBNeo";
+            case "neogeo":
+                return "FBNeo";
+            default:
+                return "Default";
         }
     }
-    
+
     /**
      * Affiche un dialog pour choisir le core à utiliser pour ce jeu
      */
@@ -1535,39 +1727,39 @@ public class GameDetailsActivity extends AppCompatActivity {
         if (lastSlash >= 0) {
             fileName = fileName.substring(lastSlash + 1);
         }
-        
+
         String consoleDir = getRealConsoleDirectory(game.getConsole());
         String relativePath = consoleDir + "/" + fileName;
-        
+
         // Obtenir le core par défaut
         String defaultCoreName = getDefaultCoreForConsole(game.getConsole());
-        
+
         // Charger les cores disponibles depuis cores.json
         java.util.List<CoreInfo> availableCores = loadAvailableCoresForConsole(game.getConsole());
-        
+
         // Construire les listes pour le dialog
         java.util.List<String> coresList = new java.util.ArrayList<>();
         java.util.List<String> coreIdsList = new java.util.ArrayList<>();
-        
+
         // Ajouter "Default" en premier
         coresList.add("Default (" + defaultCoreName + ")");
         coreIdsList.add(null);
-        
+
         // Organiser les cores par catégorie
         java.util.List<CoreInfo> arcadeCores = new java.util.ArrayList<>();
         java.util.List<CoreInfo> consoleCores = new java.util.ArrayList<>();
-        
+
         for (CoreInfo core : availableCores) {
             String coreId = core.coreId.toLowerCase();
             // Détecter les cores arcade
-            if (coreId.contains("mame") || coreId.contains("fbneo") || coreId.contains("fbalpha") || 
-                coreId.contains("flycast") || coreId.contains("arcade")) {
+            if (coreId.contains("mame") || coreId.contains("fbneo") || coreId.contains("fbalpha") ||
+                    coreId.contains("flycast") || coreId.contains("arcade")) {
                 arcadeCores.add(core);
             } else {
                 consoleCores.add(core);
             }
         }
-        
+
         // Ajouter les cores arcade
         if (!arcadeCores.isEmpty()) {
             coresList.add("── ARCADE CORES ──");
@@ -1577,7 +1769,7 @@ public class GameDetailsActivity extends AppCompatActivity {
                 coreIdsList.add(core.coreId);
             }
         }
-        
+
         // Ajouter les cores console
         if (!consoleCores.isEmpty()) {
             coresList.add("── CONSOLE CORES ──");
@@ -1587,7 +1779,7 @@ public class GameDetailsActivity extends AppCompatActivity {
                 coreIdsList.add(core.coreId);
             }
         }
-        
+
         // Si aucun core trouvé, utiliser la liste par défaut
         if (availableCores.isEmpty()) {
             Log.w(TAG, "No cores found for console: " + game.getConsole() + ", using fallback list");
@@ -1602,11 +1794,11 @@ public class GameDetailsActivity extends AppCompatActivity {
             coresList.add("mGBA (GBA)");
             coreIdsList.add("mgba");
         }
-        
+
         // Convertir en tableaux
         String[] cores = coresList.toArray(new String[0]);
         String[] coreIds = coreIdsList.toArray(new String[0]);
-        
+
         CoreOverrideManager manager = CoreOverrideManager.getInstance();
 
         // Déterminer quel item est actuellement sélectionné
@@ -1631,9 +1823,12 @@ public class GameDetailsActivity extends AppCompatActivity {
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, cores) {
             @Override
             public boolean isEnabled(int position) {
-                // Désactiver les headers (ceux qui ont null dans coreIds, sauf position 0 qui est "Default")
-                if (position == 0) return true; // "Default" est toujours activé
-                if (position >= coreIds.length) return false;
+                // Désactiver les headers (ceux qui ont null dans coreIds, sauf position 0 qui
+                // est "Default")
+                if (position == 0)
+                    return true; // "Default" est toujours activé
+                if (position >= coreIds.length)
+                    return false;
                 return coreIds[position] != null; // Headers ont null, donc désactivés
             }
 
@@ -1699,7 +1894,7 @@ public class GameDetailsActivity extends AppCompatActivity {
 
         dialog.show();
     }
-    
+
     /**
      * Classe interne pour représenter les informations d'un core
      */
@@ -1708,7 +1903,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         String displayName;
         String fileName;
         String description;
-        
+
         CoreInfo(String coreId, String displayName, String fileName, String description) {
             this.coreId = coreId;
             this.displayName = displayName;
@@ -1716,36 +1911,36 @@ public class GameDetailsActivity extends AppCompatActivity {
             this.description = description;
         }
     }
-    
+
     /**
      * Charge les cores disponibles pour une console depuis cores.json
      */
     private java.util.List<CoreInfo> loadAvailableCoresForConsole(String console) {
         java.util.List<CoreInfo> cores = new java.util.ArrayList<>();
-        
+
         try {
             // Normaliser le nom de la console
             String consoleKey = console.toLowerCase().replace("_", "").replace("-", "");
-            
+
             // Obtenir les patterns de cores pour cette console
             java.util.List<String> patterns = getCorePatternsForConsole(consoleKey);
-            
+
             // Lire cores.json
             java.io.File coresFile = new java.io.File("/storage/emulated/0/GameLibrary-Data/data/cores/cores.json");
             if (!coresFile.exists()) {
                 Log.w(TAG, "cores.json not found, using fallback cores");
                 return getFallbackCoresForConsole(consoleKey);
             }
-            
+
             java.io.FileInputStream fis = new java.io.FileInputStream(coresFile);
             byte[] buffer = new byte[(int) coresFile.length()];
             fis.read(buffer);
             fis.close();
             String jsonContent = new String(buffer, "UTF-8");
-            
+
             // Parser le JSON
             org.json.JSONArray coresArray = new org.json.JSONArray(jsonContent);
-            
+
             // Chercher les cores compatibles
             Log.d(TAG, "Searching for cores matching patterns: " + patterns.toString() + " for console: " + console);
             for (int i = 0; i < coresArray.length(); i++) {
@@ -1754,51 +1949,54 @@ public class GameDetailsActivity extends AppCompatActivity {
                 String coreDisplayName = core.optString("display_name", core.optString("name", ""));
                 String coreId = core.optString("id", coreName).toLowerCase();
                 String coreFileName = core.optString("file", "");
-                
+
                 // Normaliser les noms pour la comparaison (enlever underscores et tirets)
                 String coreNameNormalized = coreName.replace("_", "").replace("-", "");
                 String coreIdNormalized = coreId.replace("_", "").replace("-", "");
-                
+
                 // Vérifier si le core correspond à un pattern
                 boolean matched = false;
                 for (String pattern : patterns) {
                     String patternLower = pattern.toLowerCase();
                     String patternNormalized = patternLower.replace("_", "").replace("-", "");
-                    
+
                     // Vérifier dans le nom, l'ID, et les versions normalisées
                     if (coreName.contains(patternLower) || coreId.contains(patternLower) ||
-                        coreNameNormalized.contains(patternNormalized) || coreIdNormalized.contains(patternNormalized)) {
+                            coreNameNormalized.contains(patternNormalized)
+                            || coreIdNormalized.contains(patternNormalized)) {
                         cores.add(new CoreInfo(coreId, coreDisplayName, coreFileName, ""));
-                        Log.d(TAG, "Matched core: " + coreDisplayName + " (id: " + coreId + ", pattern: " + pattern + ")");
+                        Log.d(TAG,
+                                "Matched core: " + coreDisplayName + " (id: " + coreId + ", pattern: " + pattern + ")");
                         matched = true;
                         break;
                     }
                 }
-                
+
                 if (!matched) {
-                    Log.v(TAG, "Core not matched: " + coreDisplayName + " (name: " + coreName + ", id: " + coreId + ")");
+                    Log.v(TAG,
+                            "Core not matched: " + coreDisplayName + " (name: " + coreName + ", id: " + coreId + ")");
                 }
             }
-            
+
             Log.i(TAG, "Loaded " + cores.size() + " compatible cores for console: " + console);
-            
+
         } catch (Exception e) {
             Log.e(TAG, "Error loading cores from cores.json", e);
             return getFallbackCoresForConsole(console.toLowerCase().replace("_", "").replace("-", ""));
         }
-        
+
         return cores;
     }
-    
+
     /**
      * Retourne les patterns de noms de cores à chercher pour une console
      */
     private java.util.List<String> getCorePatternsForConsole(String consoleKey) {
         // Normaliser avec ConsoleNameMapper
         String canonicalId = ConsoleNameMapper.normalizeToCanonical(consoleKey);
-        
+
         java.util.List<String> patterns = new java.util.ArrayList<>();
-        
+
         switch (canonicalId) {
             case "nes":
                 patterns.add("fceumm");
@@ -1867,26 +2065,28 @@ public class GameDetailsActivity extends AppCompatActivity {
                 patterns.add("fbneo");
                 break;
             default:
-                // Pour les consoles non reconnues, essayer de trouver un pattern basé sur le nom
+                // Pour les consoles non reconnues, essayer de trouver un pattern basé sur le
+                // nom
                 patterns.add(consoleKey);
                 break;
         }
-        
+
         return patterns;
     }
-    
+
     /**
      * Retourne une liste de cores par défaut si cores.json n'est pas disponible
      */
     private java.util.List<CoreInfo> getFallbackCoresForConsole(String consoleKey) {
         // Normaliser avec ConsoleNameMapper
         String canonicalId = ConsoleNameMapper.normalizeToCanonical(consoleKey);
-        
+
         java.util.List<CoreInfo> cores = new java.util.ArrayList<>();
-        
+
         switch (canonicalId) {
             case "wonderswancolor":
-                cores.add(new CoreInfo("mednafen_wswan", "Mednafen WonderSwan", "mednafen_wswan_libretro_android.so", ""));
+                cores.add(new CoreInfo("mednafen_wswan", "Mednafen WonderSwan", "mednafen_wswan_libretro_android.so",
+                        ""));
                 break;
             default:
                 // Liste par défaut
@@ -1896,10 +2096,10 @@ public class GameDetailsActivity extends AppCompatActivity {
                 cores.add(new CoreInfo("mgba", "mGBA", "libmgba_libretro_android.so", "GBA"));
                 break;
         }
-        
+
         return cores;
     }
-    
+
     private String formatReleaseDate(String releaseDate) {
         try {
             // Format: 19881002T000000 -> 1988-10-02
@@ -1914,7 +2114,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
         return releaseDate;
     }
-    
+
     /**
      * Get the appropriate emulator activity class based on user preference
      * 
@@ -1927,8 +2127,9 @@ public class GameDetailsActivity extends AppCompatActivity {
      */
     private Class<?> getEmulatorActivityClass(String console) {
         // Use effective mode (game override or console default)
-        GamepadPreferenceManager.EmulatorMode effectiveMode = GamepadPreferenceManager.INSTANCE.getEffectiveMode(this, currentConsole, currentGameId);
-        
+        GamepadPreferenceManager.EmulatorMode effectiveMode = GamepadPreferenceManager.INSTANCE.getEffectiveMode(this,
+                currentConsole, currentGameId);
+
         if (effectiveMode == GamepadPreferenceManager.EmulatorMode.RETROARCH) {
             Log.i(TAG, "Launching RetroArchEmulatorActivity for " + console + "/" + currentGameId);
             return RetroArchEmulatorActivity.class;
@@ -1937,33 +2138,35 @@ public class GameDetailsActivity extends AppCompatActivity {
             return NativeComposeEmulatorActivity.class;
         }
     }
-    
+
     /**
      * Setup the emulator mode toggle switch
      */
     private void setupEmulatorModeToggle() {
         // Load console default mode
-        GamepadPreferenceManager.EmulatorMode consoleMode = GamepadPreferenceManager.INSTANCE.loadMode(this, currentConsole);
-        
+        GamepadPreferenceManager.EmulatorMode consoleMode = GamepadPreferenceManager.INSTANCE.loadMode(this,
+                currentConsole);
+
         // Load effective mode (game override or console default)
-        GamepadPreferenceManager.EmulatorMode effectiveMode = GamepadPreferenceManager.INSTANCE.getEffectiveMode(this, currentConsole, currentGameId);
-        
+        GamepadPreferenceManager.EmulatorMode effectiveMode = GamepadPreferenceManager.INSTANCE.getEffectiveMode(this,
+                currentConsole, currentGameId);
+
         // Check if game has an override
         boolean hasOverride = GamepadPreferenceManager.INSTANCE.hasGameOverride(this, currentConsole, currentGameId);
-        
+
         // Set switch state (true = RETROARCH, false = NATIVE)
         emulatorModeSwitch.setChecked(effectiveMode == GamepadPreferenceManager.EmulatorMode.RETROARCH);
-        
+
         // Update console default info
         String consoleModeLabel = consoleMode == GamepadPreferenceManager.EmulatorMode.NATIVE ? "NATIVE" : "RETROARCH";
         consoleDefaultInfo.setText("Console default: " + consoleModeLabel);
-        
+
         // Set up switch listener
         emulatorModeSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            GamepadPreferenceManager.EmulatorMode selectedMode = isChecked ? 
-                GamepadPreferenceManager.EmulatorMode.RETROARCH : 
-                GamepadPreferenceManager.EmulatorMode.NATIVE;
-            
+            GamepadPreferenceManager.EmulatorMode selectedMode = isChecked
+                    ? GamepadPreferenceManager.EmulatorMode.RETROARCH
+                    : GamepadPreferenceManager.EmulatorMode.NATIVE;
+
             if (selectedMode == consoleMode) {
                 // Same as console default, remove override
                 GamepadPreferenceManager.INSTANCE.removeGameOverride(this, currentConsole, currentGameId);
@@ -1973,13 +2176,14 @@ public class GameDetailsActivity extends AppCompatActivity {
                 GamepadPreferenceManager.INSTANCE.saveGameOverride(this, currentConsole, currentGameId, selectedMode);
                 Log.i(TAG, "Saved game override for " + currentGameId + ": " + selectedMode);
             }
-            
+
             // No need to show restart dialog - emulation is not running at this point
         });
-        
-        Log.i(TAG, "Emulator mode toggle setup - Console: " + consoleMode + ", Effective: " + effectiveMode + ", Has Override: " + hasOverride);
+
+        Log.i(TAG, "Emulator mode toggle setup - Console: " + consoleMode + ", Effective: " + effectiveMode
+                + ", Has Override: " + hasOverride);
     }
-    
+
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
@@ -1990,7 +2194,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     }
 
     private void showArtworkUpdateOptions() {
-        String[] options = new String[]{"Download missing", "Force refresh"};
+        String[] options = new String[] { "Download missing", "Force refresh" };
         new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Artwork Options")
                 .setItems(options, (dialog, which) -> {
@@ -2003,16 +2207,17 @@ public class GameDetailsActivity extends AppCompatActivity {
                 .setNegativeButton("Cancel", null)
                 .show();
     }
-    
+
     private void startArtworkDownloadForGame(boolean missingOnly) {
         android.app.ProgressDialog dialog = new android.app.ProgressDialog(this);
         dialog.setMessage(missingOnly ? "Downloading missing artwork..." : "Refreshing artwork...");
         dialog.setCancelable(false);
         dialog.show();
-        
+
         new Thread(() -> {
             try {
-                ArtworkDownloadHelper.DownloadResult result = ArtworkDownloadHelper.downloadArtwork(game.getConsole(), game.getBaseName(), !missingOnly, missingOnly);
+                ArtworkDownloadHelper.DownloadResult result = ArtworkDownloadHelper.downloadArtwork(game.getConsole(),
+                        game.getBaseName(), !missingOnly, missingOnly);
                 runOnUiThread(() -> {
                     dialog.dismiss();
                     if (result.error != null) {
@@ -2040,16 +2245,19 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Obtenir le répertoire de la console
         String consoleDirName = getRealConsoleDirectory(game.getConsole());
         java.io.File consoleDir = new java.io.File("/storage/emulated/0/GameLibrary-Data/" + consoleDirName);
-        
+
         if (!consoleDir.exists()) {
-            android.widget.Toast.makeText(this, "Console directory not found: " + consoleDirName, android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast
+                    .makeText(this, "Console directory not found: " + consoleDirName, android.widget.Toast.LENGTH_SHORT)
+                    .show();
             return;
         }
-        
+
         // Créer le dialog
         android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
-        android.view.View dialogView = android.view.LayoutInflater.from(this).inflate(R.layout.dialog_edit_game_metadata, null);
-        
+        android.view.View dialogView = android.view.LayoutInflater.from(this)
+                .inflate(R.layout.dialog_edit_game_metadata, null);
+
         // Récupérer les champs
         android.widget.EditText titleInput = dialogView.findViewById(R.id.gameTitleInput);
         android.widget.EditText descriptionInput = dialogView.findViewById(R.id.gameDescriptionInput);
@@ -2058,13 +2266,13 @@ public class GameDetailsActivity extends AppCompatActivity {
         android.widget.EditText releaseDateInput = dialogView.findViewById(R.id.gameReleaseDateInput);
         android.widget.EditText developerInput = dialogView.findViewById(R.id.gameDeveloperInput);
         android.widget.EditText publisherInput = dialogView.findViewById(R.id.gamePublisherInput);
-        
+
         // Pré-remplir avec les valeurs actuelles
         titleInput.setText(game.getName() != null ? game.getName() : "");
         descriptionInput.setText(game.getDesc() != null ? game.getDesc() : "");
         genreInput.setText(game.getGenre() != null ? game.getGenre() : "");
         playersInput.setText(game.getPlayers() != null ? game.getPlayers() : "");
-        
+
         // Formater la date (YYYYMMDD)
         String releaseDate = game.getReleasedate();
         if (releaseDate != null && !releaseDate.isEmpty()) {
@@ -2076,26 +2284,26 @@ public class GameDetailsActivity extends AppCompatActivity {
         } else {
             releaseDateInput.setText("");
         }
-        
+
         developerInput.setText(game.getDeveloper() != null ? game.getDeveloper() : "");
         publisherInput.setText(game.getPublisher() != null ? game.getPublisher() : "");
-        
+
         // Appliquer le thème
         ThemeManager themeManager = ThemeManager.getInstance(this);
         int primaryColor = themeManager.getPrimaryColor(this);
         int headerBackgroundColor = themeManager.getHeaderBackgroundColor(this);
-        
+
         builder.setView(dialogView);
-        builder.setTitle(null);  // Pas de titre par défaut, on utilise notre header
-        
+        builder.setTitle(null); // Pas de titre par défaut, on utilise notre header
+
         android.app.AlertDialog dialog = builder.create();
         dialog.show();
-        
+
         // Récupérer les boutons du footer après création du dialog
         com.google.android.material.button.MaterialButton saveButton = dialogView.findViewById(R.id.saveButton);
         com.google.android.material.button.MaterialButton cancelButton = dialogView.findViewById(R.id.cancelButton);
         com.google.android.material.button.MaterialButton deleteButton = dialogView.findViewById(R.id.deleteButton);
-        
+
         // Configurer les boutons
         saveButton.setOnClickListener(v -> {
             // Récupérer les nouvelles valeurs
@@ -2106,42 +2314,40 @@ public class GameDetailsActivity extends AppCompatActivity {
             String newReleaseDate = releaseDateInput.getText().toString().trim();
             String newDeveloper = developerInput.getText().toString().trim();
             String newPublisher = publisherInput.getText().toString().trim();
-            
+
             // Valider le titre (obligatoire)
             if (newTitle.isEmpty()) {
                 android.widget.Toast.makeText(this, "Title cannot be empty", android.widget.Toast.LENGTH_SHORT).show();
                 return;
             }
-            
+
             // Formater la date si nécessaire (ajouter T000000 si juste YYYYMMDD)
             if (!newReleaseDate.isEmpty() && newReleaseDate.length() == 8) {
                 newReleaseDate = newReleaseDate + "T000000";
             }
-            
+
             // Créer un GameEntry mis à jour via la fonction helper Kotlin
             com.retroplay.GamelistManager.GameEntry updatedEntry = com.retroplay.GamelistManager.createGameEntry(
-                game.getId(),
-                newTitle,
-                game.getPath(),
-                newDescription.isEmpty() ? null : newDescription,
-                game.getImagePath(),
-                newReleaseDate.isEmpty() ? null : newReleaseDate,
-                newDeveloper.isEmpty() ? null : newDeveloper,
-                newPublisher.isEmpty() ? null : newPublisher,
-                newGenre.isEmpty() ? null : newGenre,
-                newPlayers.isEmpty() ? null : newPlayers,
-                game.getHash(),
-                game.getRating()
-            );
-            
+                    game.getId(),
+                    newTitle,
+                    game.getPath(),
+                    newDescription.isEmpty() ? null : newDescription,
+                    game.getImagePath(),
+                    newReleaseDate.isEmpty() ? null : newReleaseDate,
+                    newDeveloper.isEmpty() ? null : newDeveloper,
+                    newPublisher.isEmpty() ? null : newPublisher,
+                    newGenre.isEmpty() ? null : newGenre,
+                    newPlayers.isEmpty() ? null : newPlayers,
+                    game.getHash(),
+                    game.getRating());
+
             // Mettre à jour dans le gamelist.json
             boolean success = com.retroplay.GamelistManager.updateGameInGamelist(
-                consoleDir,
-                game.getId(),
-                game.getPath(),
-                updatedEntry
-            );
-            
+                    consoleDir,
+                    game.getId(),
+                    game.getPath(),
+                    updatedEntry);
+
             if (success) {
                 // Mettre à jour l'objet Game local
                 game.name = newTitle;
@@ -2151,56 +2357,59 @@ public class GameDetailsActivity extends AppCompatActivity {
                 game.releasedate = newReleaseDate.isEmpty() ? null : newReleaseDate;
                 game.developer = newDeveloper.isEmpty() ? null : newDeveloper;
                 game.publisher = newPublisher.isEmpty() ? null : newPublisher;
-                
+
                 // Rafraîchir l'affichage
                 updateGameDetailsFromGamelist();
                 headerTitle.setText(game.getName());
-                
+
                 dialog.dismiss();
                 android.widget.Toast.makeText(this, "Game metadata saved", android.widget.Toast.LENGTH_SHORT).show();
             } else {
-                android.widget.Toast.makeText(this, "Failed to save metadata", android.widget.Toast.LENGTH_SHORT).show();
+                android.widget.Toast.makeText(this, "Failed to save metadata", android.widget.Toast.LENGTH_SHORT)
+                        .show();
             }
         });
-        
+
         cancelButton.setOnClickListener(v -> {
             dialog.dismiss();
         });
-        
-        // Bouton DELETE: Supprimer l'entrée du gamelist (pas le fichier ROM ni les images)
+
+        // Bouton DELETE: Supprimer l'entrée du gamelist (pas le fichier ROM ni les
+        // images)
         deleteButton.setOnClickListener(v -> {
             // Confirmation avant suppression
             new android.app.AlertDialog.Builder(this)
-                .setTitle("Delete Game Entry")
-                .setMessage("Remove this game from the gamelist?\n\n" +
-                           "The ROM file and images will NOT be deleted.\n" +
-                           "Only the entry in gamelist.json will be removed.")
-                .setPositiveButton("DELETE", (d, w) -> {
-                    // Supprimer l'entrée du gamelist
-                    boolean success = com.retroplay.GamelistManager.removeGameFromGamelist(
-                        consoleDir,
-                        game.getId(),
-                        game.getPath()
-                    );
-                    
-                    if (success) {
-                        dialog.dismiss();
-                        android.widget.Toast.makeText(this, "Game removed from gamelist", android.widget.Toast.LENGTH_SHORT).show();
-                        // Retourner un résultat pour rafraîchir la liste
-                        Intent resultIntent = new Intent();
-                        resultIntent.putExtra("gameDeleted", true);
-                        setResult(RESULT_OK, resultIntent);
-                        // Fermer l'activité
-                        finish();
-                    } else {
-                        android.widget.Toast.makeText(this, "Failed to remove game from gamelist", android.widget.Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("CANCEL", null)
-                .show();
+                    .setTitle("Delete Game Entry")
+                    .setMessage("Remove this game from the gamelist?\n\n" +
+                            "The ROM file and images will NOT be deleted.\n" +
+                            "Only the entry in gamelist.json will be removed.")
+                    .setPositiveButton("DELETE", (d, w) -> {
+                        // Supprimer l'entrée du gamelist
+                        boolean success = com.retroplay.GamelistManager.removeGameFromGamelist(
+                                consoleDir,
+                                game.getId(),
+                                game.getPath());
+
+                        if (success) {
+                            dialog.dismiss();
+                            android.widget.Toast
+                                    .makeText(this, "Game removed from gamelist", android.widget.Toast.LENGTH_SHORT)
+                                    .show();
+                            // Retourner un résultat pour rafraîchir la liste
+                            Intent resultIntent = new Intent();
+                            resultIntent.putExtra("gameDeleted", true);
+                            setResult(RESULT_OK, resultIntent);
+                            // Fermer l'activité
+                            finish();
+                        } else {
+                            android.widget.Toast.makeText(this, "Failed to remove game from gamelist",
+                                    android.widget.Toast.LENGTH_SHORT).show();
+                        }
+                    })
+                    .setNegativeButton("CANCEL", null)
+                    .show();
         });
-        
-        
+
         // Appliquer le thème aux boutons du footer
         saveButton.setIconTint(android.content.res.ColorStateList.valueOf(android.graphics.Color.BLACK));
         saveButton.setTextColor(android.content.res.ColorStateList.valueOf(android.graphics.Color.BLACK));
@@ -2211,7 +2420,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         deleteButton.setIconTint(android.content.res.ColorStateList.valueOf(primaryColor));
         deleteButton.setTextColor(android.content.res.ColorStateList.valueOf(primaryColor));
         deleteButton.setTypeface(android.graphics.Typeface.MONOSPACE);
-        
+
         // Appliquer le fond au dialog
         dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
     }
@@ -2242,7 +2451,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         });
         popupMenu.show();
     }
-    
+
     private void openConsoleSettings() {
         Intent intent = new Intent(this, ConsoleConfigActivity.class);
         intent.putExtra("console", game.getConsole());
@@ -2255,26 +2464,64 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
         openGameInfoDialog();
     }
-    
+
     private void openGameInfoDialog() {
-        if (currentGameCRC == null || currentGameCRC.isEmpty()) {
-            Toast.makeText(this, "Game info not available yet", Toast.LENGTH_SHORT).show();
-            return;
+        if (currentGameCRC != null && !currentGameCRC.isEmpty()) {
+            // CRC Available - Show immediately
+            showGameInfoDialogInternal(currentGameCRC, currentGameInfo);
+        } else {
+            // CRC Missing - Try Name Fallback (Async)
+            Toast.makeText(this, "🔍 Searching game info...", Toast.LENGTH_SHORT).show();
+            new Thread(() -> {
+                final com.retroplay.database.GameInfo info = com.retroplay.database.DatabaseManager.INSTANCE
+                        .lookupGameByName(game.getName(), game.getConsole());
+
+                runOnUiThread(() -> {
+                    if (info != null) {
+                        Log.i(TAG, "✅ Game Info found via Name Fallback: " + info.getName());
+                        // Update local cache
+                        currentGameCRC = info.getCrc();
+                        currentGameInfo = info;
+                        // Show dialog
+                        showGameInfoDialogInternal(currentGameCRC, currentGameInfo);
+                        // Refresh button (now that we have CRC)
+                        updateGameInfoButtonState();
+                    } else {
+                        Log.w(TAG, "❌ Game Info lookup failed for: " + game.getName());
+                        Toast.makeText(this, "Game info not found in database", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }).start();
         }
+    }
+
+    private void showGameInfoDialogInternal(String crc, com.retroplay.database.GameInfo info) {
+        // Determine Config ID (Priority: Serial > CRC > NameFallback)
+        String configId = crc;
+        if (currentPsxSerial != null) {
+            Log.i(TAG, "[Config] Using PSX Serial as Config ID: " + currentPsxSerial);
+            configId = currentPsxSerial;
+        } else if (configId == null || configId.isEmpty()) {
+            // Should not happen here as crc is checked, but safety first
+            String safeName = game.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
+            Log.w(TAG, "[Config] No CRC/Serial. Using Name as ID: " + safeName);
+            configId = safeName;
+        }
+
         GameInfoDialogFragment.show(
-            getSupportFragmentManager(),
-            currentGameCRC,
-            game.getConsole(),
-            game.getName(),
-            currentGameInfo
-        );
+                getSupportFragmentManager(),
+                crc != null ? crc : "", // Lookup ID (for DB info)
+                configId, // Config ID (for Per-Game Config)
+                game.getConsole(),
+                game.getName(),
+                info);
         setGameInfoDialogVisible(true);
     }
-    
+
     private GameInfoDialogFragment getGameInfoDialog() {
         return (GameInfoDialogFragment) getSupportFragmentManager().findFragmentByTag(GAME_INFO_DIALOG_TAG);
     }
-    
+
     private boolean dismissGameInfoDialog() {
         GameInfoDialogFragment fragment = getGameInfoDialog();
         if (fragment != null) {
@@ -2284,27 +2531,26 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
         return false;
     }
-    
+
     private void registerGameInfoDialogCallbacks() {
         getSupportFragmentManager().setFragmentResultListener(
-            GAME_INFO_DIALOG_RESULT_KEY,
-            this,
-            (requestKey, bundle) -> {
-                String event = bundle.getString(GAME_INFO_DIALOG_EVENT_KEY);
-                if (GAME_INFO_DIALOG_EVENT_SHOW.equals(event)) {
-                    setGameInfoDialogVisible(true);
-                } else if (GAME_INFO_DIALOG_EVENT_DISMISS.equals(event)) {
-                    setGameInfoDialogVisible(false);
-                }
-            }
-        );
+                GAME_INFO_DIALOG_RESULT_KEY,
+                this,
+                (requestKey, bundle) -> {
+                    String event = bundle.getString(GAME_INFO_DIALOG_EVENT_KEY);
+                    if (GAME_INFO_DIALOG_EVENT_SHOW.equals(event)) {
+                        setGameInfoDialogVisible(true);
+                    } else if (GAME_INFO_DIALOG_EVENT_DISMISS.equals(event)) {
+                        setGameInfoDialogVisible(false);
+                    }
+                });
     }
-    
+
     private void syncGameInfoDialogState() {
         boolean dialogVisible = getGameInfoDialog() != null;
         setGameInfoDialogVisible(dialogVisible);
     }
-    
+
     private void setGameInfoDialogVisible(boolean visible) {
         if (isGameInfoDialogVisible == visible) {
             updateGameInfoButtonState();
@@ -2313,15 +2559,17 @@ public class GameDetailsActivity extends AppCompatActivity {
         isGameInfoDialogVisible = visible;
         updateGameInfoButtonState();
     }
-    
+
     private void updateGameInfoButtonState() {
         if (gameInfoButton == null) {
             return;
         }
-        boolean enabled = currentGameCRC != null && !currentGameCRC.isEmpty();
+        // ALWAYS ENABLED - We now support Name Fallback lookup if CRC is missing
+        boolean enabled = true;
+
         gameInfoButton.setEnabled(enabled);
         gameInfoButton.setAlpha(enabled ? 1f : 0.5f);
-        gameInfoButton.setChecked(enabled && isGameInfoDialogVisible);
+        gameInfoButton.setChecked(isGameInfoDialogVisible); // Just check visibility state
         ThemeManager themeManager = ThemeManager.getInstance(this);
         ColorStateList accent = ColorStateList.valueOf(themeManager.getPrimaryColor(this));
         ColorStateList headerBackground = ColorStateList.valueOf(themeManager.getHeaderBackgroundColor(this));
@@ -2344,7 +2592,8 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Utiliser directement le chemin local retourné par getFile()
         String localPath = game.getFile();
         if (localPath != null && !localPath.isEmpty()) {
-            // Les chemins de fichiers locaux supportent les caractères spéciaux (!, +, etc.) directement
+            // Les chemins de fichiers locaux supportent les caractères spéciaux (!, +,
+            // etc.) directement
             File directFile = new File(localPath);
             if (directFile.exists()) {
                 Log.i(TAG, "ROM file found via getFile(): " + directFile.getAbsolutePath());
@@ -2359,12 +2608,13 @@ public class GameDetailsActivity extends AppCompatActivity {
         if (rawPath != null && !rawPath.isEmpty()) {
             // Nettoyer le chemin (enlever "./" si présent)
             String cleanPath = rawPath.startsWith("./") ? rawPath.substring(2) : rawPath;
-            // Note: Les caractères spéciaux (!, +, etc.) sont supportés directement dans les chemins de fichiers Android
+            // Note: Les caractères spéciaux (!, +, etc.) sont supportés directement dans
+            // les chemins de fichiers Android
 
             // Extraire le nom du fichier depuis cleanPath
             int lastSlash = cleanPath.lastIndexOf('/');
             String fileName = lastSlash >= 0 ? cleanPath.substring(lastSlash + 1) : cleanPath;
-            
+
             // Méthode robuste: chercher le fichier en listant le répertoire
             // Cela gère correctement les caractères spéciaux (!, +, &, etc.)
             File consoleDirFile = new File(baseDir + consoleDir);
@@ -2394,14 +2644,14 @@ public class GameDetailsActivity extends AppCompatActivity {
                 Log.i(TAG, "ROM file found via console dir: " + remapped.getAbsolutePath());
                 return remapped.getAbsolutePath();
             }
-            
+
             // Essayer juste le nom de fichier dans le répertoire de console
             File finalCandidate = new File(baseDir + consoleDir + "/" + fileName);
             if (finalCandidate.exists()) {
                 Log.i(TAG, "ROM file found by filename only: " + finalCandidate.getAbsolutePath());
                 return finalCandidate.getAbsolutePath();
             }
-            
+
             // Dernier recours: retourner le chemin même s'il n'existe pas
             Log.w(TAG, "ROM file not found, using fallback path: " + baseDir + consoleDir + "/" + fileName);
             return baseDir + consoleDir + "/" + fileName;

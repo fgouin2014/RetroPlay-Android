@@ -4,70 +4,77 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
-import com.retroplay.config.RetroPlayConfigManager
-import com.retroplay.database.DatabaseManager
-
-// ... (existing imports)
-
-    // ...
-
 import com.retroplay.CoreVariable
 
 /**
- * ViewModel for RetroArchEmulatorActivity.
+ * ViewModel for NativeComposeEmulatorActivity.
  * Holds UI state to survive configuration changes and separate concerns.
  */
-class RetroArchEmulatorViewModel : ViewModel() {
+class NativeEmulatorViewModel : ViewModel() {
 
     // UI Visibility States
     val showMainMenu = mutableStateOf(false)
     val showGamePadSettings = mutableStateOf(false)
-    val showAdvancedOverlaySettings = mutableStateOf(false)
+    val showAdvancedRadialSettings = mutableStateOf(false)
     val showQuickMenu = mutableStateOf(false)
     val overlaysVisible = mutableStateOf(true)
-    
-    // Dialog States
+    val showGameInfoDialog = mutableStateOf(false)
+    val showDiskSwapperDialog = mutableStateOf(false)
     val showCoreErrorDialog = mutableStateOf(false)
     val showCoreSelectorFromError = mutableStateOf(false)
     val showCoreChangeConfirmDialog = mutableStateOf(false)
     
-    // Turbo menus
-    val showTurboSettings = mutableStateOf(false)
-    val showQuickTurbo = mutableStateOf(false)
-    
-    // États pour DIP Switches, Core Options, Game Info et Cheats
-    val showDipSwitchDialog = mutableStateOf(false)
-    val showCoreOptionsDialog = mutableStateOf(false)
-    val showGameInfoDialog = mutableStateOf(false)
-    
-    // État pour le dialog des extensions N64
-    val showN64ExtensionsDialog = mutableStateOf(false)
-    val n64ExtensionsInfo = mutableStateOf<List<Pair<Int, String>>>(emptyList())
-    
-    val showCheatsDialog = mutableStateOf(false)
-    val showSmartConfigDialog = mutableStateOf(false)
-    val showPerGameConfigDialog = mutableStateOf(false)
-    val showDiskSwapperDialog = mutableStateOf(false)
-    
     // Core Error State
     var failedCoreName = mutableStateOf("")
     var coreChangeConfirmMessage = mutableStateOf("")
-    
-    // Per-Game Config State
-    var perGameConfigCRC: String? = null
-    var perGameConfigGameName = mutableStateOf("")
-    
+
+    // Quick Actions Bar
+    val quickActionsBarVisible = mutableStateOf(true)
+    val quickActionsBarAutoHideEnabled = mutableStateOf(true)
+    val quickActionsBarAutoHideTimer = mutableStateOf(0L)
+
+    // Emulation State
+    val isFastForwardActive = mutableStateOf(false)
+    val audioMuted = mutableStateOf(false)
+    var fastForwardRatio = mutableStateOf(2f)
+
     // Core Variables (DIP Switches / Core Options)
+    val showDipSwitchDialog = mutableStateOf(false)
+    val showCoreOptionsDialog = mutableStateOf(false)
+    
     val allCoreVariables = mutableStateListOf<CoreVariable>()
     val dipSwitches = mutableStateListOf<CoreVariable>()
     val coreOptions = mutableStateListOf<CoreVariable>()
-    
+
     // Disk Swapper State
     val availableDisksState = mutableIntStateOf(0)
     val currentDiskState = mutableIntStateOf(0)
+
+    // Turbo States
+    val showTurboSettings = mutableStateOf(false)
+    val showQuickTurbo = mutableStateOf(false)
+
+    // Smart Config & Per-Game Config States
+    val showSmartConfigDialog = mutableStateOf(false)
+    val showPerGameConfigDialog = mutableStateOf(false)
+
+    fun toggleQuickActionsBar() {
+        quickActionsBarVisible.value = !quickActionsBarVisible.value
+    }
+
+    fun toggleFastForward() {
+        isFastForwardActive.value = !isFastForwardActive.value
+    }
     
-    // Controller Configuration Flag
-    var controllerConfigurationDone = false
+    fun toggleAudioMute() {
+        audioMuted.value = !audioMuted.value
+    }
+
+    fun resetState() {
+        showMainMenu.value = false
+        showGamePadSettings.value = false
+        // ... reset logic if needed
+    }
 
     // Config ID State (Resolved Identity)
     var gameCRC: String? = null
@@ -90,10 +97,10 @@ class RetroArchEmulatorViewModel : ViewModel() {
         
         // 2. If CRC is missing (e.g. Save State), try Name Fallback in DB
         if (gameCRC == null) {
-            val gameInfo = DatabaseManager.lookupGameByName(initialGameName, console)
+            val gameInfo = com.retroplay.database.DatabaseManager.lookupGameByName(initialGameName, console)
             if (gameInfo != null) {
                 gameCRC = gameInfo.crc
-                RetroPlayConfigManager.updateConfigValue("last_resolved_crc", gameInfo.crc) // Optional debug
+                com.retroplay.config.RetroPlayConfigManager.updateConfigValue("last_resolved_crc", gameInfo.crc)
             }
         }
         
@@ -102,19 +109,17 @@ class RetroArchEmulatorViewModel : ViewModel() {
         
         // Priority 1: Use passed Overrides (from GameDetailsActivity)
         if (overridePsxSerial != null) {
-             android.util.Log.i("RetroArchViewModel", "[Identity] Using passed PSX Serial: $overridePsxSerial")
+             android.util.Log.i("NativeEmulatorViewModel", "[Identity] Using passed PSX Serial: $overridePsxSerial")
              customConfigId = overridePsxSerial
-             // Also store it as if extracted locally so logic works elsewhere
-             // (No specific field for serial here aside from customConfigId)
         } else if (overrideConfigId != null) {
-             android.util.Log.i("RetroArchViewModel", "[Identity] Using passed Config ID: $overrideConfigId")
+             android.util.Log.i("NativeEmulatorViewModel", "[Identity] Using passed Config ID: $overrideConfigId")
              customConfigId = overrideConfigId
         } else {
              // Priority 2: Extract PSX Serial locally (if not passed)
             if (console == "psx" || console == "ps1" || console == "playstation") {
                  val serial = com.retroplay.util.PsxSerialExtractor.extractSerial(romPath)
                  if (serial != null) {
-                     android.util.Log.i("RetroArchViewModel", "[Identity] Extracted Serial locally: $serial")
+                     android.util.Log.i("NativeEmulatorViewModel", "[Identity] Extracted Serial locally: $serial")
                      customConfigId = serial
                  }
             }
@@ -123,36 +128,10 @@ class RetroArchEmulatorViewModel : ViewModel() {
         // Priority 3: Fallback to Name if still null (ensures Config is always usable)
         if (customConfigId == null) {
             val safeName = initialGameName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-            android.util.Log.w("RetroArchViewModel", "[Identity] No ID found. Using Name Fallback: $safeName")
+            android.util.Log.w("NativeEmulatorViewModel", "[Identity] No ID found. Using Name Fallback: $safeName")
             customConfigId = safeName
         }
         
         return customConfigId
-    }
-
-    fun toggleQuickMenu() {
-        showQuickMenu.value = !showQuickMenu.value
-    }
-
-    fun toggleOverlaysVisibility() {
-        overlaysVisible.value = !overlaysVisible.value
-    }
-
-    fun resetState() {
-        showMainMenu.value = false
-        showGamePadSettings.value = false
-        showAdvancedOverlaySettings.value = false
-        showQuickMenu.value = false
-        showCoreErrorDialog.value = false
-        showTurboSettings.value = false
-        showQuickTurbo.value = false
-        showDipSwitchDialog.value = false
-        showCoreOptionsDialog.value = false
-        showGameInfoDialog.value = false
-        showN64ExtensionsDialog.value = false
-        showCheatsDialog.value = false
-        showSmartConfigDialog.value = false
-        showPerGameConfigDialog.value = false
-        showDiskSwapperDialog.value = false
     }
 }

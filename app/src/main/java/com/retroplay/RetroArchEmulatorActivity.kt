@@ -181,6 +181,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private val showPerGameConfigDialog = mutableStateOf(false)
     private val showDiskSwapperDialog = mutableStateOf(false)
     private var perGameConfigCRC: String? = null
+    private var customConfigId: String? = null // Separate ID for Config (e.g. Serial) vs Content (CRC)
     private var perGameConfigGameName: String = ""
     private var allCoreVariables = mutableStateListOf<CoreVariable>()
     private val dipSwitches = mutableStateListOf<CoreVariable>()
@@ -352,8 +353,22 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         val config = retroPlayConfig
         
         // SAFETY: Calculate optimal settings to prevent OOM crashes
-        // This applies ALWAYS, even if SmartConfig is disabled
-        val gameInfo = com.retroplay.database.GameInfo(
+        // Try to get REAL GameInfo from DB for accurate SmartConfig (Genre-based)
+        var realGameInfo: com.retroplay.database.GameInfo? = null
+        if (!gameCRC.isNullOrEmpty()) {
+            realGameInfo = com.retroplay.database.DatabaseManager.lookupGame(gameCRC!!, console)
+        }
+        if (realGameInfo == null) {
+            realGameInfo = com.retroplay.database.DatabaseManager.lookupGameByName(gameName, console)
+        }
+
+        if (realGameInfo != null) {
+             Log.i(TAG, "[SmartConfig] Using Metadata: ${realGameInfo.name} [${realGameInfo.genre}]")
+        } else {
+             Log.w(TAG, "[SmartConfig] Metadata not found, using generic Action profile")
+        }
+
+        val gameInfo = realGameInfo ?: com.retroplay.database.GameInfo(
             name = gameName,
             crc = "",  // CRC not needed for buffer calculation
             console = console,
@@ -1398,8 +1413,36 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         val gameId = rawGameId  // legacy usage for config loading
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
         
-        // Load per-game config (if exists)
-        applyPerGameConfig(gameCRC)
+        // Initialize ViewModel
+        val viewModel = androidx.lifecycle.ViewModelProvider(this).get(com.retroplay.viewmodels.RetroArchEmulatorViewModel::class.java)
+        
+        // Read override Identity from Intent (passed by GameDetailsActivity)
+        val psxSerial = intent.getStringExtra("psxSerial")
+        val intentConfigId = intent.getStringExtra("configId")
+
+        // MODULAR IDENTITY RESOLUTION:
+        // Resolve Game Identity (CRC, Serial, or Name) via ViewModel
+        // This handles DB lookup fallback (if CRC invalid) and Config ID priority (Serial > CRC > Name)
+        val resolvedId = viewModel.resolveGameIdentity(
+            gameName, 
+            gameCRC, 
+            console, 
+            romPath,
+            overrideConfigId = intentConfigId,
+            overridePsxSerial = psxSerial
+        )
+        
+        // Update local variables from ViewModel state
+        gameCRC = viewModel.gameCRC
+        customConfigId = viewModel.customConfigId
+        
+        Log.i(TAG, "[DEBUG] Config Initialization Check (Modular):")
+        Log.i(TAG, "  - loadSlot: $loadSlot")
+        Log.i(TAG, "  - gameName: $gameName")
+        Log.i(TAG, "  - gameCRC (Resolved): $gameCRC")
+        Log.i(TAG, "  - customConfigId (Resolved): $customConfigId")
+        
+        applyPerGameConfig(customConfigId)
         
         // Détecter les jeux Zapper AVANT la création de GLRetroViewData
         isZapperGame = ZapperGameDetector.isZapperGame(gameName, console)
@@ -2145,12 +2188,13 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     showSmartConfigDialog.value = true
                 },
                 onPerGameConfig = {
-                    if (gameCRC != null) {
-                        perGameConfigCRC = gameCRC
+                    if (customConfigId != null) {
+                        perGameConfigCRC = customConfigId
                         perGameConfigGameName = gameName
                         showPerGameConfigDialog.value = true
                     }
                 },
+                configId = customConfigId,
                 // Quick Wins callbacks
                 onRewindPress = {
                     beginRewind()
@@ -3650,6 +3694,7 @@ fun ComposeEmulatorScreen(
     showTurboSettings: MutableState<Boolean> = mutableStateOf(false),
     showQuickTurbo: MutableState<Boolean> = mutableStateOf(false),
     gameCRC: String?,
+    configId: String?,
     loadedCheats: List<com.retroplay.cheat.CheatManager.Cheat>,
     overlaysVisible: MutableState<Boolean>,
     initialVariant: GamePadLayoutManager.LayoutVariant,
@@ -4470,6 +4515,7 @@ fun ComposeEmulatorScreen(
                     com.retroplay.retroarch.RetroArchMainMenu(
                         gameName = gameName,
                         gameCRC = gameCRC,
+                        configId = configId,
                         console = console,
                         prefs = prefs,
                         onDismiss = { showMainMenu.value = false },
@@ -4522,9 +4568,7 @@ fun ComposeEmulatorScreen(
                             onSmartConfig()
                         },
                         onPerGameConfig = {
-                            if (gameCRC != null) {
-                                onPerGameConfig()
-                            }
+                            onPerGameConfig()
                         },
                         onTurboSettings = {
                             showMainMenu.value = false

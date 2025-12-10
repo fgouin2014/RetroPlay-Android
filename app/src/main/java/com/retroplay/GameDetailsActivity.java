@@ -52,7 +52,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     private TextView gameReleaseDate;
     private TextView gameRating;
     private Button playButton;
-    private MaterialButton playNativeButton;
+    private MaterialButton playRetroPlayButton;
     private MaterialButton loadSaveButton;
     private MaterialButton cheatButton;
     private MaterialButton coreOverrideButton;
@@ -65,8 +65,8 @@ public class GameDetailsActivity extends AppCompatActivity {
     private TextView headerTitle;
     private FrameLayout pillWasm;
     private FrameLayout pillLoad;
-    private FrameLayout pillNative;
-    private LinearLayout nativeButtonsContainer;
+    private FrameLayout pillRetroPlay;
+    private LinearLayout retroPlayButtonsContainer;
     private FavoritesManager favoritesManager;
 
     private String currentGameCRC;
@@ -76,8 +76,6 @@ public class GameDetailsActivity extends AppCompatActivity {
     private String currentGalleryGameId;
 
     // Emulator Mode Toggle
-    private SwitchMaterial emulatorModeSwitch;
-    private TextView consoleDefaultInfo;
     private String currentConsole;
     private String currentGameId;
 
@@ -117,7 +115,6 @@ public class GameDetailsActivity extends AppCompatActivity {
         setupViews();
         populateGameDetails();
         setupButtons();
-        setupEmulatorModeToggle();
 
         syncGameInfoDialogState();
 
@@ -179,19 +176,15 @@ public class GameDetailsActivity extends AppCompatActivity {
         // gameRating n'existe pas dans le layout actuel, laisser null
         gameRating = null;
         playButton = findViewById(R.id.play_button);
-        playNativeButton = findViewById(R.id.play_native_button);
+        playRetroPlayButton = findViewById(R.id.play_native_button);
         loadSaveButton = findViewById(R.id.load_save_button);
         cheatButton = findViewById(R.id.cheat_button);
         coreOverrideButton = findViewById(R.id.core_override_button);
         viewGalleryButton = findViewById(R.id.view_gallery_button);
         pillWasm = findViewById(R.id.pill_wasm);
         pillLoad = findViewById(R.id.pill_load);
-        pillNative = findViewById(R.id.pill_native);
-        nativeButtonsContainer = findViewById(R.id.native_buttons_container);
-
-        // Emulator Mode Toggle
-        emulatorModeSwitch = findViewById(R.id.emulatorModeSwitch);
-        consoleDefaultInfo = findViewById(R.id.consoleDefaultInfo);
+        pillRetroPlay = findViewById(R.id.pill_native);
+        retroPlayButtonsContainer = findViewById(R.id.native_buttons_container);
     }
 
     /**
@@ -544,8 +537,8 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Play button (WASM)
         playButton.setOnClickListener(v -> launchGame());
 
-        // Play native button (cores natifs)
-        playNativeButton.setOnClickListener(v -> launchGameNative(0)); // 0 = nouvelle partie
+        // Play RetroPlay button
+        playRetroPlayButton.setOnClickListener(v -> launchGameRetroPlay(0)); // 0 = nouvelle partie
 
         // Load save button (ouvre menu de sélection de slot)
         loadSaveButton.setOnClickListener(v -> showSlotSelectionDialog());
@@ -559,16 +552,14 @@ public class GameDetailsActivity extends AppCompatActivity {
 
         viewGalleryButton.setOnClickListener(v -> openScreenshotGallery());
 
-        // Afficher les boutons natifs pour TOUTES les consoles
-        // L'utilisateur peut maintenant choisir entre WASM et NATIVE pour n'importe
-        // quelle console
+        // Afficher les boutons RetroPlay pour TOUTES les consoles
         String console = game.getConsole().toLowerCase();
-        nativeButtonsContainer.setVisibility(View.VISIBLE);
+        retroPlayButtonsContainer.setVisibility(View.VISIBLE);
 
         // Vérifier si des sauvegardes existent dans les slots
         checkAndShowLoadSaveButton();
 
-        // Dual/Triple-Color Pill - WASM (Red), LOAD (Blue), and Native (Green)
+        // Dual/Triple-Color Pill - WASM (Red), LOAD (Blue), and RetroPlay (Green)
         pillWasm.setOnClickListener(v -> {
             Log.i(TAG, "WASM pill clicked - launching EmulatorJS");
             launchGame();
@@ -579,9 +570,9 @@ public class GameDetailsActivity extends AppCompatActivity {
             showSlotSelectionDialog();
         });
 
-        pillNative.setOnClickListener(v -> {
-            Log.i(TAG, "NATIVE pill clicked - launching RetroArch");
-            launchGameNative(0); // 0 = new game
+        pillRetroPlay.setOnClickListener(v -> {
+            Log.i(TAG, "RETROPLAY pill clicked - launching RetroArch");
+            launchGameRetroPlay(0); // 0 = new game
         });
     }
 
@@ -589,7 +580,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         // Rafraîchir le bouton de core override au cas où il aurait été changé
-        // depuis NativeComposeEmulatorActivity (via le dialog d'erreur)
+        // depuis l'activité d'émulation
         updateCoreOverrideButton();
         if (favoriteButton != null) {
             updateFavoriteButton();
@@ -690,7 +681,7 @@ public class GameDetailsActivity extends AppCompatActivity {
     private long lastNativeLaunchTime = 0;
     private static final long MIN_NATIVE_LAUNCH_INTERVAL_MS = 1000; // Minimum 1 seconde entre deux lancements natifs
 
-    private void launchGameNative(int slot) {
+    private void launchGameRetroPlay(int slot) {
         // Vérifier le délai minimum entre deux lancements natifs
         // Nécessaire car LibretroDroid ne peut pas charger le même core si l'ancien
         // n'est pas libéré
@@ -704,7 +695,7 @@ public class GameDetailsActivity extends AppCompatActivity {
             Toast.makeText(this, "Please wait...", Toast.LENGTH_SHORT).show();
 
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                launchGameNative(slot);
+                launchGameRetroPlay(slot);
             }, remainingDelay);
             return;
         }
@@ -712,7 +703,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         lastNativeLaunchTime = currentTime;
 
         String slotInfo = (slot == 0) ? "[NEW GAME]" : "[LOAD SLOT " + slot + "]";
-        Log.i(TAG, "Lancement du jeu (NATIVE COMPOSE): " + game.getName() + " " + slotInfo);
+        Log.i(TAG, "Lancement du jeu (RETROPLAY): " + game.getName() + " " + slotInfo);
 
         // Utiliser resolveRomPath() pour gérer correctement les caractères spéciaux (!,
         // +, &, etc.)
@@ -1450,10 +1441,7 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
 
         // Game info texts
-        if (gameDescription != null) {
-            gameDescription.setTextColor(textSecondaryColor);
-            gameDescription.setAlpha(1.0f);
-        }
+
         // Les TextViews dans les cards (genre, players, release date) utilisent
         // primaryColor pour être visibles
         if (gameGenre != null) {
@@ -1470,10 +1458,10 @@ public class GameDetailsActivity extends AppCompatActivity {
         }
 
         // Action buttons
-        if (playNativeButton != null) {
-            playNativeButton.setBackgroundTintList(ColorStateList.valueOf(primaryColor));
-            playNativeButton.setIconTint(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_black)));
-            playNativeButton.setAlpha(1.0f);
+        if (playRetroPlayButton != null) {
+            playRetroPlayButton.setBackgroundTintList(ColorStateList.valueOf(primaryColor));
+            playRetroPlayButton.setIconTint(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.kitt_black)));
+            playRetroPlayButton.setAlpha(1.0f);
         }
 
         if (loadSaveButton != null) {
@@ -1517,10 +1505,6 @@ public class GameDetailsActivity extends AppCompatActivity {
         // Note: Pills are typically styled via their child TextViews
 
         // Console default info
-        if (consoleDefaultInfo != null) {
-            consoleDefaultInfo.setTextColor(textSecondaryColor);
-            consoleDefaultInfo.setAlpha(1.0f);
-        }
 
         // Header background
         android.view.View detailsHeader = findViewById(R.id.details_header);
@@ -1534,12 +1518,6 @@ public class GameDetailsActivity extends AppCompatActivity {
             gameInfoButton.setBackgroundTintList(ColorStateList.valueOf(headerBackgroundColor));
             gameInfoButton.setStrokeColor(ColorStateList.valueOf(primaryColor));
             gameInfoButton.setAlpha(1.0f);
-        }
-
-        // Emulator Mode Switch
-        if (emulatorModeSwitch != null) {
-            emulatorModeSwitch.setThumbTintList(ColorStateList.valueOf(primaryColor));
-            emulatorModeSwitch.setTrackTintList(ColorStateList.valueOf(headerBackgroundColor));
         }
 
         // MaterialCardView - appliquer le thème aux cards
@@ -2117,71 +2095,13 @@ public class GameDetailsActivity extends AppCompatActivity {
 
     /**
      * Get the appropriate emulator activity class based on user preference
-     * 
-     * Two separate activities for clean separation:
-     * - NATIVE mode: NativeComposeEmulatorActivity (Radial/Lemuroid gamepads)
-     * - RETROARCH mode: RetroArchEmulatorActivity (Pure RetroArch overlays)
-     * 
+     *
      * @param console Console ID (e.g., "nes", "snes", "psx")
-     * @return Class of emulator activity based on effective mode
+     * @return Class of emulator activity
      */
     private Class<?> getEmulatorActivityClass(String console) {
-        // Use effective mode (game override or console default)
-        GamepadPreferenceManager.EmulatorMode effectiveMode = GamepadPreferenceManager.INSTANCE.getEffectiveMode(this,
-                currentConsole, currentGameId);
-
-        if (effectiveMode == GamepadPreferenceManager.EmulatorMode.RETROARCH) {
-            Log.i(TAG, "Launching RetroArchEmulatorActivity for " + console + "/" + currentGameId);
-            return RetroArchEmulatorActivity.class;
-        } else {
-            Log.i(TAG, "Launching NativeComposeEmulatorActivity for " + console + "/" + currentGameId);
-            return NativeComposeEmulatorActivity.class;
-        }
-    }
-
-    /**
-     * Setup the emulator mode toggle switch
-     */
-    private void setupEmulatorModeToggle() {
-        // Load console default mode
-        GamepadPreferenceManager.EmulatorMode consoleMode = GamepadPreferenceManager.INSTANCE.loadMode(this,
-                currentConsole);
-
-        // Load effective mode (game override or console default)
-        GamepadPreferenceManager.EmulatorMode effectiveMode = GamepadPreferenceManager.INSTANCE.getEffectiveMode(this,
-                currentConsole, currentGameId);
-
-        // Check if game has an override
-        boolean hasOverride = GamepadPreferenceManager.INSTANCE.hasGameOverride(this, currentConsole, currentGameId);
-
-        // Set switch state (true = RETROARCH, false = NATIVE)
-        emulatorModeSwitch.setChecked(effectiveMode == GamepadPreferenceManager.EmulatorMode.RETROARCH);
-
-        // Update console default info
-        String consoleModeLabel = consoleMode == GamepadPreferenceManager.EmulatorMode.NATIVE ? "NATIVE" : "RETROARCH";
-        consoleDefaultInfo.setText("Console default: " + consoleModeLabel);
-
-        // Set up switch listener
-        emulatorModeSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            GamepadPreferenceManager.EmulatorMode selectedMode = isChecked
-                    ? GamepadPreferenceManager.EmulatorMode.RETROARCH
-                    : GamepadPreferenceManager.EmulatorMode.NATIVE;
-
-            if (selectedMode == consoleMode) {
-                // Same as console default, remove override
-                GamepadPreferenceManager.INSTANCE.removeGameOverride(this, currentConsole, currentGameId);
-                Log.i(TAG, "Removed game override for " + currentGameId + " (now using console default)");
-            } else {
-                // Different from console default, save override
-                GamepadPreferenceManager.INSTANCE.saveGameOverride(this, currentConsole, currentGameId, selectedMode);
-                Log.i(TAG, "Saved game override for " + currentGameId + ": " + selectedMode);
-            }
-
-            // No need to show restart dialog - emulation is not running at this point
-        });
-
-        Log.i(TAG, "Emulator mode toggle setup - Console: " + consoleMode + ", Effective: " + effectiveMode
-                + ", Has Override: " + hasOverride);
+        // RetroPlay Mode: Always use RetroArchEmulatorActivity
+        return RetroArchEmulatorActivity.class;
     }
 
     @Override

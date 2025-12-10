@@ -97,6 +97,40 @@ object DatabaseManager {
         
         return gameCache[console]?.get(crc)
     }
+
+    /**
+     * Lookup game by Name when CRC is unavailable (e.g. Save States)
+     * Exact case-insensitive match has priority, then fuzzy contains.
+     */
+    fun lookupGameByName(name: String, console: String): GameInfo? {
+        // Ensure DB is loaded
+        loadDatabase(console)
+        
+        val consoleCache = gameCache[console] ?: return null
+        val normalizedName = name.lowercase().trim()
+        
+        // 1. Exact match (case insensitive) -> O(N) but N is ~1000-3000
+        val exactMatch = consoleCache.values.find { it.name.lowercase() == normalizedName }
+        if (exactMatch != null) {
+            Log.i(TAG, "Game found by NAME (Exact): ${exactMatch.name} (CRC: ${exactMatch.crc})")
+            return exactMatch
+        }
+        
+        // 2. Contains match (if name is "Super Mario Bros" and DB has "Super Mario Bros (USA)")
+        // We look for the DB entry that STARTS with the requested name
+        val startsWith = consoleCache.values.find { it.name.lowercase().startsWith(normalizedName) }
+        if (startsWith != null) {
+             Log.i(TAG, "Game found by NAME (StartsWith): ${startsWith.name} (CRC: ${startsWith.crc})")
+             return startsWith
+        }
+        
+        Log.w(TAG, "Game lookup by NAME failed for: $name")
+        return null
+    }
+
+    suspend fun lookupGameByNameAsync(name: String, console: String): GameInfo? = withContext(Dispatchers.IO) {
+        lookupGameByName(name, console)
+    }
     
     fun loadDatabase(console: String) {
         if (gameCache.containsKey(console)) {

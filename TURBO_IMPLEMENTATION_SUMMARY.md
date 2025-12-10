@@ -305,3 +305,4 @@ Plus réaliste, compatible RetroArch, meilleur pour la plupart des jeux
 **Lignes de code:** ~450 lignes (4 nouveaux fichiers + 3 modifiés)  
 **Méthodologie:** Nos Rules - Basé sur audit exhaustif RetroArch officiel
 
+

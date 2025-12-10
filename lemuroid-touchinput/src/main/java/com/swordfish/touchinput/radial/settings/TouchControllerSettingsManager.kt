@@ -32,6 +32,9 @@ class TouchControllerSettingsManager(private val sharedPreferences: SharedPrefer
         val swapAnalogSticks: Boolean = false,
         val invertAnalogLeftY: Boolean = false,
         val invertAnalogRightY: Boolean = false,
+        val lightgunTriggerOnTouch: Boolean = true,
+        val lightgunTriggerDelay: Int = 0,
+        val lightgunAllowOffscreen: Boolean = false,
     )
 
     private fun computeInsetsPaddings(density: Density, insets: WindowInsets): PaddingValues {

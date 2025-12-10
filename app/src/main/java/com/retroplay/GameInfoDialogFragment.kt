@@ -19,6 +19,8 @@ import androidx.fragment.app.FragmentManager
 import androidx.core.os.bundleOf
 import com.retroplay.database.DatabaseManager
 import com.retroplay.database.GameInfo
+import com.retroplay.ui.dialogs.GameInfoDialog
+import com.retroplay.ui.dialogs.PerGameConfigDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

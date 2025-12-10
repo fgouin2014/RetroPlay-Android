@@ -233,11 +233,11 @@
 
 
 
-        <!-- Native Settings Section -->
+        <!-- RetroArch Settings Section -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="📱 NATIVE SETTINGS"
+            android:text="📱 RETROARCH SETTINGS"
             android:textSize="16sp"
             android:textColor="@color/kitt_red"
             android:fontFamily="monospace"
@@ -260,79 +260,7 @@
                 android:padding="12dp">
 
                 <!-- EMULATOR MODE (All Consoles) -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginBottom="16dp"
-                    android:background="@color/kitt_dark_red"
-                    android:padding="16dp">
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="EMULATOR MODE"
-                        android:textSize="14sp"
-                        android:textColor="@color/kitt_red"
-                        android:fontFamily="monospace"
-                        android:textStyle="bold"
-                        android:layout_marginBottom="16dp"
-                        android:gravity="center" />
-
-                    <RadioGroup
-                        android:id="@+id/emulatorModeRadioGroup"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <RadioButton
-                            android:id="@+id/radioNativeMode"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="NATIVE (Default - Radial Gamepad)"
-                            android:textSize="13sp"
-                            android:textColor="@android:color/white"
-                            android:fontFamily="monospace"
-                            android:textStyle="bold"
-                            android:checked="true"
-                            android:padding="8dp" />
-
-                        <RadioButton
-                            android:id="@+id/radioRetroArchMode"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="RETROARCH (Pure RetroArch Overlays)"
-                            android:textSize="13sp"
-                            android:textColor="@android:color/white"
-                            android:fontFamily="monospace"
-                            android:textStyle="bold"
-                            android:padding="8dp" />
-                    </RadioGroup>
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="NATIVE: Lemuroid/Radial gamepad with adjustable settings.\nRETROARCH: Pure RetroArch overlays system (optimized, lightweight)."
-                        android:textSize="11sp"
-                        android:textColor="#ff6666"
-                        android:fontFamily="monospace"
-                        android:layout_marginTop="12dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/resetEmulatorModeButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="RESET TO DEFAULT"
-                        android:textSize="11sp"
-                        android:fontFamily="monospace"
-                        android:textStyle="bold"
-                        android:layout_gravity="center"
-                        android:layout_marginTop="12dp"
-                        app:cornerRadius="8dp"
-                        app:backgroundTint="@color/kitt_medium_red"
-                        app:strokeColor="@color/kitt_red"
-                        app:strokeWidth="1dp" />
-                </LinearLayout>
 
                 <!-- Controller Ports Configuration (All Consoles) -->
                 <LinearLayout

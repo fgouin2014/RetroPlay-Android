@@ -8,19 +8,19 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,7 +53,7 @@ fun QuickActionsBar(
     onQuickSave: () -> Unit,
     onQuickLoad: () -> Unit,
     onOpenSettings: () -> Unit,
-    onCycleShader: () -> Unit = {},
+    onShaderSelected: (String) -> Unit = {},
     currentShaderName: String = "None",
     modifier: Modifier = Modifier
 ) {
@@ -77,16 +77,14 @@ fun QuickActionsBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .wrapContentHeight()  // Ne prendre que la hauteur nécessaire, pas toute la hauteur
+            .wrapContentHeight()
             .padding(top = statusBarHeight.value)
             .background(BarBackground)
             .pointerInteropFilter { event ->
-                // Détecter les touches sur la barre pour réafficher (auto-hide)
                 if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-                    // Le timer sera réinitialisé par l'activité parente
-                    // On retourne false pour laisser passer les touches aux boutons
+                    // Touch on bar resets auto-hide timer in parent
                 }
-                false  // Ne pas consommer l'événement
+                false
             }
     ) {
         Row(
@@ -129,11 +127,57 @@ fun QuickActionsBar(
                 onClick = onQuickLoad
             )
 
-            IconAction(
-                iconRes = R.drawable.ic_palette_24,
-                tint = if (currentShaderName != "None (Fast)") ShaderActiveColor else DefaultIconColor,
-                onClick = onCycleShader
-            )
+            // Shader Selection (Spinner/Dropdown)
+            Box(contentAlignment = Alignment.Center) {
+                val showShaderMenu = remember { mutableStateOf(false) }
+
+                IconAction(
+                    iconRes = R.drawable.ic_palette_24,
+                    tint = if (currentShaderName != "None (Fast)") ShaderActiveColor else DefaultIconColor,
+                    onClick = { showShaderMenu.value = true }
+                )
+
+                DropdownMenu(
+                    expanded = showShaderMenu.value,
+                    onDismissRequest = { showShaderMenu.value = false },
+                    modifier = Modifier.background(Color(0xFF2D2D2D))
+                ) {
+                    DropdownMenuItem(
+                        text = { 
+                            Text(
+                                "Shaders", 
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                            ) 
+                        },
+                        onClick = {},
+                        enabled = false
+                    )
+                    
+                    com.retroplay.shader.ShaderManager.ShaderPreset.values().forEach { preset ->
+                        val isSelected = currentShaderName == preset.name
+                        DropdownMenuItem(
+                            text = { 
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = preset.icon,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                    Text(
+                                        text = preset.displayName,
+                                        color = if (isSelected) ShaderActiveColor else Color.White,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            },
+                            onClick = {
+                                onShaderSelected(preset.name)
+                                showShaderMenu.value = false
+                            }
+                        )
+                    }
+                }
+            }
 
             IconAction(
                 iconRes = R.drawable.ic_settings_24,
@@ -240,4 +284,3 @@ private val AudioMuteColor = Color(0xFFF44336)
 private val ShaderActiveColor = Color(0xFFB388FF)
 private val AccentUtilityColor = Color(0xFF81D4FA)
 private val AccentSettingsColor = Color(0xFFFFB74D)
-

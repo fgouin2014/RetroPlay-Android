@@ -114,7 +114,27 @@ object PadKitHelper {
             marginY = prefs.getFloat("${key}_marginY", 0.0f),
             swapAnalogSticks = prefs.getBoolean("${key}_swap", false),
             invertAnalogLeftY = prefs.getBoolean("${key}_invertLeftY", prefs.getBoolean("${key}_invertY", false)),
-            invertAnalogRightY = prefs.getBoolean("${key}_invertRightY", prefs.getBoolean("${key}_invertY", false))
+            invertAnalogRightY = prefs.getBoolean("${key}_invertRightY", prefs.getBoolean("${key}_invertY", false)),
+            lightgunTriggerOnTouch = prefs.getBoolean("${key}_lightgun_trigger_on_touch", true),
+            lightgunTriggerDelay = prefs.getInt("${key}_lightgun_trigger_delay", 0),
+            lightgunAllowOffscreen = prefs.getBoolean("${key}_lightgun_allow_offscreen", false)
         )
+    }
+
+    fun saveSettings(prefs: android.content.SharedPreferences, console: String, settings: TouchControllerSettingsManager.Settings) {
+        val key = "gamepad_${console}_settings"
+        prefs.edit().apply {
+            putFloat("${key}_scale", settings.scale)
+            putFloat("${key}_rotation", settings.rotation)
+            putFloat("${key}_marginX", settings.marginX)
+            putFloat("${key}_marginY", settings.marginY)
+            putBoolean("${key}_swap", settings.swapAnalogSticks)
+            putBoolean("${key}_invertLeftY", settings.invertAnalogLeftY)
+            putBoolean("${key}_invertRightY", settings.invertAnalogRightY)
+            putBoolean("${key}_lightgun_trigger_on_touch", settings.lightgunTriggerOnTouch)
+            putInt("${key}_lightgun_trigger_delay", settings.lightgunTriggerDelay)
+            putBoolean("${key}_lightgun_allow_offscreen", settings.lightgunAllowOffscreen)
+            apply()
+        }
     }
 }

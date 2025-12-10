@@ -360,88 +360,7 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- EMULATOR MODE (Per Game Override) -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_margin="16dp"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="4dp"
-                app:strokeColor="@color/kitt_red"
-                app:strokeWidth="1dp"
-                app:cardBackgroundColor="@color/kitt_medium_red">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="🎮 EMULATOR MODE"
-                        android:textSize="18sp"
-                        android:textColor="@color/kitt_red"
-                        android:fontFamily="monospace"
-                        android:textStyle="bold"
-                        android:gravity="center"
-                        android:layout_marginBottom="12dp" />
-
-                    <!-- Toggle Switch -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginBottom="8dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="NATIVE"
-                            android:textSize="14sp"
-                            android:textColor="@color/kitt_red_light"
-                            android:fontFamily="monospace"
-                            android:textStyle="bold" />
-
-                        <com.google.android.material.switchmaterial.SwitchMaterial
-                            android:id="@+id/emulatorModeSwitch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checked="false"
-                            app:thumbTint="@color/kitt_red"
-                            app:trackTint="@color/kitt_red_alpha" />
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="RETROARCH"
-                            android:textSize="14sp"
-                            android:textColor="@color/kitt_red_light"
-                            android:fontFamily="monospace"
-                            android:textStyle="bold"
-                            android:gravity="end" />
-
-                    </LinearLayout>
-
-                    <!-- Console Default Info -->
-                    <TextView
-                        android:id="@+id/consoleDefaultInfo"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Console default: NATIVE"
-                        android:textSize="12sp"
-                        android:textColor="@color/kitt_red_alpha"
-                        android:fontFamily="monospace"
-                        android:gravity="center"
-                        android:layout_marginTop="4dp" />
-
-                </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
 
             <!-- Action Buttons -->
             <LinearLayout
@@ -521,7 +440,7 @@
                     android:layout_height="56dp"
                     android:layout_weight="1"
                     android:layout_marginEnd="8dp"
-                    android:text="⚡ NEW GAME"
+                    android:text="⚡ RETROPLAY"
                     android:textSize="13sp"
                     app:backgroundTint="@color/kitt_red"
                     app:cornerRadius="16dp"

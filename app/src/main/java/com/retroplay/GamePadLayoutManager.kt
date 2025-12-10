@@ -72,11 +72,11 @@ object GamePadLayoutManager {
      */
     fun loadVariant(prefs: SharedPreferences, console: String): LayoutVariant {
         val key = "gamepad_${console}_variant"
-        val variantName = prefs.getString(key, "DEFAULT") ?: "DEFAULT"
+        val variantName = prefs.getString(key, "RETROARCH") ?: "RETROARCH"
         return try {
             LayoutVariant.valueOf(variantName)
         } catch (e: Exception) {
-            LayoutVariant.DEFAULT
+            LayoutVariant.RETROARCH
         }
     }
     

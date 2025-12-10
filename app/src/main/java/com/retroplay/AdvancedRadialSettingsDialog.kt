@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.retroplay.overlay.models.OverlayPreferenceManager
 import com.swordfish.touchinput.radial.settings.TouchControllerSettingsManager
+import com.retroplay.ui.components.SwitchRow
 import kotlin.math.roundToInt
 
 @Composable

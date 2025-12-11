@@ -107,8 +107,10 @@ object PadKitHelper {
     
     fun loadSettings(prefs: android.content.SharedPreferences, console: String): TouchControllerSettingsManager.Settings {
         val key = "gamepad_${console}_settings"
+        val scale = prefs.getFloat("${key}_scale", 1.0f)
+        
         return TouchControllerSettingsManager.Settings(
-            scale = prefs.getFloat("${key}_scale", 0.5f),
+            scale = scale,
             rotation = prefs.getFloat("${key}_rotation", 0.0f),
             marginX = prefs.getFloat("${key}_marginX", 0.0f),
             marginY = prefs.getFloat("${key}_marginY", 0.0f),

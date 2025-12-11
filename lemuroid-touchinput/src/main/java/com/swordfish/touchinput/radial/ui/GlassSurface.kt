@@ -91,40 +91,48 @@ fun GlassSurface(
 
             val cornerRadiusPx = minOf(cornerRadius.toPx(), expandedSize.minDimension / 2f)
 
-            val shadowBitmap = ShadowCache.getOrCreate(
-                width = expandedSize.width.toInt(),
-                height = expandedSize.height.toInt(),
-                cornerRadius = cornerRadiusPx,
-                shadowColor = shadowColor,
-                blurRadius = blurRadiusPx
-            )
-
-            val strokeInset = strokePx / 2f
-            val fillSize = expandedSize + Size(strokePx, strokePx)
-            val fillOffset = -Offset(strokeInset, strokeInset)
-
-            val drawOffset = Offset(paddingStart, paddingTop)
-            val adjustedRadius = cornerRadiusPx + strokeInset
-
-            onDrawWithContent {
-                drawImage(shadowBitmap, topLeft = drawOffset)
-
-                drawRoundRect(
-                    color = fillColor,
-                    topLeft = fillOffset + drawOffset,
-                    size = fillSize,
-                    cornerRadius = CornerRadius(adjustedRadius, adjustedRadius)
+            // CRITIQUE: Avoid crash if size is <= 0 (happens during initialization or if padding > size)
+            if (expandedSize.width > 0 && expandedSize.height > 0) {
+                 val shadowBitmap = ShadowCache.getOrCreate(
+                    width = expandedSize.width.toInt().coerceAtLeast(1),
+                    height = expandedSize.height.toInt().coerceAtLeast(1),
+                    cornerRadius = cornerRadiusPx,
+                    shadowColor = shadowColor,
+                    blurRadius = blurRadiusPx
                 )
 
-                drawRoundRect(
-                    color = strokeColor,
-                    topLeft = drawOffset,
-                    size = expandedSize,
-                    cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                    style = Stroke(width = strokePx)
-                )
+                val strokeInset = strokePx / 2f
+                val fillSize = expandedSize + Size(strokePx, strokePx)
+                val fillOffset = -Offset(strokeInset, strokeInset)
 
-                drawContent()
+                val drawOffset = Offset(paddingStart, paddingTop)
+                val adjustedRadius = cornerRadiusPx + strokeInset
+
+                onDrawWithContent {
+                    drawImage(shadowBitmap, topLeft = drawOffset)
+
+                    drawRoundRect(
+                        color = fillColor,
+                        topLeft = fillOffset + drawOffset,
+                        size = fillSize,
+                        cornerRadius = CornerRadius(adjustedRadius, adjustedRadius)
+                    )
+
+                    drawRoundRect(
+                        color = strokeColor,
+                        topLeft = drawOffset,
+                        size = expandedSize,
+                        cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
+                        style = Stroke(width = strokePx)
+                    )
+
+                    drawContent()
+                }
+            } else {
+                 // Skip drawing background/shadow if size is invalid, just draw content
+                 onDrawWithContent {
+                     drawContent()
+                 }
             }
         },
         content = content

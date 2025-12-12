@@ -65,8 +65,12 @@ import com.swordfish.touchinput.radial.settings.TouchControllerSettingsManager
 import com.retroplay.ui.components.*
 import androidx.compose.runtime.mutableFloatStateOf
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+
+
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -167,12 +171,16 @@ fun GamePadSettingsDialog(
     var radialRotation by remember { mutableFloatStateOf(radialSettings.rotation) }
     var radialMarginX by remember { mutableFloatStateOf(radialSettings.marginX) }
     var radialMarginY by remember { mutableFloatStateOf(radialSettings.marginY) }
+    var radialSwapAnalogSticks by remember { mutableStateOf(radialSettings.swapAnalogSticks) }
+    var radialInvertAnalogLeftY by remember { mutableStateOf(radialSettings.invertAnalogLeftY) }
+    var radialInvertAnalogRightY by remember { mutableStateOf(radialSettings.invertAnalogRightY) }
+
     
     // Detect optimization
     var isAdjusting by remember { mutableStateOf(false) }
 
     var isTransparent by remember { mutableStateOf(false) }
-    var showAdvancedRadialSettings by remember { mutableStateOf(false) }
+
     val contentScrollState = rememberScrollState()
     
     // Tab sélectionné (0 = Overlays, 1 = Advanced, 2 = General)
@@ -413,55 +421,28 @@ fun GamePadSettingsDialog(
     }
 
     // Save Radial Settings
-    LaunchedEffect(radialScale, radialRotation, radialMarginX, radialMarginY) {
+    LaunchedEffect(
+        radialScale,
+        radialRotation,
+        radialMarginX,
+        radialMarginY,
+        radialSwapAnalogSticks,
+        radialInvertAnalogLeftY,
+        radialInvertAnalogRightY
+    ) {
         PadKitHelper.saveSettings(prefs, console, TouchControllerSettingsManager.Settings(
             scale = radialScale,
             rotation = radialRotation,
             marginX = radialMarginX,
             marginY = radialMarginY,
-            swapAnalogSticks = swapAnalogSticks,
-            invertAnalogLeftY = invertAnalogLeftY,
-            invertAnalogRightY = invertAnalogRightY
+            swapAnalogSticks = radialSwapAnalogSticks,
+            invertAnalogLeftY = radialInvertAnalogLeftY,
+            invertAnalogRightY = radialInvertAnalogRightY
         ))
     }
 
 
-    // Advanced Radial Settings Dialog
-    if (showAdvancedRadialSettings) {
-        AdvancedRadialSettingsDialog(
-            console = console,
-            initialSettings = TouchControllerSettingsManager.Settings(
-                scale = radialScale,
-                rotation = radialRotation,
-                marginX = radialMarginX,
-                marginY = radialMarginY,
-                swapAnalogSticks = swapAnalogSticks,
-                invertAnalogLeftY = invertAnalogLeftY,
-                invertAnalogRightY = invertAnalogRightY
-            ),
-            prefs = prefs,
-            onPreview = { previewSettings ->
-                radialScale = previewSettings.scale
-                radialRotation = previewSettings.rotation
-                radialMarginX = previewSettings.marginX
-                radialMarginY = previewSettings.marginY
-                swapAnalogSticks = previewSettings.swapAnalogSticks
-                invertAnalogLeftY = previewSettings.invertAnalogLeftY
-                invertAnalogRightY = previewSettings.invertAnalogRightY
-            },
-            onSave = { newSettings ->
-                radialScale = newSettings.scale
-                radialRotation = newSettings.rotation
-                radialMarginX = newSettings.marginX
-                radialMarginY = newSettings.marginY
-                swapAnalogSticks = newSettings.swapAnalogSticks
-                invertAnalogLeftY = newSettings.invertAnalogLeftY
-                invertAnalogRightY = newSettings.invertAnalogRightY
-                showAdvancedRadialSettings = false
-            },
-            onCancel = { showAdvancedRadialSettings = false }
-        )
-    }
+
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -2350,87 +2331,192 @@ fun GamePadSettingsDialog(
                         }
                     }
                 } else {
-                    // Radial Settings UI
-                    Text("Lemuroid Gamepad Adjustments", color = Color(0xFF2196F3), style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+                    // Radial Settings UI - Advanced Integrated
+                    Text("Radial Menu", color = Color(0xFF2196F3), style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
                     
-                    Button(
-                        onClick = { showAdvancedRadialSettings = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3)),
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                    ) {
-                        Text("Advanced Settings", color = Color.White)
-                    }
-
                     HorizontalDivider(color = Color(0xFF444444))
                     Spacer(Modifier.height(8.dp))
                     
-                    // Scale (0.75x - 1.5x)
-                    Text("Scale: ${String.format("%.2f", radialScale * 0.75f + 0.75f)}x", color = Color.LightGray, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
-                    Slider(
+                    Text(
+                        text = "Precision Adjustments",
+                        color = Color(0xFF2196F3),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    RadialSlider(
+                        label = "Scale",
                         value = radialScale,
-                        onValueChange = { 
-                            radialScale = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
+                        displayValue = "${String.format("%.2f", radialScale * 0.75f + 0.75f)}x",
                         valueRange = 0f..1f,
-                        modifier = Modifier.fillMaxWidth()
+                        onValueChange = { radialScale = it },
+                        onNudge = { delta ->
+                            radialScale = (radialScale + delta).coerceIn(0f, 1f)
+                        }
                     )
-                    
-                    // Rotation (0° - 45°)
-                    Text("Rotation: ${String.format("%.0f", radialRotation * 45f)}°", color = Color.LightGray, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
-                    Slider(
+
+                    RadialSlider(
+                        label = "Rotation",
                         value = radialRotation,
-                        onValueChange = { 
-                            radialRotation = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
+                        displayValue = "${String.format("%.0f", radialRotation * TouchControllerSettingsManager.MAX_ROTATION)}°",
                         valueRange = 0f..1f,
-                        modifier = Modifier.fillMaxWidth()
+                        onValueChange = { radialRotation = it },
+                        onNudge = { delta ->
+                            radialRotation = (radialRotation + delta).coerceIn(0f, 1f)
+                        }
                     )
-                    
-                    // Margin X (0dp - 96dp)
-                    Text("Margin X: ${String.format("%.0f", radialMarginX * 96f)}dp", color = Color.LightGray, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
-                    Slider(
+
+                    RadialSlider(
+                        label = "Horizontal Margin",
                         value = radialMarginX,
-                        onValueChange = { 
-                            radialMarginX = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
+                        displayValue = "${String.format("%.0f", radialMarginX * TouchControllerSettingsManager.MAX_MARGINS)}dp",
                         valueRange = 0f..1f,
-                        modifier = Modifier.fillMaxWidth()
+                        onValueChange = { radialMarginX = it },
+                        onNudge = { delta ->
+                            radialMarginX = (radialMarginX + delta).coerceIn(0f, 1f)
+                        }
                     )
-                    
-                    // Margin Y (0dp - 96dp)
-                    Text("Margin Y: ${String.format("%.0f", radialMarginY * 96f)}dp", color = Color.LightGray, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
-                    Slider(
+
+                    RadialSlider(
+                        label = "Vertical Margin",
                         value = radialMarginY,
-                        onValueChange = { 
-                            radialMarginY = it
-                            isAdjusting = true
-                        },
-                        onValueChangeFinished = { isAdjusting = false },
+                        displayValue = "${String.format("%.0f", radialMarginY * TouchControllerSettingsManager.MAX_MARGINS)}dp",
                         valueRange = 0f..1f,
-                        modifier = Modifier.fillMaxWidth()
+                        onValueChange = { radialMarginY = it },
+                        onNudge = { delta ->
+                            radialMarginY = (radialMarginY + delta).coerceIn(0f, 1f)
+                        }
                     )
                     
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(16.dp))
+                    HorizontalDivider(color = Color(0xFF444444))
+                    Spacer(Modifier.height(16.dp))
+
+                    Text(
+                        text = "Analog Options",
+                        color = Color(0xFFFF9800),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    SwitchRow(
+                        title = "Swap Left/Right Sticks",
+                        subtitle = "Exchange left and right analog positions",
+                        checked = radialSwapAnalogSticks,
+                        onCheckedChange = { radialSwapAnalogSticks = it }
+                    )
+
+                    SwitchRow(
+                        title = "Invert Left Stick Y",
+                        subtitle = "Reverse up/down movement for left analog",
+                        checked = radialInvertAnalogLeftY,
+                        onCheckedChange = { radialInvertAnalogLeftY = it }
+                    )
+
+                    SwitchRow(
+                        title = "Invert Right Stick Y",
+                        subtitle = "Reverse up/down movement for right analog",
+                        checked = radialInvertAnalogRightY,
+                        onCheckedChange = { radialInvertAnalogRightY = it }
+                    )
                     
-                    // Buttons for Radial
+                    Spacer(Modifier.height(16.dp))
+                    HorizontalDivider(color = Color(0xFF444444))
+                    Spacer(Modifier.height(16.dp))
+
+                    Text(
+                        text = "Lightgun Options",
+                        color = Color(0xFFFFC107),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    SwitchRow(
+                        title = "Trigger on Touch",
+                        subtitle = "Fire immediately when touching the screen",
+                        checked = lightgunTriggerOnTouch,
+                        onCheckedChange = { lightgunTriggerOnTouch = it }
+                    )
+
+                    SwitchRow(
+                        title = "Allow Off-Screen Shots",
+                        subtitle = "Permit shooting outside the playfield",
+                        checked = lightgunAllowOffscreen,
+                        onCheckedChange = { lightgunAllowOffscreen = it }
+                    )
+
+                    Column {
+                        Text(
+                            text = "Trigger Delay: ${lightgunTriggerDelay} frame(s)",
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                        Slider(
+                            value = lightgunTriggerDelay.toFloat(),
+                            onValueChange = { lightgunTriggerDelay = it.roundToInt().coerceAtLeast(0) },
+                            valueRange = 0f..10f,
+                            steps = 9,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFFFFC107),
+                                activeTrackColor = Color(0xFFFFC107),
+                                inactiveTrackColor = Color(0xFF444444)
+                            )
+                        )
+                        Text(
+                            text = "Frames to wait before sending the lightgun trigger",
+                            color = Color(0xFF888888),
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = "Lightgun Port: ${if (lightgunPort < 0) "All" else lightgunPort + 1}",
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                        Slider(
+                            value = lightgunPort.toFloat(),
+                            onValueChange = {
+                                lightgunPort = it.roundToInt().coerceIn(-1, 3)
+                            },
+                            valueRange = -1f..3f,
+                            steps = 3,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF4CAF50),
+                                activeTrackColor = Color(0xFF4CAF50),
+                                inactiveTrackColor = Color(0xFF444444)
+                            )
+                        )
+                        Text(
+                            text = "Choose which port controls the lightgun (-1 = all ports)",
+                            color = Color(0xFF888888),
+                            fontSize = 11.sp
+                        )
+                    }
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    // Buttons for Radial - Keep Reset and Done
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Button(
                             onClick = {
-                                radialScale = 0.5f // Default?
+                                radialScale = 0.5f 
                                 radialRotation = 0f
                                 radialMarginX = 0f
                                 radialMarginY = 0f
-                                // And force saved? (handled by LaunchedEffect)
+                                radialSwapAnalogSticks = false
+                                radialInvertAnalogLeftY = false
+                                radialInvertAnalogRightY = false
+                                // Lightgun defaults (managed by AdvancedOverlaySettings logic)
+                                lightgunTriggerOnTouch = true
+                                lightgunTriggerDelay = 1
+                                lightgunAllowOffscreen = true
+                                lightgunPort = -1
                             },
                              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722))
                         ) { Text("Reset", color = Color.White) }
@@ -2448,3 +2534,60 @@ fun GamePadSettingsDialog(
 }
 
 
+@Composable
+private fun RadialSlider(
+    label: String,
+    value: Float,
+    displayValue: String,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit,
+    onNudge: (Float) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, color = Color.LightGray, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+            Text(displayValue, color = Color.White, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            IconButton(
+                onClick = { onNudge(-0.01f) },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Text(
+                    text = "-",
+                    color = Color(0xFFB0BEC5),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = valueRange,
+                modifier = Modifier.weight(1f)
+            )
+
+            IconButton(
+                onClick = { onNudge(0.01f) },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Text(
+                    text = "+",
+                    color = Color(0xFFB0BEC5),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}

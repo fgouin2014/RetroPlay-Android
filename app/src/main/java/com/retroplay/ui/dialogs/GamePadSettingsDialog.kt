@@ -458,7 +458,7 @@ fun GamePadSettingsDialog(
                     containerColor = if (isTransparent)
                         Color(0xFF000000).copy(alpha = 0.3f)
                     else
-                        Color(0xFF000000).copy(alpha = 0.4f)
+                        Color(0xB3111111) // 70% opacity for better see-through
                 )
             ) {
                 Column(
@@ -474,30 +474,35 @@ fun GamePadSettingsDialog(
                     )
                     
                     // Layout Switch
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF333333), RoundedCornerShape(8.dp))
-                            .padding(4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    // Layout Switch (Refactored to Tabs)
+                    TabRow(
+                        selectedTabIndex = if (currentVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) 0 else 1,
+                        containerColor = Color.Transparent,
+                        contentColor = Color(0xFFFF9800),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                     ) {
-                         Button(
-                             onClick = { onVariantChanged(GamePadLayoutManager.LayoutVariant.RETROARCH) },
-                             colors = ButtonDefaults.buttonColors(
-                                 containerColor = if(currentVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) Color(0xFF4CAF50) else Color.Transparent
-                             ),
-                             modifier = Modifier.weight(1f),
-                             shape = RoundedCornerShape(6.dp)
-                         ) { Text("RetroArch", color = Color.White) }
-                         
-                         Button(
-                             onClick = { onVariantChanged(GamePadLayoutManager.LayoutVariant.DEFAULT) },
-                             colors = ButtonDefaults.buttonColors(
-                                 containerColor = if(currentVariant != GamePadLayoutManager.LayoutVariant.RETROARCH) Color(0xFF2196F3) else Color.Transparent
-                             ),
-                             modifier = Modifier.weight(1f),
-                             shape = RoundedCornerShape(6.dp)
-                         ) { Text("Radial Menu", color = Color.White) }
+                        Tab(
+                            selected = currentVariant == GamePadLayoutManager.LayoutVariant.RETROARCH,
+                            onClick = { onVariantChanged(GamePadLayoutManager.LayoutVariant.RETROARCH) },
+                            text = { 
+                                Text(
+                                    "RetroArch", 
+                                    color = if (currentVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) Color(0xFFFF9800) else Color(0xFF888888),
+                                    fontWeight = if (currentVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) FontWeight.Bold else FontWeight.Normal
+                                ) 
+                            }
+                        )
+                        Tab(
+                            selected = currentVariant == GamePadLayoutManager.LayoutVariant.DEFAULT,
+                            onClick = { onVariantChanged(GamePadLayoutManager.LayoutVariant.DEFAULT) },
+                            text = { 
+                                Text(
+                                    "Radial Menu", 
+                                    color = if (currentVariant == GamePadLayoutManager.LayoutVariant.DEFAULT) Color(0xFFFF9800) else Color(0xFF888888),
+                                    fontWeight = if (currentVariant == GamePadLayoutManager.LayoutVariant.DEFAULT) FontWeight.Bold else FontWeight.Normal
+                                ) 
+                            }
+                        )
                     }
 
                     if (currentVariant == GamePadLayoutManager.LayoutVariant.RETROARCH) {
@@ -599,9 +604,9 @@ fun GamePadSettingsDialog(
                                             selectedOverlay = overlayName
                                         },
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isSelected) Color(0xFF1B5E20).copy(alpha = 0.4f) else Color(0xFF1C1C1C)
+                                        containerColor = if (isSelected) Color(0xFF1B5E20).copy(alpha = 0.6f) else Color(0x10FFFFFF) // Glassy unselected
                                     ),
-                                    border = BorderStroke(1.dp, if (isSelected) Color(0xFF4CAF50) else Color(0xFF2F2F2F))
+                                    border = BorderStroke(1.dp, if (isSelected) Color(0xFF4CAF50) else Color(0x30FFFFFF))
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -658,9 +663,9 @@ fun GamePadSettingsDialog(
                                             selectedOverlay = overlayName
                                         },
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isSelected) Color(0xFF311B92).copy(alpha = 0.45f) else Color(0xFF1C1C1C)
+                                        containerColor = if (isSelected) Color(0xFF311B92).copy(alpha = 0.6f) else Color(0x10FFFFFF)
                                     ),
-                                    border = BorderStroke(1.dp, if (isSelected) Color(0xFF9575CD) else Color(0xFF2F2F2F))
+                                    border = BorderStroke(1.dp, if (isSelected) Color(0xFF9575CD) else Color(0x30FFFFFF))
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -750,10 +755,10 @@ fun GamePadSettingsDialog(
                                     TextButton(
                                         onClick = { selectedLandscapeLayout = layoutName },
                                         colors = ButtonDefaults.textButtonColors(
-                                            containerColor = if (isSelected) Color(0xFFFF9800) else Color(0xFF2A2A2A)
+                                            containerColor = if (isSelected) Color(0xFFFF9800) else Color(0x20FFFFFF)
                                         ),
                                         shape = RoundedCornerShape(50),
-                                        border = BorderStroke(1.dp, if (isSelected) Color(0xFFFFC107) else Color(0xFF3A3A3A)),
+                                        border = BorderStroke(1.dp, if (isSelected) Color(0xFFFFC107) else Color(0x30FFFFFF)),
                                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                                     ) {
                                         Text(
@@ -779,10 +784,10 @@ fun GamePadSettingsDialog(
                                     TextButton(
                                         onClick = { selectedPortraitLayout = layoutName },
                                         colors = ButtonDefaults.textButtonColors(
-                                            containerColor = if (isSelected) Color(0xFFFF9800) else Color(0xFF2A2A2A)
+                                            containerColor = if (isSelected) Color(0xFFFF9800) else Color(0x20FFFFFF)
                                         ),
                                         shape = RoundedCornerShape(50),
-                                        border = BorderStroke(1.dp, if (isSelected) Color(0xFFFFC107) else Color(0xFF3A3A3A)),
+                                        border = BorderStroke(1.dp, if (isSelected) Color(0xFFFFC107) else Color(0x30FFFFFF)),
                                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                                     ) {
                                         Text(
@@ -807,7 +812,7 @@ fun GamePadSettingsDialog(
                                     checkedThumbColor = Color(0xFF4CAF50),
                                     checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
                                     uncheckedThumbColor = Color(0xFF777777),
-                                    uncheckedTrackColor = Color(0xFF444444)
+                                    uncheckedTrackColor = Color(0x40FFFFFF)
                                 )
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -2263,7 +2268,8 @@ fun GamePadSettingsDialog(
                                         
                                         androidx.compose.material3.DropdownMenu(
                                             expanded = expandedPortMenu,
-                                            onDismissRequest = { expandedPortMenu = false }
+                                            onDismissRequest = { expandedPortMenu = false },
+                                            modifier = Modifier.background(Color(0xFF222222)) // Dark background for contrast
                                         ) {
                                             controllerTypes.forEach { (name, id) ->
                                                 androidx.compose.material3.DropdownMenuItem(
@@ -2335,7 +2341,7 @@ fun GamePadSettingsDialog(
                     Text("Radial Menu", color = Color(0xFF2196F3), style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
                     
-                    HorizontalDivider(color = Color(0xFF444444))
+                    HorizontalDivider(color = Color(0x40FFFFFF))
                     Spacer(Modifier.height(8.dp))
                     
                     Text(
@@ -2390,7 +2396,7 @@ fun GamePadSettingsDialog(
                     )
                     
                     Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = Color(0xFF444444))
+                    HorizontalDivider(color = Color(0x40FFFFFF))
                     Spacer(Modifier.height(16.dp))
 
                     Text(
@@ -2422,7 +2428,7 @@ fun GamePadSettingsDialog(
                     )
                     
                     Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = Color(0xFF444444))
+                    HorizontalDivider(color = Color(0x40FFFFFF))
                     Spacer(Modifier.height(16.dp))
 
                     Text(
@@ -2460,7 +2466,7 @@ fun GamePadSettingsDialog(
                             colors = SliderDefaults.colors(
                                 thumbColor = Color(0xFFFFC107),
                                 activeTrackColor = Color(0xFFFFC107),
-                                inactiveTrackColor = Color(0xFF444444)
+                                inactiveTrackColor = Color(0x40FFFFFF)
                             )
                         )
                         Text(
@@ -2486,7 +2492,7 @@ fun GamePadSettingsDialog(
                             colors = SliderDefaults.colors(
                                 thumbColor = Color(0xFF4CAF50),
                                 activeTrackColor = Color(0xFF4CAF50),
-                                inactiveTrackColor = Color(0xFF444444)
+                                inactiveTrackColor = Color(0x40FFFFFF)
                             )
                         )
                         Text(

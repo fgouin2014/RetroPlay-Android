@@ -1189,144 +1189,18 @@ fun GamePadSettingsDialog(
                             HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
                             Spacer(Modifier.height(16.dp))
                             
+                            
                             // === BEHAVIOR ===
-                            Text(
-                                "Behavior",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 8.dp)
+                            AdvancedVisibilitySettingsContent(
+                                hideInMenu = hideInMenu,
+                                onHideInMenuChanged = { hideInMenu = it },
+                                behindMenu = behindMenu,
+                                onBehindMenuChanged = { behindMenu = it },
+                                hideWhenGamepad = hideWhenGamepad,
+                                onHideWhenGamepadChanged = { hideWhenGamepad = it },
+                                hideWhenGamepadPort0Only = hideWhenGamepadPort0Only,
+                                onHideWhenGamepadPort0OnlyChanged = { hideWhenGamepadPort0Only = it }
                             )
-                            
-                            // Hide in Menu
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Hide Overlay in Menu",
-                                        color = Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "Hide overlay when in-game menu is open",
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Switch(
-                                    checked = hideInMenu,
-                                    onCheckedChange = { hideInMenu = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFF4CAF50),
-                                        checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color(0xFF888888),
-                                        uncheckedTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                            }
-                            
-                            // Behind Menu
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Overlay Behind Menu",
-                                        color = Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "Render overlay behind menu (instead of hiding)",
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Switch(
-                                    checked = behindMenu,
-                                    onCheckedChange = { behindMenu = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFF2196F3),
-                                        checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color(0xFF888888),
-                                        uncheckedTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                            }
-                            
-                            // Hide When Gamepad Connected
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Hide When Gamepad Connected",
-                                        color = Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "Hide touch overlay when physical gamepad is detected",
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Switch(
-                                    checked = hideWhenGamepad,
-                                    onCheckedChange = { hideWhenGamepad = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFFFF9800),
-                                        checkedTrackColor = Color(0xFFFF9800).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color(0xFF888888),
-                                        uncheckedTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                            }
-                            
-                            // Hide When Gamepad Connected - Port 0 Only (multijoueur)
-                            if (hideWhenGamepad) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp, horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            "Port 0 Only (Multijoueur)",
-                                            color = Color.White,
-                                            fontSize = 14.sp
-                                        )
-                                        Text(
-                                            "Hide overlay only if gamepad on port 0. Allows player 2 to use overlay touch",
-                                            color = Color(0xFF888888),
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                    Switch(
-                                        checked = hideWhenGamepadPort0Only,
-                                        onCheckedChange = { hideWhenGamepadPort0Only = it },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color(0xFFFF9800),
-                                            checkedTrackColor = Color(0xFFFF9800).copy(alpha = 0.5f),
-                                            uncheckedThumbColor = Color(0xFF888888),
-                                            uncheckedTrackColor = Color(0xFF444444)
-                                        )
-                                    )
-                                }
-                            }
                             
                             Spacer(Modifier.height(16.dp))
                             HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
@@ -1676,626 +1550,21 @@ fun GamePadSettingsDialog(
                             }
                     }
                         2 -> {
-                        // ========== ONGLET 3: RETROARCH GENERAL SETTINGS ==========
-                            
-                            // ========== SHADERS SECTION ==========
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Shaders",
-                                    color = Color(0xFFFF9800),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                TextButton(
-                                    onClick = {
-                                        // Reset Shader to default
-                                        prefs.edit().putString("emulation_shader_preset", "DEFAULT").apply()
-                                        onShaderChanged("DEFAULT")
-                                    }
-                                ) {
-                                    Text("Reset", color = Color(0xFF888888), fontSize = 12.sp)
-                                }
-                            }
-                            
-                            var selectedShaderName by remember { 
-                                mutableStateOf(
-                                    prefs.getString("emulation_shader_preset", "DEFAULT") ?: "DEFAULT"
-                                )
-                            }
-                            var expandedShaderMenu by remember { mutableStateOf(false) }
-                            
-                            val availableShaders = com.retroplay.shader.ShaderManager.ShaderPreset.values()
-                            val currentShader = com.retroplay.shader.ShaderManager.fromString(selectedShaderName)
-                            
-                            Box {
-                                Button(
-                                    onClick = { expandedShaderMenu = true },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF2A2A2A)
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Shader Preset: ${currentShader.displayName}",
-                                            color = Color.White
-                                        )
-                                        Text("▼", color = Color(0xFF888888))
-                                    }
-                                }
-                                
-                                androidx.compose.material3.DropdownMenu(
-                                    expanded = expandedShaderMenu,
-                                    onDismissRequest = { expandedShaderMenu = false },
-                                    modifier = Modifier.background(Color(0xFF1C1C1C))
-                                ) {
-                                    availableShaders.forEach { shader ->
-                                        androidx.compose.material3.DropdownMenuItem(
-                                            text = { 
-                                                Text(
-                                                    text = "${shader.icon} ${shader.displayName}",
-                                                    color = if (shader == currentShader) Color(0xFFFF9800) else Color.White
-                                                )
-                                            },
-                                            onClick = {
-                                                selectedShaderName = shader.name
-                                                expandedShaderMenu = false
-                                                prefs.edit().putString("emulation_shader_preset", shader.name).apply()
-                                                onShaderChanged(shader.name)
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                            GeneralSettingsTabContent(
+                                prefs = prefs,
+                                console = console,
+                                debugModeState = debugModeState,
+                                onShaderChanged = onShaderChanged,
+                                onVsyncChanged = onVsyncChanged,
+                                onAspectRatioChanged = onAspectRatioChanged,
+                                onAudioVolumeChanged = onAudioVolumeChanged,
+                                onAudioMuteChanged = onAudioMuteChanged,
+                                onFastForwardRatioChanged = onFastForwardRatioChanged,
+                                onRewindEnabledChanged = onRewindEnabledChanged,
+                                onPsxAnalogModeChanged = onPsxAnalogModeChanged
+                            )
+                        }    
 
-                            HorizontalDivider(color = Color(0xFF444444))
-
-                            // ========== VIDEO SECTION ==========
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Video Settings",
-                                    color = Color(0xFFFF9800),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                TextButton(
-                                    onClick = {
-                                        // Reset Video Settings to defaults
-                                        prefs.edit()
-                                            .putBoolean("emulation_video_vsync", true)
-                                            .putString("emulation_video_aspect_ratio", "AUTO")
-                                            .apply()
-                                        // Synchroniser avec RetroPlayConfigManager pour compatibilité
-                                        val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-                                        com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = true))
-                                        onVsyncChanged(true)
-                                    }
-                                ) {
-                                    Text("Reset", color = Color(0xFF888888), fontSize = 12.sp)
-                                }
-                            }
-                            
-                            var vsyncEnabled by remember { 
-                                mutableStateOf(
-                                    prefs.getBoolean("emulation_video_vsync", true)
-                                )
-                            }
-                            
-                            val vsyncIsDefault = vsyncEnabled == true
-                            
-                            SwitchRow(
-                                title = "VSync",
-                                subtitle = "Vertical synchronization (reduces screen tearing)",
-                                checked = vsyncEnabled,
-                                onCheckedChange = { 
-                                    vsyncEnabled = it
-                                    prefs.edit().putBoolean("emulation_video_vsync", it).apply()
-                                    // Synchroniser avec RetroPlayConfigManager pour compatibilité
-                                    val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-                                    com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = it))
-                                    onVsyncChanged(it)
-                                },
-                                showModifiedIndicator = !vsyncIsDefault
-                            )
-                            
-                            // Aspect Ratio
-                            var selectedAspectRatio by remember { 
-                                mutableStateOf(
-                                    prefs.getString("emulation_video_aspect_ratio", "AUTO") ?: "AUTO"
-                                )
-                            }
-                            var expandedAspectRatioMenu by remember { mutableStateOf(false) }
-                            
-                            val aspectRatios = listOf(
-                                "AUTO" to "Auto (Core Default)",
-                                "4:3" to "4:3 (1.33:1)",
-                                "16:9" to "16:9 (1.78:1)",
-                                "16:10" to "16:10 (1.6:1)",
-                                "1:1" to "1:1 (Square)",
-                                "21:9" to "21:9 (2.33:1)"
-                            )
-                            
-                            val aspectRatioIsDefault = selectedAspectRatio == "AUTO"
-                            
-                            Box {
-                                Button(
-                                    onClick = { expandedAspectRatioMenu = true },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (aspectRatioIsDefault) Color(0xFF2A2A2A) else Color(0xFF3A2A1A)
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = "Aspect Ratio: ${aspectRatios.find { it.first == selectedAspectRatio }?.second ?: selectedAspectRatio}",
-                                                color = Color.White
-                                            )
-                                            if (!aspectRatioIsDefault) {
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text("●", color = Color(0xFFFF9800), fontSize = 8.sp)
-                                            }
-                                        }
-                                        Text("▼", color = Color(0xFF888888))
-                                    }
-                                }
-                                
-                                androidx.compose.material3.DropdownMenu(
-                                    expanded = expandedAspectRatioMenu,
-                                    onDismissRequest = { expandedAspectRatioMenu = false },
-                                    modifier = Modifier.background(Color(0xFF1C1C1C))
-                                ) {
-                                    aspectRatios.forEach { (ratio, displayName) ->
-                                        androidx.compose.material3.DropdownMenuItem(
-                                            text = { 
-                                                Text(
-                                                    text = displayName,
-                                                    color = if (ratio == selectedAspectRatio) Color(0xFFFF9800) else Color.White
-                                                )
-                                            },
-                                            onClick = {
-                                                selectedAspectRatio = ratio
-                                                expandedAspectRatioMenu = false
-                                                prefs.edit().putString("emulation_video_aspect_ratio", ratio).apply()
-                                                onAspectRatioChanged(ratio)
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-
-                            HorizontalDivider(color = Color(0xFF444444))
-
-                            // ========== AUDIO SECTION ==========
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Audio Settings",
-                                    color = Color(0xFFFF9800),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                TextButton(
-                                    onClick = {
-                                        // Reset Audio Settings to defaults
-                                        prefs.edit()
-                                            .putFloat("emulation_audio_volume", 1.0f)
-                                            .putBoolean("emulation_audio_muted", false)
-                                            .putBoolean("emulation_audio_low_latency", false)
-                                            .apply()
-                                        onAudioVolumeChanged(1.0f)
-                                        onAudioMuteChanged(false)
-                                    }
-                                ) {
-                                    Text("Reset", color = Color(0xFF888888), fontSize = 12.sp)
-                                }
-                            }
-                            
-                            var audioVolume by remember { 
-                                mutableStateOf(prefs.getFloat("emulation_audio_volume", 1.0f)) 
-                            }
-                            var audioMuted by remember { 
-                                mutableStateOf(prefs.getBoolean("emulation_audio_muted", false)) 
-                            }
-                            
-                            val volumeIsDefault = audioVolume == 1.0f
-                            
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                SliderWithLabel(
-                                    label = "Volume",
-                                    value = audioVolume,
-                                    onValueChange = { 
-                                        audioVolume = it
-                                        prefs.edit().putFloat("emulation_audio_volume", it).apply()
-                                        onAudioVolumeChanged(it)
-                                    },
-                                    valueRange = 0.0f..1.0f,
-                                    displayValue = "${(audioVolume * 100).toInt()}%",
-                                    activeColor = Color(0xFF4CAF50)
-                                )
-                                if (!volumeIsDefault) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("●", color = Color(0xFFFF9800), fontSize = 8.sp)
-                                }
-                            }
-                            
-                            val muteIsDefault = !audioMuted
-                            
-                            SwitchRow(
-                                title = "Mute Audio",
-                                subtitle = "Disable all audio output",
-                                checked = audioMuted,
-                                onCheckedChange = { 
-                                    audioMuted = it
-                                    prefs.edit().putBoolean("emulation_audio_muted", it).apply()
-                                    onAudioMuteChanged(it)
-                                },
-                                showModifiedIndicator = !muteIsDefault
-                            )
-                            
-                            var lowLatencyAudio by remember { 
-                                mutableStateOf(
-                                    prefs.getBoolean("emulation_audio_low_latency", false)
-                                )
-                            }
-                            
-                            val lowLatencyIsDefault = !lowLatencyAudio
-                            
-                            SwitchRow(
-                                title = "Low Latency Audio",
-                                subtitle = "Use low latency audio mode (reduces audio delay, may increase battery usage)",
-                                checked = lowLatencyAudio,
-                                onCheckedChange = { 
-                                    lowLatencyAudio = it
-                                    prefs.edit().putBoolean("emulation_audio_low_latency", it).apply()
-                                },
-                                showModifiedIndicator = !lowLatencyIsDefault
-                            )
-
-                            HorizontalDivider(color = Color(0xFF444444))
-
-                            // ========== ADVANCED SECTION ==========
-                            Text(
-                                text = "Advanced Settings",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            
-                            var fastForwardRatio by remember { 
-                                mutableStateOf(prefs.getFloat("emulation_fast_forward_ratio", 2.0f)) 
-                            }
-                            
-                            SliderWithLabel(
-                                label = "Fast Forward Ratio",
-                                value = fastForwardRatio,
-                                onValueChange = { 
-                                    fastForwardRatio = it
-                                    prefs.edit().putFloat("emulation_fast_forward_ratio", it).apply()
-                                    onFastForwardRatioChanged(it)
-                                },
-                                valueRange = 1.0f..10.0f,
-                                displayValue = "${fastForwardRatio.toInt()}x",
-                                activeColor = Color(0xFFFF9800)
-                            )
-                            
-                            var rewindEnabled by remember { 
-                                mutableStateOf(
-                                    prefs.getBoolean("emulation_rewind_enable", false)
-                                )
-                            }
-                            
-                            SwitchRow(
-                                title = "Rewind",
-                                subtitle = "Enable rewind functionality (requires buffer)",
-                                checked = rewindEnabled,
-                                onCheckedChange = { 
-                                    rewindEnabled = it
-                                    prefs.edit().putBoolean("emulation_rewind_enable", it).apply()
-                                    // Synchroniser avec RetroPlayConfigManager pour compatibilité
-                                    val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-                                    com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(rewindEnable = it))
-                                    onRewindEnabledChanged(it)
-                                }
-                            )
-                            
-                            SwitchRow(
-                                title = "Debug Mode",
-                                subtitle = "Show overlay debug information",
-                                checked = debugModeState.value,
-                                onCheckedChange = { debugModeState.value = it }
-                            )
-                            
-                            HorizontalDivider(color = Color(0xFF444444))
-                            
-                            // Run-Ahead Settings
-                            var runAheadEnabled by remember { 
-                                mutableStateOf(
-                                    prefs.getBoolean("emulation_runahead_enabled", false)
-                                )
-                            }
-                            var runAheadFrames by remember { 
-                                mutableStateOf(
-                                    prefs.getInt("emulation_runahead_frames", 1).toFloat()
-                                )
-                            }
-                            
-                            SwitchRow(
-                                title = "Run-Ahead",
-                                subtitle = "Reduce input lag by running N frames ahead (requires save state support)",
-                                checked = runAheadEnabled,
-                                onCheckedChange = { 
-                                    runAheadEnabled = it
-                                    prefs.edit().putBoolean("emulation_runahead_enabled", it).apply()
-                                    // Synchroniser avec RetroPlayConfigManager pour compatibilité
-                                    val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-                                    com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(runAheadEnabled = it))
-                                }
-                            )
-                            
-                            if (runAheadEnabled) {
-                                SliderWithLabel(
-                                    label = "Run-Ahead Frames",
-                                    value = runAheadFrames,
-                                    onValueChange = { 
-                                        runAheadFrames = it
-                                        prefs.edit().putInt("emulation_runahead_frames", it.toInt()).apply()
-                                        // Synchroniser avec RetroPlayConfigManager pour compatibilité
-                                        val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-                                        com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(runAheadFrames = it.toInt()))
-                                    },
-                                    valueRange = 1.0f..4.0f,
-                                    displayValue = "${runAheadFrames.toInt()} frames",
-                                    activeColor = Color(0xFF4CAF50)
-                                )
-                                
-                                Text(
-                                    text = "Recommended: 1-2 frames for most games, 3-4 for fighting games",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp,
-                                    fontStyle = FontStyle.Italic
-                                )
-                            }
-
-                            HorizontalDivider(color = Color(0xFF444444))
-                            
-                            // ========== CONSOLE-SPECIFIC SETTINGS ==========
-                            // PSX: Enable Analog Mode (DualShock)
-                            if (console.equals("psx", ignoreCase = true)) {
-                                Text(
-                                    text = "PlayStation Settings",
-                                    color = Color(0xFFFF9800),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                
-                                var psxAnalogMode by remember { 
-                                    mutableStateOf(
-                                        prefs.getBoolean("psx_analog_mode_enabled", true)
-                                    )
-                                }
-                                
-                                SwitchRow(
-                                    title = "Enable Analog Mode (DualShock)",
-                                    subtitle = "Activate analog sticks on PSX controller (like pressing ANALOG button on DualShock)",
-                                    checked = psxAnalogMode,
-                                    onCheckedChange = { 
-                                        psxAnalogMode = it
-                                        prefs.edit().putBoolean("psx_analog_mode_enabled", it).apply()
-                                        // Appliquer immédiatement si callback fourni
-                                        onPsxAnalogModeChanged?.invoke(it)
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            if (it) "Analog mode ON - Applied immediately!" else "Analog mode OFF - Applied immediately!",
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                )
-                                
-                                Text(
-                                    text = "When enabled, analog sticks will work in games that support them (Ape Escape, Medal of Honor, Crash Team Racing, etc.). Changes apply immediately!",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp,
-                                    fontStyle = FontStyle.Italic,
-                                    modifier = Modifier.padding(start = 8.dp, top = 4.dp)
-                                )
-                                
-                                HorizontalDivider(color = Color(0xFF444444))
-                            }
-
-                            // ========== INPUT SETTINGS (HOTKEYS) SECTION ==========
-                            Text(
-                                text = "Input Settings (Hotkeys)",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            
-                            Text(
-                                text = "Hotkeys are configured in overlay .cfg files. Available hotkeys:",
-                                color = Color(0xFF888888),
-                                fontSize = 12.sp
-                            )
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            // Liste des hotkeys disponibles
-                            val hotkeys = listOf(
-                                "Save State" to "save_state",
-                                "Load State" to "load_state",
-                                "State Slot +" to "state_slot_increase",
-                                "State Slot -" to "state_slot_decrease",
-                                "Fast Forward" to "toggle_fast_forward",
-                                "Rewind" to "rewind",
-                                "Reset" to "reset",
-                                "Pause Toggle" to "pause_toggle",
-                                "Audio Mute" to "audio_mute_toggle",
-                                "Shader Next" to "shader_next",
-                                "Shader Prev" to "shader_prev",
-                                "Screenshot" to "screenshot",
-                                "Frame Advance" to "frame_advance"
-                            )
-                            
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                hotkeys.forEach { (displayName, action) ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = displayName,
-                                                color = Color.White,
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                            Text(
-                                                text = action,
-                                                color = Color(0xFF888888),
-                                                fontSize = 11.sp
-                                            )
-                                        }
-                                        Text(
-                                            text = "✓",
-                                            color = Color(0xFF4CAF50),
-                                            fontSize = 14.sp
-                                        )
-                                    }
-                                }
-                            }
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            Text(
-                                text = "Note: Hotkeys are triggered from overlay buttons. To configure hotkeys, edit the overlay .cfg file or use overlay buttons.",
-                                color = Color(0xFF666666),
-                                fontSize = 11.sp,
-                                fontStyle = FontStyle.Italic
-                            )
-                            
-                            HorizontalDivider(color = Color(0xFF444444))
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            // ========== CONTROLLER PORTS CONFIGURATION ==========
-                            Text(
-                                text = "Controller Ports",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            
-                            Text(
-                                text = "Configure controller type for each port. Manual configuration overrides auto-detection.",
-                                color = Color(0xFF888888),
-                                fontSize = 12.sp
-                            )
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            // Ports configuration (0-3)
-                            // Note: getControllers() nécessite retroView, donc on utilise une liste statique pour l'instant
-                            // Les IDs standards Libretro:
-                            // 0 = None, 1 = Joypad, 4 = Lightgun, 6 = Pointer, 258 = Zapper (FCEUmm)
-                            val controllerTypes = listOf(
-                                "Auto (Default)" to -1,
-                                "None" to 0,
-                                "Joypad" to 1,
-                                "Lightgun" to 4,
-                                "Pointer" to 6,
-                                "Zapper (NES)" to 258
-                            )
-                            
-                            // Configuration pour chaque port (0-3)
-                            for (port in 0..3) {
-                                var selectedControllerType by remember { 
-                                    mutableStateOf(
-                                        prefs.getInt("controller_port_${console}_port${port}", -1) // -1 = Auto
-                                    )
-                                }
-                                
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Port ${port + 1}",
-                                        color = Color.White,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    
-                                    var expandedPortMenu by remember { mutableStateOf(false) }
-                                    
-                                    Box {
-                                        TextButton(
-                                            onClick = { expandedPortMenu = true }
-                                        ) {
-                                            Text(
-                                                text = controllerTypes.find { it.second == selectedControllerType }?.first ?: "Auto",
-                                                color = if (selectedControllerType == -1) Color(0xFF888888) else Color(0xFF00BCD4),
-                                                fontSize = 12.sp
-                                            )
-                                        }
-                                        
-                                        androidx.compose.material3.DropdownMenu(
-                                            expanded = expandedPortMenu,
-                                            onDismissRequest = { expandedPortMenu = false },
-                                            modifier = Modifier.background(Color(0xFF222222)) // Dark background for contrast
-                                        ) {
-                                            controllerTypes.forEach { (name, id) ->
-                                                androidx.compose.material3.DropdownMenuItem(
-                                                    text = { Text(name, color = Color.White) },
-                                                    onClick = {
-                                                        selectedControllerType = id
-                                                        expandedPortMenu = false
-                                                        // Sauvegarder la configuration
-                                                        prefs.edit().putInt("controller_port_${console}_port${port}", id).apply()
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            Text(
-                                text = "Note: 'Auto' uses automatic detection. Manual settings override auto-detection for this console.",
-                                color = Color(0xFF666666),
-                                fontSize = 11.sp,
-                                fontStyle = FontStyle.Italic
-                            )
-                        }
                     }
 
                     HorizontalDivider(color = Color(0xFF444444))
@@ -2337,200 +1606,293 @@ fun GamePadSettingsDialog(
                         }
                     }
                 } else {
-                    // Radial Settings UI - Advanced Integrated
-                    Text("Radial Menu", color = Color(0xFF2196F3), style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
+                    // Radial Settings Mode with Tabs
+                    var selectedRadialTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
                     
-                    HorizontalDivider(color = Color(0x40FFFFFF))
-                    Spacer(Modifier.height(8.dp))
-                    
-                    Text(
-                        text = "Precision Adjustments",
-                        color = Color(0xFF2196F3),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    RadialSlider(
-                        label = "Scale",
-                        value = radialScale,
-                        displayValue = "${String.format("%.2f", radialScale * 0.75f + 0.75f)}x",
-                        valueRange = 0f..1f,
-                        onValueChange = { radialScale = it },
-                        onNudge = { delta ->
-                            radialScale = (radialScale + delta).coerceIn(0f, 1f)
-                        }
-                    )
-
-                    RadialSlider(
-                        label = "Rotation",
-                        value = radialRotation,
-                        displayValue = "${String.format("%.0f", radialRotation * TouchControllerSettingsManager.MAX_ROTATION)}°",
-                        valueRange = 0f..1f,
-                        onValueChange = { radialRotation = it },
-                        onNudge = { delta ->
-                            radialRotation = (radialRotation + delta).coerceIn(0f, 1f)
-                        }
-                    )
-
-                    RadialSlider(
-                        label = "Horizontal Margin",
-                        value = radialMarginX,
-                        displayValue = "${String.format("%.0f", radialMarginX * TouchControllerSettingsManager.MAX_MARGINS)}dp",
-                        valueRange = 0f..1f,
-                        onValueChange = { radialMarginX = it },
-                        onNudge = { delta ->
-                            radialMarginX = (radialMarginX + delta).coerceIn(0f, 1f)
-                        }
-                    )
-
-                    RadialSlider(
-                        label = "Vertical Margin",
-                        value = radialMarginY,
-                        displayValue = "${String.format("%.0f", radialMarginY * TouchControllerSettingsManager.MAX_MARGINS)}dp",
-                        valueRange = 0f..1f,
-                        onValueChange = { radialMarginY = it },
-                        onNudge = { delta ->
-                            radialMarginY = (radialMarginY + delta).coerceIn(0f, 1f)
-                        }
-                    )
-                    
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = Color(0x40FFFFFF))
-                    Spacer(Modifier.height(16.dp))
-
-                    Text(
-                        text = "Analog Options",
-                        color = Color(0xFFFF9800),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    SwitchRow(
-                        title = "Swap Left/Right Sticks",
-                        subtitle = "Exchange left and right analog positions",
-                        checked = radialSwapAnalogSticks,
-                        onCheckedChange = { radialSwapAnalogSticks = it }
-                    )
-
-                    SwitchRow(
-                        title = "Invert Left Stick Y",
-                        subtitle = "Reverse up/down movement for left analog",
-                        checked = radialInvertAnalogLeftY,
-                        onCheckedChange = { radialInvertAnalogLeftY = it }
-                    )
-
-                    SwitchRow(
-                        title = "Invert Right Stick Y",
-                        subtitle = "Reverse up/down movement for right analog",
-                        checked = radialInvertAnalogRightY,
-                        onCheckedChange = { radialInvertAnalogRightY = it }
-                    )
-                    
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = Color(0x40FFFFFF))
-                    Spacer(Modifier.height(16.dp))
-
-                    Text(
-                        text = "Lightgun Options",
-                        color = Color(0xFFFFC107),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    SwitchRow(
-                        title = "Trigger on Touch",
-                        subtitle = "Fire immediately when touching the screen",
-                        checked = lightgunTriggerOnTouch,
-                        onCheckedChange = { lightgunTriggerOnTouch = it }
-                    )
-
-                    SwitchRow(
-                        title = "Allow Off-Screen Shots",
-                        subtitle = "Permit shooting outside the playfield",
-                        checked = lightgunAllowOffscreen,
-                        onCheckedChange = { lightgunAllowOffscreen = it }
-                    )
-
-                    Column {
-                        Text(
-                            text = "Trigger Delay: ${lightgunTriggerDelay} frame(s)",
-                            color = Color.White,
-                            fontSize = 14.sp
-                        )
-                        Slider(
-                            value = lightgunTriggerDelay.toFloat(),
-                            onValueChange = { lightgunTriggerDelay = it.roundToInt().coerceAtLeast(0) },
-                            valueRange = 0f..10f,
-                            steps = 9,
-                            colors = SliderDefaults.colors(
-                                thumbColor = Color(0xFFFFC107),
-                                activeTrackColor = Color(0xFFFFC107),
-                                inactiveTrackColor = Color(0x40FFFFFF)
-                            )
-                        )
-                        Text(
-                            text = "Frames to wait before sending the lightgun trigger",
-                            color = Color(0xFF888888),
-                            fontSize = 11.sp
-                        )
-                    }
-
-                    Column {
-                        Text(
-                            text = "Lightgun Port: ${if (lightgunPort < 0) "All" else lightgunPort + 1}",
-                            color = Color.White,
-                            fontSize = 14.sp
-                        )
-                        Slider(
-                            value = lightgunPort.toFloat(),
-                            onValueChange = {
-                                lightgunPort = it.roundToInt().coerceIn(-1, 3)
-                            },
-                            valueRange = -1f..3f,
-                            steps = 3,
-                            colors = SliderDefaults.colors(
-                                thumbColor = Color(0xFF4CAF50),
-                                activeTrackColor = Color(0xFF4CAF50),
-                                inactiveTrackColor = Color(0x40FFFFFF)
-                            )
-                        )
-                        Text(
-                            text = "Choose which port controls the lightgun (-1 = all ports)",
-                            color = Color(0xFF888888),
-                            fontSize = 11.sp
-                        )
-                    }
-                    
-                    Spacer(Modifier.height(16.dp))
-                    
-                    // Buttons for Radial - Keep Reset and Done
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    androidx.compose.material3.TabRow(
+                        selectedTabIndex = selectedRadialTab,
+                        containerColor = Color.Transparent,
+                        contentColor = Color(0xFFFF9800),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                     ) {
-                        Button(
-                            onClick = {
-                                radialScale = 0.5f 
-                                radialRotation = 0f
-                                radialMarginX = 0f
-                                radialMarginY = 0f
-                                radialSwapAnalogSticks = false
-                                radialInvertAnalogLeftY = false
-                                radialInvertAnalogRightY = false
-                                // Lightgun defaults (managed by AdvancedOverlaySettings logic)
-                                lightgunTriggerOnTouch = true
-                                lightgunTriggerDelay = 1
-                                lightgunAllowOffscreen = true
-                                lightgunPort = -1
-                            },
-                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722))
-                        ) { Text("Reset", color = Color.White) }
-                        
-                        Button(
-                            onClick = onDismiss,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                        ) { Text("Done", color = Color.White) }
+                        androidx.compose.material3.Tab(
+                            selected = selectedRadialTab == 0,
+                            onClick = { selectedRadialTab = 0 },
+                            text = { 
+                                Text(
+                                    "Settings", 
+                                    color = if (selectedRadialTab == 0) Color(0xFFFF9800) else Color(0xFF888888),
+                                    fontWeight = if (selectedRadialTab == 0) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                        androidx.compose.material3.Tab(
+                            selected = selectedRadialTab == 1,
+                            onClick = { selectedRadialTab = 1 },
+                            text = { 
+                                Text(
+                                    "Advanced",
+                                    color = if (selectedRadialTab == 1) Color(0xFFFF9800) else Color(0xFF888888),
+                                    fontWeight = if (selectedRadialTab == 1) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                        androidx.compose.material3.Tab(
+                            selected = selectedRadialTab == 2,
+                            onClick = { selectedRadialTab = 2 },
+                            text = { 
+                                Text(
+                                    "General",
+                                    color = if (selectedRadialTab == 2) Color(0xFFFF9800) else Color(0xFF888888),
+                                    fontWeight = if (selectedRadialTab == 2) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                    }
+
+                    when (selectedRadialTab) {
+                        0 -> {
+                            // Radial Settings UI - Advanced Integrated
+                            // ... (Keep existing Radial implementation)
+                            Text("Radial Menu", color = Color(0xFF2196F3), style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+                            // ... (Keep existing Radial implementation lines 1772-1964)
+                             Spacer(Modifier.height(8.dp))
+                            
+                            HorizontalDivider(color = Color(0x40FFFFFF))
+                            Spacer(Modifier.height(8.dp))
+                            
+                            Text(
+                                text = "Precision Adjustments",
+                                color = Color(0xFF2196F3),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            RadialSlider(
+                                label = "Scale",
+                                value = radialScale,
+                                displayValue = "${String.format("%.2f", radialScale * 0.75f + 0.75f)}x",
+                                valueRange = 0f..1f,
+                                onValueChange = { radialScale = it },
+                                onNudge = { delta ->
+                                    radialScale = (radialScale + delta).coerceIn(0f, 1f)
+                                }
+                            )
+
+                            RadialSlider(
+                                label = "Rotation",
+                                value = radialRotation,
+                                displayValue = "${String.format("%.0f", radialRotation * TouchControllerSettingsManager.MAX_ROTATION)}°",
+                                valueRange = 0f..1f,
+                                onValueChange = { radialRotation = it },
+                                onNudge = { delta ->
+                                    radialRotation = (radialRotation + delta).coerceIn(0f, 1f)
+                                }
+                            )
+
+                            RadialSlider(
+                                label = "Horizontal Margin",
+                                value = radialMarginX,
+                                displayValue = "${String.format("%.0f", radialMarginX * TouchControllerSettingsManager.MAX_MARGINS)}dp",
+                                valueRange = 0f..1f,
+                                onValueChange = { radialMarginX = it },
+                                onNudge = { delta ->
+                                    radialMarginX = (radialMarginX + delta).coerceIn(0f, 1f)
+                                }
+                            )
+
+                            RadialSlider(
+                                label = "Vertical Margin",
+                                value = radialMarginY,
+                                displayValue = "${String.format("%.0f", radialMarginY * TouchControllerSettingsManager.MAX_MARGINS)}dp",
+                                valueRange = 0f..1f,
+                                onValueChange = { radialMarginY = it },
+                                onNudge = { delta ->
+                                    radialMarginY = (radialMarginY + delta).coerceIn(0f, 1f)
+                                }
+                            )
+                            
+                            Spacer(Modifier.height(16.dp))
+                            HorizontalDivider(color = Color(0x40FFFFFF))
+                            Spacer(Modifier.height(16.dp))
+
+                            Text(
+                                text = "Analog Options",
+                                color = Color(0xFFFF9800),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            SwitchRow(
+                                title = "Swap Left/Right Sticks",
+                                subtitle = "Exchange left and right analog positions",
+                                checked = radialSwapAnalogSticks,
+                                onCheckedChange = { radialSwapAnalogSticks = it }
+                            )
+
+                            SwitchRow(
+                                title = "Invert Left Stick Y",
+                                subtitle = "Reverse up/down movement for left analog",
+                                checked = radialInvertAnalogLeftY,
+                                onCheckedChange = { radialInvertAnalogLeftY = it }
+                            )
+
+                            SwitchRow(
+                                title = "Invert Right Stick Y",
+                                subtitle = "Reverse up/down movement for right analog",
+                                checked = radialInvertAnalogRightY,
+                                onCheckedChange = { radialInvertAnalogRightY = it }
+                            )
+                            
+                            Spacer(Modifier.height(16.dp))
+                            HorizontalDivider(color = Color(0x40FFFFFF))
+                            Spacer(Modifier.height(16.dp))
+
+                            Text(
+                                text = "Lightgun Options",
+                                color = Color(0xFFFFC107),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            SwitchRow(
+                                title = "Trigger on Touch",
+                                subtitle = "Fire immediately when touching the screen",
+                                checked = lightgunTriggerOnTouch,
+                                onCheckedChange = { lightgunTriggerOnTouch = it }
+                            )
+
+                            SwitchRow(
+                                title = "Allow Off-Screen Shots",
+                                subtitle = "Permit shooting outside the playfield",
+                                checked = lightgunAllowOffscreen,
+                                onCheckedChange = { lightgunAllowOffscreen = it }
+                            )
+
+                            Column {
+                                Text(
+                                    text = "Trigger Delay: ${lightgunTriggerDelay} frame(s)",
+                                    color = Color.White,
+                                    fontSize = 14.sp
+                                )
+                                Slider(
+                                    value = lightgunTriggerDelay.toFloat(),
+                                    onValueChange = { lightgunTriggerDelay = it.roundToInt().coerceAtLeast(0) },
+                                    valueRange = 0f..10f,
+                                    steps = 9,
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Color(0xFFFFC107),
+                                        activeTrackColor = Color(0xFFFFC107),
+                                        inactiveTrackColor = Color(0x40FFFFFF)
+                                    )
+                                )
+                                Text(
+                                    text = "Frames to wait before sending the lightgun trigger",
+                                    color = Color(0xFF888888),
+                                    fontSize = 11.sp
+                                )
+                            }
+
+                            Column {
+                                Text(
+                                    text = "Lightgun Port: ${if (lightgunPort < 0) "All" else lightgunPort + 1}",
+                                    color = Color.White,
+                                    fontSize = 14.sp
+                                )
+                                Slider(
+                                    value = lightgunPort.toFloat(),
+                                    onValueChange = {
+                                        lightgunPort = it.roundToInt().coerceIn(-1, 3)
+                                    },
+                                    valueRange = -1f..3f,
+                                    steps = 3,
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Color(0xFF4CAF50),
+                                        activeTrackColor = Color(0xFF4CAF50),
+                                        inactiveTrackColor = Color(0x40FFFFFF)
+                                    )
+                                )
+                                Text(
+                                    text = "Choose which port controls the lightgun (-1 = all ports)",
+                                    color = Color(0xFF888888),
+                                    fontSize = 11.sp
+                                )
+                            }
+                            
+                            Spacer(Modifier.height(16.dp))
+                            
+                            // Buttons for Radial - Keep Reset and Done
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Button(
+                                    onClick = {
+                                        radialScale = 0.5f 
+                                        radialRotation = 0f
+                                        radialMarginX = 0f
+                                        radialMarginY = 0f
+                                        radialSwapAnalogSticks = false
+                                        radialInvertAnalogLeftY = false
+                                        radialInvertAnalogRightY = false
+                                        // Lightgun defaults (managed by AdvancedOverlaySettings logic)
+                                        lightgunTriggerOnTouch = true
+                                        lightgunTriggerDelay = 1
+                                        lightgunAllowOffscreen = true
+                                        lightgunPort = -1
+                                    },
+                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722))
+                                ) { Text("Reset", color = Color.White) }
+                                
+                                Button(
+                                    onClick = onDismiss,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                                ) { Text("Done", color = Color.White) }
+                            }
+                        }
+                        1 -> {
+                             // NEW Advanced Tab content for Radial
+                            AdvancedVisibilitySettingsContent(
+                                hideInMenu = hideInMenu,
+                                onHideInMenuChanged = { hideInMenu = it },
+                                behindMenu = behindMenu,
+                                onBehindMenuChanged = { behindMenu = it },
+                                hideWhenGamepad = hideWhenGamepad,
+                                onHideWhenGamepadChanged = { hideWhenGamepad = it },
+                                hideWhenGamepadPort0Only = hideWhenGamepadPort0Only,
+                                onHideWhenGamepadPort0OnlyChanged = { hideWhenGamepadPort0Only = it }
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))) { Text("Done", color = Color.White) }
+                            }
+                        }
+                        2 -> {
+                            GeneralSettingsTabContent(
+                                // ... (Keep existing General Settings logic)
+                                prefs = prefs,
+                                console = console,
+                                debugModeState = debugModeState,
+                                onShaderChanged = onShaderChanged,
+                                onVsyncChanged = onVsyncChanged,
+                                onAspectRatioChanged = onAspectRatioChanged,
+                                onAudioVolumeChanged = onAudioVolumeChanged,
+                                onAudioMuteChanged = onAudioMuteChanged,
+                                onFastForwardRatioChanged = onFastForwardRatioChanged,
+                                onRewindEnabledChanged = onRewindEnabledChanged,
+                                onPsxAnalogModeChanged = onPsxAnalogModeChanged
+                            )
+                            Spacer(Modifier.height(16.dp))
+                             Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Button(
+                                    onClick = onDismiss,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                                ) { Text("Done", color = Color.White) }
+                            }
+                        }
                     }
                 }
                 }
@@ -2594,6 +1956,776 @@ private fun RadialSlider(
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun GeneralSettingsTabContent(
+    prefs: android.content.SharedPreferences,
+    console: String,
+    debugModeState: androidx.compose.runtime.MutableState<Boolean>,
+    onShaderChanged: (String) -> Unit,
+    onVsyncChanged: (Boolean) -> Unit,
+    onAspectRatioChanged: (String) -> Unit,
+    onAudioVolumeChanged: (Float) -> Unit,
+    onAudioMuteChanged: (Boolean) -> Unit,
+    onFastForwardRatioChanged: (Float) -> Unit,
+    onRewindEnabledChanged: (Boolean) -> Unit,
+    onPsxAnalogModeChanged: ((Boolean) -> Unit)?
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // ========== SHADERS SECTION ==========
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Shaders",
+            color = Color(0xFFFF9800),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        androidx.compose.material3.TextButton(
+            onClick = {
+                prefs.edit().putString("emulation_shader_preset", "DEFAULT").apply()
+                onShaderChanged("DEFAULT")
+            }
+        ) {
+            Text("Reset", color = Color(0xFF888888), fontSize = 12.sp)
+        }
+    }
+
+    var selectedShaderName by remember { 
+        mutableStateOf(
+            prefs.getString("emulation_shader_preset", "DEFAULT") ?: "DEFAULT"
+        )
+    }
+    var expandedShaderMenu by remember { mutableStateOf(false) }
+
+    val availableShaders = com.retroplay.shader.ShaderManager.ShaderPreset.values()
+    val currentShader = com.retroplay.shader.ShaderManager.fromString(selectedShaderName)
+
+    Box {
+        Button(
+            onClick = { expandedShaderMenu = true },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF2A2A2A)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Shader Preset: ${currentShader.displayName}",
+                    color = Color.White
+                )
+                Text("▼", color = Color(0xFF888888))
+            }
+        }
+
+        androidx.compose.material3.DropdownMenu(
+            expanded = expandedShaderMenu,
+            onDismissRequest = { expandedShaderMenu = false },
+            modifier = Modifier.background(Color(0xFF1C1C1C))
+        ) {
+            availableShaders.forEach { shader ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { 
+                        Text(
+                            text = "${shader.icon} ${shader.displayName}",
+                            color = if (shader == currentShader) Color(0xFFFF9800) else Color.White
+                        )
+                    },
+                    onClick = {
+                        selectedShaderName = shader.name
+                        expandedShaderMenu = false
+                        prefs.edit().putString("emulation_shader_preset", shader.name).apply()
+                        onShaderChanged(shader.name)
+                    }
+                )
+            }
+        }
+    }
+
+    HorizontalDivider(color = Color(0x40FFFFFF))
+
+    // ========== VIDEO SECTION ==========
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Video Settings",
+            color = Color(0xFFFF9800),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        androidx.compose.material3.TextButton(
+            onClick = {
+                prefs.edit()
+                    .putBoolean("emulation_video_vsync", true)
+                    .putString("emulation_video_aspect_ratio", "AUTO")
+                    .apply()
+                // Synchroniser avec RetroPlayConfigManager
+                val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+                com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = true))
+                onVsyncChanged(true)
+            }
+        ) {
+            Text("Reset", color = Color(0xFF888888), fontSize = 12.sp)
+        }
+    }
+
+    var vsyncEnabled by remember { 
+        mutableStateOf(
+            prefs.getBoolean("emulation_video_vsync", true)
+        )
+    }
+
+    val vsyncIsDefault = vsyncEnabled == true
+
+    SwitchRow(
+        title = "VSync",
+        subtitle = "Vertical synchronization (reduces screen tearing)",
+        checked = vsyncEnabled,
+        onCheckedChange = { 
+            vsyncEnabled = it
+            prefs.edit().putBoolean("emulation_video_vsync", it).apply()
+            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+            com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = it))
+            onVsyncChanged(it)
+        },
+        showModifiedIndicator = !vsyncIsDefault
+    )
+
+    // Aspect Ratio
+    var selectedAspectRatio by remember { 
+        mutableStateOf(
+            prefs.getString("emulation_video_aspect_ratio", "AUTO") ?: "AUTO"
+        )
+    }
+    var expandedAspectRatioMenu by remember { mutableStateOf(false) }
+
+    val aspectRatios = listOf(
+        "AUTO" to "Auto (Core Default)",
+        "4:3" to "4:3 (1.33:1)",
+        "16:9" to "16:9 (1.78:1)",
+        "16:10" to "16:10 (1.6:1)",
+        "1:1" to "1:1 (Square)",
+        "21:9" to "21:9 (2.33:1)"
+    )
+
+    val aspectRatioIsDefault = selectedAspectRatio == "AUTO"
+
+    Box {
+        Button(
+            onClick = { expandedAspectRatioMenu = true },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (aspectRatioIsDefault) Color(0xFF2A2A2A) else Color(0xFF3A2A1A)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Aspect Ratio: ${aspectRatios.find { it.first == selectedAspectRatio }?.second ?: selectedAspectRatio}",
+                        color = Color.White
+                    )
+                    if (!aspectRatioIsDefault) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("●", color = Color(0xFFFF9800), fontSize = 8.sp)
+                    }
+                }
+                Text("▼", color = Color(0xFF888888))
+            }
+        }
+
+        androidx.compose.material3.DropdownMenu(
+            expanded = expandedAspectRatioMenu,
+            onDismissRequest = { expandedAspectRatioMenu = false },
+            modifier = Modifier.background(Color(0xFF222222))
+        ) {
+            aspectRatios.forEach { (ratio, displayName) ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { 
+                        Text(
+                            text = displayName,
+                            color = if (ratio == selectedAspectRatio) Color(0xFFFF9800) else Color.White
+                        )
+                    },
+                    onClick = {
+                        selectedAspectRatio = ratio
+                        expandedAspectRatioMenu = false
+                        prefs.edit().putString("emulation_video_aspect_ratio", ratio).apply()
+                        onAspectRatioChanged(ratio)
+                    }
+                )
+            }
+        }
+    }
+
+    HorizontalDivider(color = Color(0x40FFFFFF))
+
+    // ========== AUDIO SECTION ==========
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Audio Settings",
+            color = Color(0xFFFF9800),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        androidx.compose.material3.TextButton(
+            onClick = {
+                prefs.edit()
+                    .putFloat("emulation_audio_volume", 1.0f)
+                    .putBoolean("emulation_audio_muted", false)
+                    .putBoolean("emulation_audio_low_latency", false)
+                    .apply()
+                onAudioVolumeChanged(1.0f)
+                onAudioMuteChanged(false)
+            }
+        ) {
+            Text("Reset", color = Color(0xFF888888), fontSize = 12.sp)
+        }
+    }
+
+    var audioVolume by remember { 
+        mutableStateOf(prefs.getFloat("emulation_audio_volume", 1.0f)) 
+    }
+    var audioMuted by remember { 
+        mutableStateOf(prefs.getBoolean("emulation_audio_muted", false)) 
+    }
+
+    val volumeIsDefault = audioVolume == 1.0f
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        SliderWithLabel(
+            label = "Volume",
+            value = audioVolume,
+            onValueChange = { 
+                audioVolume = it
+                prefs.edit().putFloat("emulation_audio_volume", it).apply()
+                onAudioVolumeChanged(it)
+            },
+            valueRange = 0.0f..1.0f,
+            displayValue = "${(audioVolume * 100).toInt()}%",
+            activeColor = Color(0xFF4CAF50)
+        )
+        if (!volumeIsDefault) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("●", color = Color(0xFFFF9800), fontSize = 8.sp)
+        }
+    }
+
+    val muteIsDefault = !audioMuted
+
+    SwitchRow(
+        title = "Mute Audio",
+        subtitle = "Disable all audio output",
+        checked = audioMuted,
+        onCheckedChange = { 
+            audioMuted = it
+            prefs.edit().putBoolean("emulation_audio_muted", it).apply()
+            onAudioMuteChanged(it)
+        },
+        showModifiedIndicator = !muteIsDefault
+    )
+
+    var lowLatencyAudio by remember { 
+        mutableStateOf(
+            prefs.getBoolean("emulation_audio_low_latency", false)
+        )
+    }
+
+    val lowLatencyIsDefault = !lowLatencyAudio
+
+    SwitchRow(
+        title = "Low Latency Audio",
+        subtitle = "Use low latency audio mode (reduces audio delay, may increase battery usage)",
+        checked = lowLatencyAudio,
+        onCheckedChange = { 
+            lowLatencyAudio = it
+            prefs.edit().putBoolean("emulation_audio_low_latency", it).apply()
+        },
+        showModifiedIndicator = !lowLatencyIsDefault
+    )
+
+    HorizontalDivider(color = Color(0x40FFFFFF))
+
+    // ========== ADVANCED SECTION ==========
+    Text(
+        text = "Advanced Settings",
+        color = Color(0xFFFF9800),
+        fontSize = 16.sp,
+        fontWeight = FontWeight.SemiBold
+    )
+
+    var fastForwardRatio by remember { 
+        mutableStateOf(prefs.getFloat("emulation_fast_forward_ratio", 2.0f)) 
+    }
+
+    SliderWithLabel(
+        label = "Fast Forward Ratio",
+        value = fastForwardRatio,
+        onValueChange = { 
+            fastForwardRatio = it
+            prefs.edit().putFloat("emulation_fast_forward_ratio", it).apply()
+            onFastForwardRatioChanged(it)
+        },
+        valueRange = 1.0f..10.0f,
+        displayValue = "${fastForwardRatio.toInt()}x",
+        activeColor = Color(0xFFFF9800)
+    )
+
+    var rewindEnabled by remember { 
+        mutableStateOf(
+            prefs.getBoolean("emulation_rewind_enable", false)
+        )
+    }
+
+    SwitchRow(
+        title = "Rewind",
+        subtitle = "Enable rewind functionality (requires buffer)",
+        checked = rewindEnabled,
+        onCheckedChange = { 
+            rewindEnabled = it
+            prefs.edit().putBoolean("emulation_rewind_enable", it).apply()
+            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+            com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(rewindEnable = it))
+            onRewindEnabledChanged(it)
+        }
+    )
+
+    SwitchRow(
+        title = "Debug Mode",
+        subtitle = "Show overlay debug information",
+        checked = debugModeState.value,
+        onCheckedChange = { debugModeState.value = it }
+    )
+
+    HorizontalDivider(color = Color(0x40FFFFFF))
+
+    // Run-Ahead Settings
+    var runAheadEnabled by remember { 
+        mutableStateOf(
+            prefs.getBoolean("emulation_runahead_enabled", false)
+        )
+    }
+    var runAheadFrames by remember { 
+        mutableStateOf(
+            prefs.getInt("emulation_runahead_frames", 1).toFloat()
+        )
+    }
+
+    SwitchRow(
+        title = "Run-Ahead",
+        subtitle = "Reduce input lag by running N frames ahead (requires save state support)",
+        checked = runAheadEnabled,
+        onCheckedChange = { 
+            runAheadEnabled = it
+            prefs.edit().putBoolean("emulation_runahead_enabled", it).apply()
+            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+            com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(runAheadEnabled = it))
+        }
+    )
+
+    if (runAheadEnabled) {
+        SliderWithLabel(
+            label = "Run-Ahead Frames",
+            value = runAheadFrames,
+            onValueChange = { 
+                runAheadFrames = it
+                prefs.edit().putInt("emulation_runahead_frames", it.toInt()).apply()
+                val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+                com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(runAheadFrames = it.toInt()))
+            },
+            valueRange = 1.0f..4.0f,
+            displayValue = "${runAheadFrames.toInt()} frames",
+            activeColor = Color(0xFF4CAF50)
+        )
+
+        Text(
+            text = "Recommended: 1-2 frames for most games, 3-4 for fighting games",
+            color = Color(0xFF888888),
+            fontSize = 11.sp,
+            fontStyle = FontStyle.Italic
+        )
+    }
+
+    HorizontalDivider(color = Color(0x40FFFFFF))
+
+    // ========== CONSOLE-SPECIFIC SETTINGS ==========
+    if (console.equals("psx", ignoreCase = true)) {
+        Text(
+            text = "PlayStation Settings",
+            color = Color(0xFFFF9800),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        var psxAnalogMode by remember { 
+            mutableStateOf(
+                prefs.getBoolean("psx_analog_mode_enabled", true)
+            )
+        }
+
+        SwitchRow(
+            title = "Enable Analog Mode (DualShock)",
+            subtitle = "Activate analog sticks on PSX controller (like pressing ANALOG button on DualShock)",
+            checked = psxAnalogMode,
+            onCheckedChange = { 
+                psxAnalogMode = it
+                prefs.edit().putBoolean("psx_analog_mode_enabled", it).apply()
+                onPsxAnalogModeChanged?.invoke(it)
+                android.widget.Toast.makeText(
+                    context,
+                    if (it) "Analog mode ON - Applied immediately!" else "Analog mode OFF - Applied immediately!",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        )
+
+        Text(
+            text = "When enabled, analog sticks will work in games that support them (Ape Escape, Medal of Honor, Crash Team Racing, etc.). Changes apply immediately!",
+            color = Color(0xFF888888),
+            fontSize = 11.sp,
+            fontStyle = FontStyle.Italic,
+            modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+        )
+
+        HorizontalDivider(color = Color(0x40FFFFFF))
+    }
+
+    // ========== INPUT SETTINGS (HOTKEYS) SECTION ==========
+    Text(
+        text = "Input Settings (Hotkeys)",
+        color = Color(0xFFFF9800),
+        fontSize = 16.sp,
+        fontWeight = FontWeight.SemiBold
+    )
+
+    Text(
+        text = "Hotkeys are configured in overlay .cfg files. Available hotkeys:",
+        color = Color(0xFF888888),
+        fontSize = 12.sp
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    val hotkeys = listOf(
+        "Save State" to "save_state",
+        "Load State" to "load_state",
+        "State Slot +" to "state_slot_increase",
+        "State Slot -" to "state_slot_decrease",
+        "Fast Forward" to "toggle_fast_forward",
+        "Rewind" to "rewind",
+        "Reset" to "reset",
+        "Pause Toggle" to "pause_toggle",
+        "Audio Mute" to "audio_mute_toggle",
+        "Shader Next" to "shader_next",
+        "Shader Prev" to "shader_prev",
+        "Screenshot" to "screenshot",
+        "Frame Advance" to "frame_advance"
+    )
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        hotkeys.forEach { (displayName, action) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = displayName,
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = action,
+                        color = Color(0xFF888888),
+                        fontSize = 11.sp
+                    )
+                }
+                Text(
+                    text = "✓",
+                    color = Color(0xFF4CAF50),
+                    fontSize = 14.sp
+                )
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Text(
+        text = "Note: Hotkeys are triggered from overlay buttons. To configure hotkeys, edit the overlay .cfg file or use overlay buttons.",
+        color = Color(0xFF666666),
+        fontSize = 11.sp,
+        fontStyle = FontStyle.Italic
+    )
+
+    HorizontalDivider(color = Color(0x40FFFFFF))
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // ========== CONTROLLER PORTS CONFIGURATION ==========
+    Text(
+        text = "Controller Ports",
+        color = Color(0xFFFF9800),
+        fontSize = 16.sp,
+        fontWeight = FontWeight.SemiBold
+    )
+
+    Text(
+        text = "Configure controller type for each port. Manual configuration overrides auto-detection.",
+        color = Color(0xFF888888),
+        fontSize = 12.sp
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    val controllerTypes = listOf(
+        "Auto (Default)" to -1,
+        "None" to 0,
+        "Joypad" to 1,
+        "Lightgun" to 4,
+        "Pointer" to 6,
+        "Zapper (NES)" to 258
+    )
+
+    for (port in 0..3) {
+        var selectedControllerType by remember { 
+            mutableStateOf(
+                prefs.getInt("controller_port_${console}_port${port}", -1) // -1 = Auto
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Port ${port + 1}",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+
+            var expandedPortMenu by remember { mutableStateOf(false) }
+
+            Box {
+                androidx.compose.material3.TextButton(
+                    onClick = { expandedPortMenu = true }
+                ) {
+                    Text(
+                        text = controllerTypes.find { it.second == selectedControllerType }?.first ?: "Auto",
+                        color = if (selectedControllerType == -1) Color(0xFF888888) else Color(0xFF00BCD4),
+                        fontSize = 12.sp
+                    )
+                }
+
+                androidx.compose.material3.DropdownMenu(
+                    expanded = expandedPortMenu,
+                    onDismissRequest = { expandedPortMenu = false },
+                    modifier = Modifier.background(Color(0xFF222222))
+                ) {
+                    controllerTypes.forEach { (name, id) ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(name, color = Color.White) },
+                            onClick = {
+                                selectedControllerType = id
+                                expandedPortMenu = false
+                                prefs.edit().putInt("controller_port_${console}_port${port}", id).apply()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Text(
+        text = "Note: 'Auto' uses automatic detection. Manual settings override auto-detection for this console.",
+        color = Color(0xFF666666),
+        fontSize = 11.sp,
+        fontStyle = FontStyle.Italic
+    )
+}
+// ... (End of file)
+
+@Composable
+private fun AdvancedVisibilitySettingsContent(
+    hideInMenu: Boolean,
+    onHideInMenuChanged: (Boolean) -> Unit,
+    behindMenu: Boolean,
+    onBehindMenuChanged: (Boolean) -> Unit,
+    hideWhenGamepad: Boolean,
+    onHideWhenGamepadChanged: (Boolean) -> Unit,
+    hideWhenGamepadPort0Only: Boolean,
+    onHideWhenGamepadPort0OnlyChanged: (Boolean) -> Unit
+) {
+    Text(
+        "Behavior",
+        color = Color(0xFFFF9800),
+        fontSize = 16.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+    
+    // Hide in Menu
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Hide Overlay in Menu",
+                color = Color.White,
+                fontSize = 14.sp
+            )
+            Text(
+                "Hide overlay when in-game menu is open",
+                color = Color(0xFF888888),
+                fontSize = 11.sp
+            )
+        }
+        Switch(
+            checked = hideInMenu,
+            onCheckedChange = onHideInMenuChanged,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFF4CAF50),
+                checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
+                uncheckedThumbColor = Color(0xFF888888),
+                uncheckedTrackColor = Color(0xFF444444)
+            )
+        )
+    }
+    
+    // Behind Menu
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Overlay Behind Menu",
+                color = Color.White,
+                fontSize = 14.sp
+            )
+            Text(
+                "Render overlay behind menu (instead of hiding)",
+                color = Color(0xFF888888),
+                fontSize = 11.sp
+            )
+        }
+        Switch(
+            checked = behindMenu,
+            onCheckedChange = onBehindMenuChanged,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFF2196F3),
+                checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
+                uncheckedThumbColor = Color(0xFF888888),
+                uncheckedTrackColor = Color(0xFF444444)
+            )
+        )
+    }
+    
+    // Hide When Gamepad Connected
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Hide When Gamepad Connected",
+                color = Color.White,
+                fontSize = 14.sp
+            )
+            Text(
+                "Hide touch overlay when physical gamepad is detected",
+                color = Color(0xFF888888),
+                fontSize = 11.sp
+            )
+        }
+        Switch(
+            checked = hideWhenGamepad,
+            onCheckedChange = onHideWhenGamepadChanged,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFFFF9800),
+                checkedTrackColor = Color(0xFFFF9800).copy(alpha = 0.5f),
+                uncheckedThumbColor = Color(0xFF888888),
+                uncheckedTrackColor = Color(0xFF444444)
+            )
+        )
+    }
+    
+    // Hide When Gamepad Connected - Port 0 Only (multijoueur)
+    if (hideWhenGamepad) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp, horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Port 0 Only (Multijoueur)",
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
+                Text(
+                    "Hide overlay only if gamepad on port 0. Allows player 2 to use overlay touch",
+                    color = Color(0xFF888888),
+                    fontSize = 11.sp
+                )
+            }
+            Switch(
+                checked = hideWhenGamepadPort0Only,
+                onCheckedChange = onHideWhenGamepadPort0OnlyChanged,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color(0xFFFF9800),
+                    checkedTrackColor = Color(0xFFFF9800).copy(alpha = 0.5f),
+                    uncheckedThumbColor = Color(0xFF888888),
+                    uncheckedTrackColor = Color(0xFF444444)
+                )
+            )
         }
     }
 }

@@ -1073,10 +1073,7 @@ fun ComposeEmulatorScreen(
                                 }
                             }
                         },
-                        onPreviewSettings = { newSettings ->
-                            // Direct State Update for smooth Live Preview
-                            settings = newSettings
-                        }
+
                     )
                 }
                 

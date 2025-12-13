@@ -30,6 +30,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import com.retroplay.R;
+import com.retroplay.usecases.LoadCoresUseCase;
+import com.retroplay.usecases.ScanConsoleUseCase;
+import com.retroplay.ui.dialogs.AuditReportDialog;
 
 public class ConsoleManagerActivity extends AppCompatActivity {
     
@@ -176,7 +179,7 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                             File consoleDir = new File(GAMELIBRARY_DIR + "/" + console.id);
                             if (consoleDir.exists() && consoleDir.isDirectory()) {
                                 String extensions = console.extensions != null ? String.join(", ", console.extensions) : "";
-                                AuditResult result = scanConsoleWithAudit(console.id, console.name, extensions);
+                                ScanConsoleUseCase.ScanResult result = new ScanConsoleUseCase().scanConsoleWithAudit(console.id, console.name, extensions);
                                 if (result != null && result.success) {
                                     success++;
                                     totalRomsFound += result.totalRoms;
@@ -235,7 +238,7 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                         progressDialog.dismiss();
                         
                         // Afficher le rapport d'audit
-                        showAuditReportDialog(finalReport, finalSuccess, finalScanned);
+                        AuditReportDialog.show(ConsoleManagerActivity.this, finalReport, finalSuccess, finalScanned);
                         
                         // Recharger la liste
                         loadConsoles();
@@ -246,465 +249,20 @@ public class ConsoleManagerActivity extends AppCompatActivity {
             .show();
     }
     
-    private void showAuditReportDialog(String report, int success, int total) {
-        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
-        builder.setTitle("ROM Audit Report");
-        
-        // Créer un ScrollView pour le rapport
-        android.widget.ScrollView scrollView = new android.widget.ScrollView(this);
-        android.widget.TextView textView = new android.widget.TextView(this);
-        textView.setText(report);
-        textView.setTextSize(12);
-        textView.setTypeface(android.graphics.Typeface.MONOSPACE);
-        textView.setPadding(40, 40, 40, 40);
-        textView.setTextIsSelectable(true);
-        scrollView.addView(textView);
-        
-        builder.setView(scrollView);
-        builder.setPositiveButton("OK", null);
-        builder.setNeutralButton("Copy Report", (dialog, which) -> {
-            android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(android.content.Context.CLIPBOARD_SERVICE);
-            android.content.ClipData clip = android.content.ClipData.newPlainText("Audit Report", report);
-            clipboard.setPrimaryClip(clip);
-            android.widget.Toast.makeText(this, "Report copied to clipboard", android.widget.Toast.LENGTH_SHORT).show();
-        });
-        builder.show();
-    }
+    // Méthode showAuditReportDialog déplacée vers AuditReportDialog.show(...)
     
-    private AuditResult scanConsoleWithAudit(String consoleId, String consoleName, String extensionsStr) {
-        AuditResult result = new AuditResult();
-        result.consoleId = consoleId;
-        result.consoleName = consoleName;
-        
-        try {
-            File consoleDir = new File(GAMELIBRARY_DIR + "/" + consoleId);
-            if (!consoleDir.exists() || !consoleDir.isDirectory()) {
-                result.success = false;
-                return result;
-            }
-            
-            // Charger les extensions depuis console.json si présent
-            List<String> extensions = new ArrayList<>();
-            File consoleJsonFile = new File(consoleDir, "console.json");
-            if (consoleJsonFile.exists()) {
-                java.io.FileInputStream fis = new java.io.FileInputStream(consoleJsonFile);
-                byte[] buffer = new byte[(int) consoleJsonFile.length()];
-                fis.read(buffer);
-                fis.close();
-                String json = new String(buffer, "UTF-8");
-                JSONObject consoleJson = new JSONObject(json);
-                
-                if (consoleJson.has("extensions")) {
-                    JSONArray extArray = consoleJson.getJSONArray("extensions");
-                    for (int i = 0; i < extArray.length(); i++) {
-                        extensions.add(extArray.getString(i).toLowerCase());
-                    }
-                }
-            }
-            
-            // Si pas d'extensions dans console.json, utiliser celles fournies
-            if (extensions.isEmpty() && !extensionsStr.isEmpty()) {
-                String[] parts = extensionsStr.split(",");
-                for (String ext : parts) {
-                    String cleaned = ext.trim().toLowerCase();
-                    if (!cleaned.isEmpty()) {
-                        if (!cleaned.startsWith(".")) {
-                            cleaned = "." + cleaned;
-                        }
-                        extensions.add(cleaned);
-                    }
-                }
-            }
-            
-            // Scanner les ROMs dans le répertoire
-            File[] files = consoleDir.listFiles();
-            List<ScannedRom> scannedRoms = new ArrayList<>();
-            int romCounter = 1;
-            
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isFile()) {
-                        String fileName = file.getName();
-                        
-                        // Vérifier si c'est un ROM
-                        boolean isRom = false;
-                        if (!extensions.isEmpty()) {
-                            for (String ext : extensions) {
-                                if (fileName.toLowerCase().endsWith(ext)) {
-                                    isRom = true;
-                                    break;
-                                }
-                            }
-                        } else {
-                            isRom = isRomFile(fileName);
-                        }
-                        
-                        if (isRom) {
-                            String baseName = getBaseNameFromFile(fileName);
-                            
-                            // Vérifier si les images existent
-                            File box2dImage = new File(consoleDir, "media/box2d/" + baseName + ".png");
-                            File screenshotImage = new File(consoleDir, "media/screenshots/" + baseName + ".png");
-                            
-                            ScannedRom rom = new ScannedRom();
-                            rom.id = String.valueOf(romCounter++);
-                            rom.name = baseName;
-                            rom.path = "./" + fileName;
-                            rom.hasBox2dImage = box2dImage.exists();
-                            rom.hasScreenshot = screenshotImage.exists();
-                            
-                            scannedRoms.add(rom);
-                        }
-                    }
-                }
-            }
-            
-            result.totalRoms = scannedRoms.size();
-            
-            // Si aucun ROM trouvé, ignorer
-            if (scannedRoms.isEmpty()) {
-                result.success = false;
-                return result;
-            }
-            
-            // AUDIT MODE: Charger le gamelist.json existant et faire un merge intelligent
-            File gamelistFile = new File(consoleDir, "gamelist.json");
-            JSONArray existingGames = new JSONArray();
-            java.util.HashSet<String> existingPaths = new java.util.HashSet<>();
-            
-            // Charger les entrées existantes
-            if (gamelistFile.exists()) {
-                try {
-                    java.io.FileInputStream fis = new java.io.FileInputStream(gamelistFile);
-                    byte[] buffer = new byte[(int) gamelistFile.length()];
-                    fis.read(buffer);
-                    fis.close();
-                    String existingJson = new String(buffer, "UTF-8");
-                    existingGames = new JSONArray(existingJson);
-                    
-                    // Compter les entrées existantes
-                    for (int i = 0; i < existingGames.length(); i++) {
-                        try {
-                            JSONObject game = existingGames.getJSONObject(i);
-                            existingPaths.add(game.getString("path"));
-                        } catch (Exception e) {
-                            // Ignorer
-                        }
-                    }
-                } catch (Exception e) {
-                    android.util.Log.w("ConsoleManager", "Could not load existing gamelist.json, creating new one");
-                }
-            }
-            
-            // Créer une map des ROMs existantes (path -> JSONObject)
-            java.util.HashMap<String, JSONObject> existingRomsMap = new java.util.HashMap<>();
-            for (int i = 0; i < existingGames.length(); i++) {
-                try {
-                    JSONObject game = existingGames.getJSONObject(i);
-                    String path = game.getString("path");
-                    existingRomsMap.put(path, game);
-                } catch (Exception e) {
-                    // Ignorer les entrées invalides
-                }
-            }
-            
-            // Créer le nouveau JSON en fusionnant les données
-            JSONArray gamesArray = new JSONArray();
-            int newId = 1;
-            
-            for (ScannedRom rom : scannedRoms) {
-                JSONObject gameObj;
-                
-                // Vérifier si ce ROM existe déjà
-                if (existingRomsMap.containsKey(rom.path)) {
-                    // GARDER les métadonnées existantes
-                    gameObj = existingRomsMap.get(rom.path);
-                    // Mettre à jour seulement l'ID pour la cohérence
-                    gameObj.put("id", String.valueOf(newId++));
-                    
-                    // Mettre à jour l'image si elle existe maintenant
-                    if (rom.hasBox2dImage && !gameObj.optString("image", "").contains("box2d")) {
-                        gameObj.put("image", "./media/box2d/" + rom.name + ".png");
-                        result.updatedRoms++;
-                    }
-                } else {
-                    // NOUVEAU ROM: créer une entrée basique
-                    gameObj = new JSONObject();
-                    gameObj.put("id", String.valueOf(newId++));
-                    gameObj.put("name", rom.name);
-                    gameObj.put("path", rom.path);
-                    gameObj.put("image", rom.hasBox2dImage ? "./media/box2d/" + rom.name + ".png" : "");
-                    gameObj.put("desc", "");
-                    gameObj.put("releasedate", "");
-                    gameObj.put("developer", "");
-                    gameObj.put("publisher", "");
-                    gameObj.put("genre", "");
-                    gameObj.put("players", "");
-                    result.newRoms++;
-                }
-                
-                // Compter les images manquantes
-                if (!rom.hasBox2dImage && !rom.hasScreenshot) {
-                    result.missingImages++;
-                }
-                
-                gamesArray.put(gameObj);
-            }
-            
-            // Calculer les ROMs supprimés (dans l'ancien JSON mais plus sur le disque)
-            result.removedRoms = existingPaths.size() - (result.totalRoms - result.newRoms);
-            if (result.removedRoms < 0) result.removedRoms = 0;
-            
-            // Écrire le nouveau gamelist.json au format {"games": [...]}
-            JSONObject gamelistWrapper = new JSONObject();
-            gamelistWrapper.put("games", gamesArray);
-            java.io.FileWriter writer = new java.io.FileWriter(gamelistFile);
-            writer.write(gamelistWrapper.toString(2));
-            writer.close();
-            
-            result.success = true;
-            return result;
-        } catch (Exception e) {
-            android.util.Log.e("ConsoleManager", "Error in scanConsoleWithAudit: " + e.getMessage());
-            result.success = false;
-            return result;
-        }
-    }
+    // Méthode scanConsoleWithAudit déplacée vers ScanConsoleUseCase
+    // Utiliser: new ScanConsoleUseCase().scanConsoleWithAudit(...)
     
-    private boolean scanConsoleSilently(String consoleId, String extensionsStr) {
-        try {
-            File consoleDir = new File(GAMELIBRARY_DIR + "/" + consoleId);
-            if (!consoleDir.exists() || !consoleDir.isDirectory()) {
-                return false;
-            }
-            
-            // Charger les extensions depuis console.json si présent
-            List<String> extensions = new ArrayList<>();
-            File consoleJsonFile = new File(consoleDir, "console.json");
-            if (consoleJsonFile.exists()) {
-                java.io.FileInputStream fis = new java.io.FileInputStream(consoleJsonFile);
-                byte[] buffer = new byte[(int) consoleJsonFile.length()];
-                fis.read(buffer);
-                fis.close();
-                String json = new String(buffer, "UTF-8");
-                JSONObject consoleJson = new JSONObject(json);
-                
-                if (consoleJson.has("extensions")) {
-                    JSONArray extArray = consoleJson.getJSONArray("extensions");
-                    for (int i = 0; i < extArray.length(); i++) {
-                        extensions.add(extArray.getString(i).toLowerCase());
-                    }
-                }
-            }
-            
-            // Si pas d'extensions dans console.json, utiliser celles fournies
-            if (extensions.isEmpty() && !extensionsStr.isEmpty()) {
-                String[] parts = extensionsStr.split(",");
-                for (String ext : parts) {
-                    String cleaned = ext.trim().toLowerCase();
-                    if (!cleaned.isEmpty()) {
-                        if (!cleaned.startsWith(".")) {
-                            cleaned = "." + cleaned;
-                        }
-                        extensions.add(cleaned);
-                    }
-                }
-            }
-            
-            // Scanner les ROMs dans le répertoire
-            File[] files = consoleDir.listFiles();
-            List<ScannedRom> scannedRoms = new ArrayList<>();
-            int romCounter = 1;
-            
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isFile()) {
-                        String fileName = file.getName();
-                        
-                        // Vérifier si c'est un ROM
-                        boolean isRom = false;
-                        if (!extensions.isEmpty()) {
-                            for (String ext : extensions) {
-                                if (fileName.toLowerCase().endsWith(ext)) {
-                                    isRom = true;
-                                    break;
-                                }
-                            }
-                        } else {
-                            isRom = isRomFile(fileName);
-                        }
-                        
-                        if (isRom) {
-                            String baseName = getBaseNameFromFile(fileName);
-                            
-                            // Vérifier si les images existent
-                            File box2dImage = new File(consoleDir, "media/box2d/" + baseName + ".png");
-                            File screenshotImage = new File(consoleDir, "media/screenshots/" + baseName + ".png");
-                            
-                            ScannedRom rom = new ScannedRom();
-                            rom.id = String.valueOf(romCounter++);
-                            rom.name = baseName;
-                            rom.path = "./" + fileName;
-                            rom.hasBox2dImage = box2dImage.exists();
-                            rom.hasScreenshot = screenshotImage.exists();
-                            
-                            scannedRoms.add(rom);
-                        }
-                    }
-                }
-            }
-            
-            // Si aucun ROM trouvé, ignorer
-            if (scannedRoms.isEmpty()) {
-                return false;
-            }
-            
-            // AUDIT MODE: Charger le gamelist.json existant et faire un merge intelligent
-            File gamelistFile = new File(consoleDir, "gamelist.json");
-            JSONArray existingGames = new JSONArray();
-            
-            // Charger les entrées existantes
-            if (gamelistFile.exists()) {
-                try {
-                    java.io.FileInputStream fis = new java.io.FileInputStream(gamelistFile);
-                    byte[] buffer = new byte[(int) gamelistFile.length()];
-                    fis.read(buffer);
-                    fis.close();
-                    String existingJson = new String(buffer, "UTF-8");
-                    JSONObject gamelistObj = new JSONObject(existingJson);
-                    existingGames = gamelistObj.getJSONArray("games");
-                } catch (Exception e) {
-                    android.util.Log.w("ConsoleManager", "Could not load existing gamelist.json, creating new one");
-                }
-            }
-            
-            // Créer une map des ROMs existantes (path -> JSONObject)
-            java.util.HashMap<String, JSONObject> existingRomsMap = new java.util.HashMap<>();
-            for (int i = 0; i < existingGames.length(); i++) {
-                try {
-                    JSONObject game = existingGames.getJSONObject(i);
-                    String path = game.getString("path");
-                    existingRomsMap.put(path, game);
-                } catch (Exception e) {
-                    // Ignorer les entrées invalides
-                }
-            }
-            
-            // Créer le nouveau JSON en fusionnant les données
-            JSONArray gamesArray = new JSONArray();
-            int newId = 1;
-            
-            for (ScannedRom rom : scannedRoms) {
-                JSONObject gameObj;
-                
-                // Vérifier si ce ROM existe déjà
-                if (existingRomsMap.containsKey(rom.path)) {
-                    // GARDER les métadonnées existantes
-                    gameObj = existingRomsMap.get(rom.path);
-                    // Mettre à jour seulement l'ID pour la cohérence
-                    gameObj.put("id", String.valueOf(newId++));
-                    
-                    // Mettre à jour l'image si elle existe maintenant
-                    if (rom.hasBox2dImage && !gameObj.optString("image", "").contains("box2d")) {
-                        gameObj.put("image", "./media/box2d/" + rom.name + ".png");
-                    }
-                } else {
-                    // NOUVEAU ROM: créer une entrée basique
-                    gameObj = new JSONObject();
-                    gameObj.put("id", String.valueOf(newId++));
-                    gameObj.put("name", rom.name);
-                    gameObj.put("path", rom.path);
-                    gameObj.put("image", rom.hasBox2dImage ? "./media/box2d/" + rom.name + ".png" : "");
-                    gameObj.put("desc", "");
-                    gameObj.put("releasedate", "");
-                    gameObj.put("developer", "");
-                    gameObj.put("publisher", "");
-                    gameObj.put("genre", "");
-                    gameObj.put("players", "");
-                }
-                
-                gamesArray.put(gameObj);
-            }
-            
-            // Écrire le nouveau gamelist.json au format {"games": [...]}
-            JSONObject gamelistWrapper = new JSONObject();
-            gamelistWrapper.put("games", gamesArray);
-            java.io.FileWriter writer = new java.io.FileWriter(gamelistFile);
-            writer.write(gamelistWrapper.toString(2));
-            writer.close();
-            
-            return true;
-        } catch (Exception e) {
-            android.util.Log.e("ConsoleManager", "Error in scanConsoleSilently: " + e.getMessage());
-            return false;
-        }
-    }
+    // Méthode scanConsoleSilently déplacée vers ScanConsoleUseCase
+    // Utiliser: new ScanConsoleUseCase().scanConsoleSilently(...)
     
     private void loadAvailableCores() {
-        new Thread(() -> {
-            try {
-                // Lire cores.json pour obtenir la liste des cores disponibles
-                File coresFile = new File(GAMELIBRARY_DIR + "/data/cores/cores.json");
-                if (coresFile.exists()) {
-                    java.io.FileInputStream fis = new java.io.FileInputStream(coresFile);
-                    byte[] buffer = new byte[(int) coresFile.length()];
-                    fis.read(buffer);
-                    fis.close();
-                    String json = new String(buffer, "UTF-8");
-                    
-                    JSONArray coresArray = new JSONArray(json);
-                    List<String> tempCores = new ArrayList<>();
-                    
-                    // Ajouter "auto" en premier
-                    tempCores.add("auto");
-                    
-                    for (int i = 0; i < coresArray.length(); i++) {
-                        JSONObject core = coresArray.getJSONObject(i);
-                        String coreName = core.getString("name");
-                        tempCores.add(coreName);
-                    }
-                    
-                    runOnUiThread(() -> {
-                        availableCores = tempCores;
-                        Log.i(TAG, "Loaded " + availableCores.size() + " available cores from cores.json");
-                    });
-                } else {
-                    Log.w(TAG, "cores.json not found, using fallback cores");
-                    runOnUiThread(() -> setFallbackCores());
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Error loading cores.json", e);
-                runOnUiThread(() -> setFallbackCores());
-            }
-        }).start();
-    }
-    
-    private void setFallbackCores() {
-        availableCores.clear();
-        availableCores.add("auto");
-        // Arcade cores
-        availableCores.add("fbneo");
-        availableCores.add("mame2010");
-        availableCores.add("mame2003_plus");
-        availableCores.add("mame2003");
-        availableCores.add("fbalpha2012_cps1");
-        availableCores.add("fbalpha2012_cps2");
-        availableCores.add("flycast");
-        // Console cores
-        availableCores.add("fceumm");
-        availableCores.add("nestopia");
-        availableCores.add("snes9x");
-        availableCores.add("parallel_n64");
-        availableCores.add("mupen64plus_next");
-        availableCores.add("mupen64plus_next_gles3");
-        availableCores.add("mupen64plus_next_gles2");
-        availableCores.add("mgba");
-        availableCores.add("gambatte");
-        availableCores.add("melonds");
-        availableCores.add("desmume");
-        availableCores.add("pcsx_rearmed");
-        availableCores.add("genesis_plus_gx");
-        availableCores.add("picodrive");
+        LoadCoresUseCase useCase = new LoadCoresUseCase();
+        useCase.loadAvailableCores(cores -> runOnUiThread(() -> {
+            availableCores = cores;
+            Log.i(TAG, "Loaded " + availableCores.size() + " available cores");
+        }));
     }
     
     private void loadConsoles() {
@@ -1530,25 +1088,7 @@ public class ConsoleManagerActivity extends AppCompatActivity {
         List<String> extensions;
     }
     
-    static class AuditResult {
-        String consoleId;
-        String consoleName;
-        boolean success;
-        int totalRoms;
-        int newRoms;
-        int updatedRoms;
-        int removedRoms;
-        int missingImages;
-        
-        AuditResult() {
-            this.success = false;
-            this.totalRoms = 0;
-            this.newRoms = 0;
-            this.updatedRoms = 0;
-            this.removedRoms = 0;
-            this.missingImages = 0;
-        }
-    }
+    // AuditResult déplacé vers ScanConsoleUseCase.ScanResult
     
     // RecyclerView Adapter
     class ConsoleAdapter extends RecyclerView.Adapter<ConsoleAdapter.ViewHolder> {

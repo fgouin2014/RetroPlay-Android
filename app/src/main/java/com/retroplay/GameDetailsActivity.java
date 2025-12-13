@@ -28,6 +28,9 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.retroplay.database.GameInfo;
 import com.retroplay.gallery.ScreenshotRepository;
+import com.retroplay.helpers.RomPathResolver;
+import com.retroplay.helpers.MetadataResolver;
+import com.retroplay.usecases.LoadGameImagesUseCase;
 import java.io.File;
 import androidx.core.content.ContextCompat;
 
@@ -517,20 +520,9 @@ public class GameDetailsActivity extends AppCompatActivity {
     }
 
     private void loadGameImages() {
-        // Screenshot image (top)
         ImageView screenshotBackground = findViewById(R.id.game_screenshot_background);
-        Glide.with(this)
-                .load(game.getScreenshotWithFallback())
-                .placeholder(android.R.drawable.ic_menu_gallery)
-                .error(android.R.drawable.ic_menu_gallery)
-                .into(screenshotBackground);
-
-        // Box2D image (bottom) - icône avec fallback
-        Glide.with(this)
-                .load(game.getImageWithFallback())
-                .placeholder(android.R.drawable.ic_menu_gallery)
-                .error(android.R.drawable.ic_menu_gallery)
-                .into(gameImage);
+        LoadGameImagesUseCase useCase = new LoadGameImagesUseCase();
+        useCase.loadGameImages(game, screenshotBackground, gameImage);
     }
 
     private void setupButtons() {

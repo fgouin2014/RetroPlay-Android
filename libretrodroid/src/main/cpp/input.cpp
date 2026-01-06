@@ -222,6 +222,113 @@ int16_t Input::getInputState(unsigned port, unsigned device, unsigned index, uns
             }
         }
 
+        case RETRO_DEVICE_LIGHTGUN: {
+            switch (id) {
+                case RETRO_DEVICE_ID_LIGHTGUN_SCREEN_X: {
+                    // Utiliser les coordonnées POINTER (même source que MOTION_SOURCE_POINTER)
+                    int16_t result = (int16_t) (2.0 * (pads[port].pointerScreenXAxis - 0.5f) * MAX_RANGE_MOTION);
+                    LOGD("[NATIVE LIGHTGUN] port=%d SCREEN_X=%d (raw=%.3f)", port, result, pads[port].pointerScreenXAxis);
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_SCREEN_Y: {
+                    int16_t result = (int16_t) (2.0 * (pads[port].pointerScreenYAxis - 0.5f) * MAX_RANGE_MOTION);
+                    LOGD("[NATIVE LIGHTGUN] port=%d SCREEN_Y=%d (raw=%.3f)", port, result, pads[port].pointerScreenYAxis);
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_X: {
+                    // Deprecated relative position - utiliser SCREEN_X à la place
+                    int16_t result = (int16_t) (2.0 * (pads[port].pointerScreenXAxis - 0.5f) * MAX_RANGE_MOTION);
+                    LOGD("[NATIVE LIGHTGUN] port=%d X=%d (raw=%.3f, deprecated)", port, result, pads[port].pointerScreenXAxis);
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_Y: {
+                    // Deprecated relative position - utiliser SCREEN_Y à la place
+                    int16_t result = (int16_t) (2.0 * (pads[port].pointerScreenYAxis - 0.5f) * MAX_RANGE_MOTION);
+                    LOGD("[NATIVE LIGHTGUN] port=%d Y=%d (raw=%.3f, deprecated)", port, result, pads[port].pointerScreenYAxis);
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_TRIGGER: {
+                    // Utiliser MOUSE_BUTTON_LEFT comme trigger (compatible avec sendMouseButton)
+                    int16_t result = pads[port].mouseButtonLeft ? 1 : 0;
+                    LOGD("[NATIVE LIGHTGUN] port=%d TRIGGER=%d", port, result);
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN: {
+                    // Convertir d'abord en int16_t comme RetroArch (bytes-for-bytes compatible)
+                    int16_t x = (int16_t) (2.0 * (pads[port].pointerScreenXAxis - 0.5f) * MAX_RANGE_MOTION);
+                    int16_t y = (int16_t) (2.0 * (pads[port].pointerScreenYAxis - 0.5f) * MAX_RANGE_MOTION);
+                    
+                    // Utiliser exactement la même logique que RetroArch input_driver_pointer_is_offscreen()
+                    // RetroArch input_driver.c ligne 654-662: edge_detect = 32700
+                    const int edge_detect = 32700;
+                    bool isOffscreen = !(x >= -edge_detect && y >= -edge_detect && x <= edge_detect && y <= edge_detect);
+                    int16_t result = isOffscreen ? 1 : 0;
+                    LOGD("[NATIVE LIGHTGUN] port=%d IS_OFFSCREEN=%d (X=%d Y=%d, rawX=%.3f rawY=%.3f)", port, result, x, y, pads[port].pointerScreenXAxis, pads[port].pointerScreenYAxis);
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_RELOAD: {
+                    // Forced off-screen shot - utiliser MOUSE_BUTTON_RIGHT ou BUTTON_SELECT
+                    int16_t result = (pads[port].mouseButtonRight || anyPressed(port, RETRO_DEVICE_ID_JOYPAD_SELECT)) ? 1 : 0;
+                    LOGD("[NATIVE LIGHTGUN] port=%d RELOAD=%d", port, result);
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_AUX_A: {
+                    int16_t result = anyPressed(port, RETRO_DEVICE_ID_JOYPAD_A) ? 1 : 0;
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_AUX_B: {
+                    int16_t result = anyPressed(port, RETRO_DEVICE_ID_JOYPAD_B) ? 1 : 0;
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_AUX_C: {
+                    int16_t result = anyPressed(port, RETRO_DEVICE_ID_JOYPAD_X) ? 1 : 0;
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_START: {
+                    int16_t result = anyPressed(port, RETRO_DEVICE_ID_JOYPAD_START) ? 1 : 0;
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_SELECT: {
+                    int16_t result = anyPressed(port, RETRO_DEVICE_ID_JOYPAD_SELECT) ? 1 : 0;
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_DPAD_UP: {
+                    int16_t result = anyPressed(port, RETRO_DEVICE_ID_JOYPAD_UP) ? 1 : 0;
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_DPAD_DOWN: {
+                    int16_t result = anyPressed(port, RETRO_DEVICE_ID_JOYPAD_DOWN) ? 1 : 0;
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_DPAD_LEFT: {
+                    int16_t result = anyPressed(port, RETRO_DEVICE_ID_JOYPAD_LEFT) ? 1 : 0;
+                    return result;
+                }
+
+                case RETRO_DEVICE_ID_LIGHTGUN_DPAD_RIGHT: {
+                    int16_t result = anyPressed(port, RETRO_DEVICE_ID_JOYPAD_RIGHT) ? 1 : 0;
+                    return result;
+                }
+
+                default:
+                    return 0;
+            }
+        }
+
         // P1 #9: Keyboard Support - compatible RetroArch RETRO_DEVICE_KEYBOARD
         case RETRO_DEVICE_KEYBOARD: {
             // id is the RetroK keycode (RETROK_*)

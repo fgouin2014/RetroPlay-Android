@@ -100,7 +100,9 @@ class NativeEmulatorViewModel : ViewModel() {
             val gameInfo = com.retroplay.database.DatabaseManager.lookupGameByName(initialGameName, console)
             if (gameInfo != null) {
                 gameCRC = gameInfo.crc
-                com.retroplay.config.RetroPlayConfigManager.updateConfigValue("last_resolved_crc", gameInfo.crc)
+                // Note: updateConfigValue now requires console parameter
+                // This is a debug value, skip for now
+                // com.retroplay.config.RetroPlayConfigManager.updateConfigValue(console, "last_resolved_crc", gameInfo.crc)
             }
         }
         

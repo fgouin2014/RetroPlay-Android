@@ -653,6 +653,7 @@ object GamelistManager {
             "amiga" -> listOf(".adf", ".dsk", ".ipf", ".zip")
             "zxspectrum" -> listOf(".tap", ".tzx", ".z80", ".sna", ".dsk", ".trd", ".scl", ".zip")
             "spectrum" -> listOf(".tap", ".tzx", ".z80", ".sna", ".dsk", ".trd", ".scl", ".zip") // Alias
+
             else -> listOf(".zip", ".7z", ".rom", ".bin")
         }
     }

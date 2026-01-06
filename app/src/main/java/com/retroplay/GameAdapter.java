@@ -34,6 +34,11 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
     public void setFavoritesManager(FavoritesManager manager) {
         this.favoritesManager = manager;
     }
+    
+    public void updateGames(List<Game> newGames) {
+        this.games = newGames;
+        notifyDataSetChanged();
+    }
 
     @NonNull
     @Override
@@ -146,13 +151,26 @@ public class GameAdapter extends RecyclerView.Adapter<GameAdapter.ViewHolder> {
         String console = game.getConsole();
         String gameName = game.getName();
         
+        // Structure : saves/{console}/{gameName}/slot{slot}.state
+        java.io.File gameDir = new java.io.File("/storage/emulated/0/GameLibrary-Data/saves/" + console + "/" + gameName);
+        
         // Vérifier si au moins un slot contient une sauvegarde
         boolean hasSave = false;
-        for (int slot = 1; slot <= 5; slot++) {
-            java.io.File saveFile = new java.io.File("/storage/emulated/0/GameLibrary-Data/saves/" + console + "/slot" + slot + "/" + gameName + ".state");
-            if (saveFile.exists()) {
-                hasSave = true;
-                break;
+        if (gameDir.exists() && gameDir.isDirectory()) {
+            for (int slot = 1; slot <= 5; slot++) {
+                java.io.File saveFile = new java.io.File(gameDir, "slot" + slot + ".state");
+                if (saveFile.exists()) {
+                    hasSave = true;
+                    break;
+                }
+            }
+            
+            // Si pas trouvé avec le nom exact, chercher n'importe quel fichier slot*.state
+            if (!hasSave) {
+                java.io.File[] stateFiles = gameDir.listFiles((dir, name) -> name.startsWith("slot") && name.endsWith(".state"));
+                if (stateFiles != null && stateFiles.length > 0) {
+                    hasSave = true;
+                }
             }
         }
         

@@ -384,6 +384,7 @@ JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_create(
     jstring soFilePath,
     jstring systemDir,
     jstring savesDir,
+    jstring cacheDir,
     jobjectArray jVariables,
     jobject shaderConfig,
     jfloat refreshRate,
@@ -399,6 +400,7 @@ JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_create(
         auto deviceLanguage = JniString(env, language);
         auto systemDirectory = JniString(env, systemDir);
         auto savesDirectory = JniString(env, savesDir);
+        auto cacheDirectory = JniString(env, cacheDir);
 
         std::vector<Variable> variables;
         int size = env->GetArrayLength(jVariables);
@@ -413,6 +415,7 @@ JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_create(
             corePath.stdString(),
             systemDirectory.stdString(),
             savesDirectory.stdString(),
+            cacheDirectory.stdString(),
             variables,
             JavaUtils::shaderFromJava(env, shaderConfig),
             refreshRate,

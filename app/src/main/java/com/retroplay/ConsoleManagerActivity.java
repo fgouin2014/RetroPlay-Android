@@ -32,25 +32,41 @@ import java.util.Map;
 import com.retroplay.R;
 import com.retroplay.usecases.LoadCoresUseCase;
 import com.retroplay.usecases.ScanConsoleUseCase;
+import com.retroplay.usecases.InstallCheatsUseCase;
+import com.retroplay.usecases.ManageConsoleUseCase;
+import com.retroplay.usecases.GenerateGamelistUseCase;
+import com.retroplay.usecases.DownloadArtworksUseCase;
+import com.retroplay.helpers.ConsoleConfigHelper;
+import com.retroplay.helpers.GameLibraryPaths;
+import com.retroplay.ui.adapters.ConsoleAdapter;
+import com.retroplay.helpers.RomFileHelper;
+import com.retroplay.models.ConsoleConfig;
+import com.retroplay.models.ScannedRom;
+import com.retroplay.utils.AssetFileHelper;
 import com.retroplay.ui.dialogs.AuditReportDialog;
+import com.retroplay.helpers.ConsoleNameHelper;
+import com.retroplay.ConsoleNameMapper;
+import com.retroplay.GamelistManager;
 
 public class ConsoleManagerActivity extends AppCompatActivity {
-    
+
     private static final String TAG = "ConsoleManagerActivity";
-    // Répertoire partagé pour les ROMs et données de consoles
-    private static final String GAMELIBRARY_DIR = "/storage/emulated/0/GameLibrary-Data";
-    
+
     private RecyclerView recyclerView;
     private ConsoleAdapter adapter;
     private List<ConsoleConfig> consoles = new ArrayList<>();
     private List<String> availableCores = new ArrayList<>();
     private String scrollToConsoleId = null; // Console à scroller automatiquement
-    
+    private InstallCheatsUseCase installCheatsUseCase;
+    private ManageConsoleUseCase manageConsoleUseCase;
+    private GenerateGamelistUseCase generateGamelistUseCase;
+    private DownloadArtworksUseCase downloadArtworksUseCase;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_console_manager);
-        
+
         // Récupérer la console à scroller depuis l'intent
         if (getIntent() != null && getIntent().hasExtra("scrollToConsole")) {
             scrollToConsoleId = getIntent().getStringExtra("scrollToConsole");
@@ -60,203 +76,220 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                 Log.i(TAG, "Will scroll to console: " + scrollToConsoleId);
             }
         }
-        
+
         setupViews();
         loadAvailableCores();
         loadConsoles();
+
+        // Initialiser les Use Cases
+        installCheatsUseCase = new InstallCheatsUseCase(this);
+        manageConsoleUseCase = new ManageConsoleUseCase(this);
+        generateGamelistUseCase = new GenerateGamelistUseCase(this);
+        downloadArtworksUseCase = new DownloadArtworksUseCase(this);
     }
-    
+
     @Override
     protected void onResume() {
         super.onResume();
-        // Recharger les consoles pour avoir les infos à jour (nouveaux jeux, nouveaux dossiers)
+        // Recharger les consoles pour avoir les infos à jour (nouveaux jeux, nouveaux
+        // dossiers)
         loadConsoles();
     }
-    
+
     private void setupViews() {
         TextView backButton = findViewById(R.id.backButton);
         backButton.setOnClickListener(v -> finish());
-        
+
         recyclerView = findViewById(R.id.consolesRecyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        
+
         MaterialButton updateAllArtworksButton = findViewById(R.id.updateAllArtworksButton);
         updateAllArtworksButton.setOnClickListener(v -> showGlobalArtworkDialog(false));
-        
+
         MaterialButton fillMissingArtworksButton = findViewById(R.id.fillMissingArtworksButton);
         fillMissingArtworksButton.setOnClickListener(v -> showGlobalArtworkDialog(true));
-        
+
         MaterialButton scanAllButton = findViewById(R.id.scanAllButton);
         scanAllButton.setOnClickListener(v -> scanAllConsoles());
-        
+
         MaterialButton addButton = findViewById(R.id.addConsoleButton);
         addButton.setOnClickListener(v -> showAddConsoleDialog());
-        
+
         MaterialButton installCheatsButton = findViewById(R.id.installCheatsButton);
         installCheatsButton.setOnClickListener(v -> installCheatsDatabase());
         installCheatsButton.setOnLongClickListener(v -> {
             showCheatStatus();
             return true;
         });
-        
+
         MaterialButton manageCoresButton = findViewById(R.id.manageCoresButton);
         manageCoresButton.setOnClickListener(v -> openCoreManager());
     }
-    
+
     private void openCoreManager() {
         Intent intent = new Intent(this, CoreManagerActivity.class);
         startActivity(intent);
     }
-    
+
     /**
      * Afficher le statut des cheats installés
      */
     private void showCheatStatus() {
-        CheatInfo info = CheatManager.INSTANCE.getCheatInfo();
-        
+        com.retroplay.CheatInfo info = com.retroplay.CheatManager.INSTANCE.getCheatInfo();
+
         android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
         builder.setTitle("Cheat Database Status");
-        
+
         String message = "Current Mode: " + info.getMode().name() + "\n\n" + info.getDescription();
-        
-        if (info.getMode() != CheatMode.NONE) {
+
+        if (info.getMode() != com.retroplay.CheatMode.NONE) {
             message += "\n\nYou can reinstall to change mode.";
         }
-        
+
         builder.setMessage(message);
-        
-        if (info.getMode() != CheatMode.NONE) {
+
+        if (info.getMode() != com.retroplay.CheatMode.NONE) {
             builder.setPositiveButton("REINSTALL", (dialog, which) -> installCheatsDatabase());
         }
-        
+
         builder.setNegativeButton("CLOSE", null);
         builder.show();
     }
-    
+
     private void scanAllConsoles() {
         if (consoles == null || consoles.isEmpty()) {
             android.widget.Toast.makeText(this, "No consoles to scan", android.widget.Toast.LENGTH_SHORT).show();
             return;
         }
-        
+
         // Afficher dialog de confirmation
         new androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Scan All Consoles?")
-            .setMessage("This will scan all " + consoles.size() + " consoles and regenerate their gamelist.json files. This may take a while.")
-            .setPositiveButton("Scan All", (dialog, which) -> {
-                // Afficher un progress dialog
-                android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
-                progressDialog.setTitle("Scanning All Consoles...");
-                progressDialog.setMessage("0 / " + consoles.size());
-                progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
-                progressDialog.setMax(consoles.size());
-                progressDialog.setProgress(0);
-                progressDialog.setCancelable(false);
-                progressDialog.show();
-                
-                // Scanner toutes les consoles en arrière-plan
-                new Thread(() -> {
-                    int scanned = 0;
-                    int success = 0;
-                    StringBuilder auditReport = new StringBuilder();
-                    auditReport.append("ROM AUDIT REPORT\n");
-                    auditReport.append("================\n\n");
-                    
-                    int totalRomsFound = 0;
-                    int totalNewRoms = 0;
-                    int totalUpdatedRoms = 0;
-                    int totalRemovedRoms = 0;
-                    
-                    for (ConsoleConfig console : consoles) {
-                        final int currentIndex = scanned;
-                        runOnUiThread(() -> {
-                            progressDialog.setMessage((currentIndex + 1) + " / " + consoles.size() + " - " + console.name);
-                            progressDialog.setProgress(currentIndex);
-                        });
-                        
-                        try {
-                            // Scanner ce répertoire
-                            File consoleDir = new File(GAMELIBRARY_DIR + "/" + console.id);
-                            if (consoleDir.exists() && consoleDir.isDirectory()) {
-                                String extensions = console.extensions != null ? String.join(", ", console.extensions) : "";
-                                ScanConsoleUseCase.ScanResult result = new ScanConsoleUseCase().scanConsoleWithAudit(console.id, console.name, extensions);
-                                if (result != null && result.success) {
-                                    success++;
-                                    totalRomsFound += result.totalRoms;
-                                    totalNewRoms += result.newRoms;
-                                    totalUpdatedRoms += result.updatedRoms;
-                                    totalRemovedRoms += result.removedRoms;
-                                    
-                                    // Ajouter au rapport
-                                    auditReport.append("[").append(console.name).append("]\n");
-                                    auditReport.append("  Total ROMs: ").append(result.totalRoms).append("\n");
-                                    if (result.newRoms > 0) {
-                                        auditReport.append("  + New: ").append(result.newRoms).append("\n");
+                .setTitle("Scan All Consoles?")
+                .setMessage("This will scan all " + consoles.size()
+                        + " consoles and regenerate their gamelist.json files. This may take a while.")
+                .setPositiveButton("Scan All", (dialog, which) -> {
+                    // Afficher un progress dialog
+                    android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
+                    progressDialog.setTitle("Scanning All Consoles...");
+                    progressDialog.setMessage("0 / " + consoles.size());
+                    progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+                    progressDialog.setMax(consoles.size());
+                    progressDialog.setProgress(0);
+                    progressDialog.setCancelable(false);
+                    progressDialog.show();
+
+                    // Scanner toutes les consoles en arrière-plan
+                    new Thread(() -> {
+                        int scanned = 0;
+                        int success = 0;
+                        StringBuilder auditReport = new StringBuilder();
+                        auditReport.append("ROM AUDIT REPORT\n");
+                        auditReport.append("================\n\n");
+
+                        int totalRomsFound = 0;
+                        int totalNewRoms = 0;
+                        int totalUpdatedRoms = 0;
+                        int totalRemovedRoms = 0;
+
+                        for (ConsoleConfig console : consoles) {
+                            final int currentIndex = scanned;
+                            runOnUiThread(() -> {
+                                progressDialog.setMessage(
+                                        (currentIndex + 1) + " / " + consoles.size() + " - " + console.name);
+                                progressDialog.setProgress(currentIndex);
+                            });
+
+                            try {
+                                // Scanner ce répertoire (ROMs dans /roms/{console}/)
+                                File consoleDir = new File(GameLibraryPaths.getRomsDirForConsole(console.id));
+                                if (consoleDir.exists() && consoleDir.isDirectory()) {
+                                    String extensions = console.extensions != null
+                                            ? String.join(", ", console.extensions)
+                                            : "";
+                                    ScanConsoleUseCase.ScanResult result = new ScanConsoleUseCase()
+                                            .scanConsoleWithAudit(console.id, console.name, extensions);
+                                    if (result != null && result.success) {
+                                        success++;
+                                        totalRomsFound += result.totalRoms;
+                                        totalNewRoms += result.newRoms;
+                                        totalUpdatedRoms += result.updatedRoms;
+                                        totalRemovedRoms += result.removedRoms;
+
+                                        // Ajouter au rapport
+                                        auditReport.append("[").append(console.name).append("]\n");
+                                        auditReport.append("  Total ROMs: ").append(result.totalRoms).append("\n");
+                                        if (result.newRoms > 0) {
+                                            auditReport.append("  + New: ").append(result.newRoms).append("\n");
+                                        }
+                                        if (result.updatedRoms > 0) {
+                                            auditReport.append("  ~ Updated: ").append(result.updatedRoms).append("\n");
+                                        }
+                                        if (result.removedRoms > 0) {
+                                            auditReport.append("  - Removed: ").append(result.removedRoms)
+                                                    .append(" (missing files)\n");
+                                        }
+                                        if (result.missingImages > 0) {
+                                            auditReport.append("  ! Missing images: ").append(result.missingImages)
+                                                    .append("\n");
+                                        }
+                                        auditReport.append("\n");
                                     }
-                                    if (result.updatedRoms > 0) {
-                                        auditReport.append("  ~ Updated: ").append(result.updatedRoms).append("\n");
-                                    }
-                                    if (result.removedRoms > 0) {
-                                        auditReport.append("  - Removed: ").append(result.removedRoms).append(" (missing files)\n");
-                                    }
-                                    if (result.missingImages > 0) {
-                                        auditReport.append("  ! Missing images: ").append(result.missingImages).append("\n");
-                                    }
-                                    auditReport.append("\n");
                                 }
+                            } catch (Exception e) {
+                                android.util.Log.e("ConsoleManager",
+                                        "Error scanning " + console.id + ": " + e.getMessage());
+                                auditReport.append("[").append(console.name).append("]\n");
+                                auditReport.append("  ERROR: ").append(e.getMessage()).append("\n\n");
                             }
-                        } catch (Exception e) {
-                            android.util.Log.e("ConsoleManager", "Error scanning " + console.id + ": " + e.getMessage());
-                            auditReport.append("[").append(console.name).append("]\n");
-                            auditReport.append("  ERROR: ").append(e.getMessage()).append("\n\n");
+
+                            scanned++;
+
+                            // Pause courte pour éviter de surcharger le système
+                            try {
+                                Thread.sleep(100);
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
                         }
-                        
-                        scanned++;
-                        
-                        // Pause courte pour éviter de surcharger le système
-                        try {
-                            Thread.sleep(100);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                    
-                    // Résumé final
-                    auditReport.append("SUMMARY\n");
-                    auditReport.append("=======\n");
-                    auditReport.append("Consoles scanned: ").append(success).append(" / ").append(scanned).append("\n");
-                    auditReport.append("Total ROMs: ").append(totalRomsFound).append("\n");
-                    auditReport.append("New ROMs added: ").append(totalNewRoms).append("\n");
-                    auditReport.append("ROMs updated: ").append(totalUpdatedRoms).append("\n");
-                    auditReport.append("ROMs removed: ").append(totalRemovedRoms).append("\n");
-                    
-                    final int finalSuccess = success;
-                    final int finalScanned = scanned;
-                    final String finalReport = auditReport.toString();
-                    
-                    runOnUiThread(() -> {
-                        progressDialog.dismiss();
-                        
-                        // Afficher le rapport d'audit
-                        AuditReportDialog.show(ConsoleManagerActivity.this, finalReport, finalSuccess, finalScanned);
-                        
-                        // Recharger la liste
-                        loadConsoles();
-                    });
-                }).start();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
+
+                        // Résumé final
+                        auditReport.append("SUMMARY\n");
+                        auditReport.append("=======\n");
+                        auditReport.append("Consoles scanned: ").append(success).append(" / ").append(scanned)
+                                .append("\n");
+                        auditReport.append("Total ROMs: ").append(totalRomsFound).append("\n");
+                        auditReport.append("New ROMs added: ").append(totalNewRoms).append("\n");
+                        auditReport.append("ROMs updated: ").append(totalUpdatedRoms).append("\n");
+                        auditReport.append("ROMs removed: ").append(totalRemovedRoms).append("\n");
+
+                        final int finalSuccess = success;
+                        final int finalScanned = scanned;
+                        final String finalReport = auditReport.toString();
+
+                        runOnUiThread(() -> {
+                            progressDialog.dismiss();
+
+                            // Afficher le rapport d'audit
+                            AuditReportDialog.show(ConsoleManagerActivity.this, finalReport, finalSuccess,
+                                    finalScanned);
+
+                            // Recharger la liste
+                            loadConsoles();
+                        });
+                    }).start();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
-    
+
     // Méthode showAuditReportDialog déplacée vers AuditReportDialog.show(...)
-    
+
     // Méthode scanConsoleWithAudit déplacée vers ScanConsoleUseCase
     // Utiliser: new ScanConsoleUseCase().scanConsoleWithAudit(...)
-    
+
     // Méthode scanConsoleSilently déplacée vers ScanConsoleUseCase
     // Utiliser: new ScanConsoleUseCase().scanConsoleSilently(...)
-    
+
     private void loadAvailableCores() {
         LoadCoresUseCase useCase = new LoadCoresUseCase();
         useCase.loadAvailableCores(cores -> runOnUiThread(() -> {
@@ -264,111 +297,259 @@ public class ConsoleManagerActivity extends AppCompatActivity {
             Log.i(TAG, "Loaded " + availableCores.size() + " available cores");
         }));
     }
-    
+
     private void loadConsoles() {
         new Thread(() -> {
             try {
-                // Scanner directement GameLibrary-Data pour toutes les consoles
-                File gamelibraryDir = new File(GAMELIBRARY_DIR);
+                // Scanner directement GameLibrary-Data/roms pour toutes les consoles
+                File romsDir = new File(GameLibraryPaths.ROMS_DIR);
                 List<ConsoleConfig> tempConsoles = new ArrayList<>();
-                
-                if (gamelibraryDir.exists() && gamelibraryDir.isDirectory()) {
-                    File[] directories = gamelibraryDir.listFiles(File::isDirectory);
-                    
+
+                if (romsDir.exists() && romsDir.isDirectory()) {
+                    File[] directories = romsDir.listFiles(File::isDirectory);
+                    Log.i(TAG, "Scanning /roms/ directory, found " + (directories != null ? directories.length : 0)
+                            + " directories");
+
                     if (directories != null) {
                         for (File dir : directories) {
                             String dirName = dir.getName();
-                            
-                            // Ignorer les répertoires système
-                            if (dirName.equals("data") || dirName.equals("emulatorjs") || 
-                                dirName.equals("vmnes") || dirName.equals("playlists") ||
-                                dirName.equals("saves") || dirName.equals("states") ||
-                                dirName.equals("cheats") || dirName.equals("media") || 
-                                dirName.equals("overlays") || dirName.equals("cores") ||
-                                dirName.equals("bios") || dirName.startsWith(".")) {
+
+                            // Ignorer les répertoires système (ne devrait pas être dans roms/, mais
+                            // sécurité)
+                            if (dirName.equals("data") || dirName.equals("emulatorjs") ||
+                                    dirName.equals("vmnes") || dirName.equals("playlists") ||
+                                    dirName.equals("saves") || dirName.equals("states") ||
+                                    dirName.equals("cheats") || dirName.equals("media") ||
+                                    dirName.equals("overlays") || dirName.equals("cores") ||
+                                    dirName.equals("bios") || dirName.startsWith(".")) {
                                 continue;
                             }
-                            
+
+                            Log.d(TAG, "Scanning console directory: " + dirName);
+
                             // Scanner les sous-consoles (ex: fbneo/sega, fbneo/Taito) AVANT le parent
                             File[] subDirectories = dir.listFiles(File::isDirectory);
                             boolean hasSubconsoles = false;
-                            
+
+                            if (subDirectories != null) {
+                                Log.d(TAG, "  Found " + subDirectories.length + " subdirectories in " + dirName);
+                            }
+
                             if (subDirectories != null) {
                                 for (File subDir : subDirectories) {
                                     String subDirName = subDir.getName();
-                                    
+
                                     // Ignorer les répertoires système
-                                    if (subDirName.equals("media") || subDirName.equals("saves") || 
-                                        subDirName.equals("states") || subDirName.equals("cheats") || 
-                                        subDirName.equals("overlays") || subDirName.equals("cores") ||
-                                        subDirName.equals("bios") || subDirName.startsWith(".")) {
+                                    if (subDirName.equals("media") || subDirName.equals("saves") ||
+                                            subDirName.equals("states") || subDirName.equals("cheats") ||
+                                            subDirName.equals("overlays") || subDirName.equals("cores") ||
+                                            subDirName.equals("bios") || subDirName.startsWith(".")) {
                                         continue;
                                     }
-                                    
+
+                                    // Pour fbneo, accepter TOUS les sous-répertoires comme sous-consoles
+                                    // (même s'ils n'ont pas encore de ROMs - ils peuvent être vides mais valides)
+                                    boolean isFbneoSub = dirName.equals("fbneo");
+
                                     // Vérifier s'il y a des ROMs ou un gamelist.json dans ce sous-répertoire
                                     File[] romFiles = subDir.listFiles(file -> {
                                         String name = file.getName().toLowerCase();
-                                        return file.isFile() && (name.endsWith(".zip") || name.endsWith(".bin") || 
-                                                                 name.endsWith(".iso") || name.endsWith(".chd"));
+                                        return file.isFile() && (name.endsWith(".zip") || name.endsWith(".bin") ||
+                                                name.endsWith(".iso") || name.endsWith(".chd"));
                                     });
-                                    
+
                                     File subGamelistFile = new File(subDir, "gamelist.json");
                                     boolean hasRoms = romFiles != null && romFiles.length > 0;
                                     boolean hasGamelist = subGamelistFile.exists();
-                                    
-                                    if (hasRoms || hasGamelist) {
+
+                                    // Accepter si: a) a des ROMs/gamelist OU b) c'est un sous-dossier fbneo (même
+                                    // vide)
+                                    if (hasRoms || hasGamelist || isFbneoSub) {
                                         // C'est une sous-console valide
                                         String subConsoleId = dirName + "/" + subDirName;
-                                        ConsoleConfig subConfig = scanConsoleDirectory(subDir, subConsoleId);
+                                        Log.d(TAG, "Tentative de chargement sous-console: " + subConsoleId +
+                                                " (ROMs: " + (romFiles != null ? romFiles.length : 0) +
+                                                ", Gamelist: " + hasGamelist + ")");
+                                        ConsoleConfig subConfig = loadConsoleConfig(subDir, subConsoleId);
                                         if (subConfig != null) {
                                             tempConsoles.add(subConfig);
                                             hasSubconsoles = true;
-                                            Log.i(TAG, "Sub-console scannée: " + subConsoleId);
+                                            Log.i(TAG,
+                                                    "✅ Sub-console chargée: " + subConsoleId + " -> " + subConfig.name);
+                                        } else {
+                                            Log.w(TAG, "❌ Échec chargement sous-console: " + subConsoleId
+                                                    + " (loadConsoleConfig retourné null)");
                                         }
+                                    } else {
+                                        Log.d(TAG, "Sous-répertoire ignoré (pas de ROMs ni gamelist): " + dirName + "/"
+                                                + subDirName);
                                     }
                                 }
                             }
-                            
-                            // Scanner la console parent (même si elle a des sous-consoles)
-                            // Normaliser le nom du répertoire avec ConsoleNameMapper
-                            String normalizedDirName = ConsoleNameMapper.normalizeToCanonical(dirName);
-                            ConsoleConfig parentConfig = scanConsoleDirectory(dir, normalizedDirName);
-                            if (parentConfig != null) {
-                                // Garder le nom original du répertoire dans l'ID pour les chemins
-                                parentConfig.id = dirName; // Nom original du répertoire
-                                tempConsoles.add(parentConfig);
-                                Log.i(TAG, "Console parent ajoutée: " + dirName + " (normalized: " + normalizedDirName + ")" + 
-                                    (hasSubconsoles ? " (avec sous-consoles)" : ""));
+
+                            // Charger la console parent SEULEMENT si elle n'a PAS de sous-consoles
+                            // Si elle a des sous-consoles, on n'affiche que les sous-consoles (comme
+                            // GameListActivity)
+                            if (!hasSubconsoles) {
+                                ConsoleConfig parentConfig = loadConsoleConfig(dir, dirName);
+                                if (parentConfig != null) {
+                                    tempConsoles.add(parentConfig);
+                                    Log.i(TAG, "Console chargée: " + dirName + " (display: " + parentConfig.name + ")");
+                                }
+                            } else {
+                                Log.i(TAG, "Console parent " + dirName
+                                        + " ignorée (a des sous-consoles, seul les sous-consoles seront affichées)");
                             }
                         }
                     }
                 }
-                
-                // Trier par nom (les sous-consoles apparaîtront après leur parent)
-                tempConsoles.sort((a, b) -> a.id.compareToIgnoreCase(b.id));
-                
+
+                // NE PAS faire de déduplication automatique - les répertoires sont des
+                // variantes régionales
+                // Exemple: "nes" (USA) et "famicom" (Japon) sont des consoles différentes avec
+                // des ROMs différentes
+                // Chaque répertoire doit être traité comme une console séparée
+
+                // Log avant tri pour debug
+                int subConsoleCount = 0;
+                for (ConsoleConfig c : tempConsoles) {
+                    if (c.id.contains("/")) {
+                        subConsoleCount++;
+                        Log.d(TAG, "Sous-console dans liste avant tri: " + c.id + " -> " + c.name);
+                    }
+                }
+                Log.i(TAG, "Total consoles avant tri: " + tempConsoles.size() + " (dont " + subConsoleCount
+                        + " sous-consoles)");
+
+                // Trier pour regrouper les sous-consoles par parent (comme GameListActivity)
+                // Les parents avec sous-consoles ne seront pas affichés, donc on trie juste
+                // pour regrouper
+                tempConsoles.sort((a, b) -> {
+                    boolean aIsSub = a.id.contains("/");
+                    boolean bIsSub = b.id.contains("/");
+
+                    if (aIsSub && bIsSub) {
+                        // Les deux sont des sous-consoles - comparer par parent puis par nom
+                        String aParent = a.id.substring(0, a.id.indexOf("/"));
+                        String bParent = b.id.substring(0, b.id.indexOf("/"));
+                        int parentCompare = aParent.compareToIgnoreCase(bParent);
+                        if (parentCompare != 0) {
+                            return parentCompare;
+                        }
+                        // Même parent, comparer les noms de sous-consoles
+                        String aSub = a.id.substring(a.id.indexOf("/") + 1);
+                        String bSub = b.id.substring(b.id.indexOf("/") + 1);
+                        return aSub.compareToIgnoreCase(bSub);
+                    } else if (aIsSub) {
+                        // a est une sous-console, b est un parent
+                        // Les parents viennent avant leurs sous-consoles dans le tri
+                        // mais ils ne seront pas affichés s'ils ont des sous-consoles
+                        String aParent = a.id.substring(0, a.id.indexOf("/"));
+                        int parentCompare = aParent.compareToIgnoreCase(b.id);
+                        if (parentCompare == 0) {
+                            return 1; // Sous-console après son parent
+                        }
+                        return parentCompare;
+                    } else if (bIsSub) {
+                        // b est une sous-console, a est un parent
+                        String bParent = b.id.substring(0, b.id.indexOf("/"));
+                        int parentCompare = a.id.compareToIgnoreCase(bParent);
+                        if (parentCompare == 0) {
+                            return -1; // Parent avant sa sous-console
+                        }
+                        return parentCompare;
+                    } else {
+                        // Les deux sont des parents - tri alphabétique simple
+                        return a.id.compareToIgnoreCase(b.id);
+                    }
+                });
+
+                // Log après tri pour debug
+                Log.i(TAG, "Total consoles après tri: " + tempConsoles.size());
+                for (ConsoleConfig c : tempConsoles) {
+                    if (c.id.contains("/")) {
+                        Log.d(TAG, "Sous-console dans liste après tri: " + c.id + " -> " + c.name);
+                    }
+                }
+
                 runOnUiThread(() -> {
+                    if (tempConsoles == null || tempConsoles.isEmpty()) {
+                        Log.w(TAG, "Aucune console trouvée dans " + GameLibraryPaths.ROMS_DIR);
+                        android.widget.Toast.makeText(this, "Aucune console trouvée", android.widget.Toast.LENGTH_SHORT)
+                                .show();
+                        return;
+                    }
+
                     consoles = tempConsoles;
-                    adapter = new ConsoleAdapter(consoles);
+                    Log.i(TAG, "Création de l'adapter avec " + consoles.size() + " consoles");
+                    adapter = new ConsoleAdapter(consoles, new ConsoleAdapter.ConsoleActionsListener() {
+                        @Override
+                        public void onEditConsole(ConsoleConfig console) {
+                            showEditConsoleDialog(console);
+                        }
+
+                        @Override
+                        public void onRefreshConsole(ConsoleConfig console, String extensions,
+                                GenerateGamelistUseCase.ProgressCallback progressCallback,
+                                GenerateGamelistUseCase.PreviewCallback previewCallback) {
+                            GenerateGamelistUseCase.PreviewCallback actualPreviewCallback = new GenerateGamelistUseCase.PreviewCallback() {
+                                @Override
+                                public void showPreview(String consoleId, List<ScannedRom> roms,
+                                        boolean gamelistExists) {
+                                    showGamelistPreviewDialog(consoleId, roms, gamelistExists);
+                                }
+                            };
+                            generateGamelistUseCase.scanRomsAndGenerateGamelist(console.id, extensions,
+                                    progressCallback, actualPreviewCallback);
+                        }
+
+                        @Override
+                        public void onArtworkConsole(ConsoleConfig console) {
+                            showArtworkOptionsForConsole(console);
+                        }
+
+                        @Override
+                        public void runOnUiThread(Runnable action) {
+                            ConsoleManagerActivity.this.runOnUiThread(action);
+                        }
+                    }, generateGamelistUseCase);
+
+                    if (recyclerView == null) {
+                        Log.e(TAG, "recyclerView est null!");
+                        return;
+                    }
+
+                    if (adapter == null) {
+                        Log.e(TAG, "adapter est null après création!");
+                        return;
+                    }
+
                     recyclerView.setAdapter(adapter);
+                    Log.i(TAG, "Adapter assigné au RecyclerView. ItemCount: " + adapter.getItemCount());
                     Log.i(TAG, "Loaded " + consoles.size() + " consoles from GameLibrary-Data");
-                    
+                    // Log détaillé pour debug
+                    for (int i = 0; i < consoles.size(); i++) {
+                        ConsoleConfig c = consoles.get(i);
+                        Log.d(TAG, "Console[" + i + "]: " + c.id + " -> " + c.name
+                                + (c.id.contains("/") ? " [SUB-CONSOLE]" : " [PARENT]"));
+                    }
+
                     // Scroller vers la console spécifiée si demandé
                     if (scrollToConsoleId != null) {
                         scrollToConsole(scrollToConsoleId);
                     }
                 });
-                
+
             } catch (Exception e) {
                 Log.e(TAG, "Error loading consoles", e);
                 runOnUiThread(() -> {
-                    android.widget.Toast.makeText(this, "Error loading consoles: " + e.getMessage(), 
-                        android.widget.Toast.LENGTH_LONG).show();
+                    android.widget.Toast.makeText(this, "Error loading consoles: " + e.getMessage(),
+                            android.widget.Toast.LENGTH_LONG).show();
                 });
             }
         }).start();
     }
-    
+
     /**
      * Scrolle vers une console spécifique dans la liste
      */
@@ -376,10 +557,10 @@ public class ConsoleManagerActivity extends AppCompatActivity {
         if (consoles == null || consoles.isEmpty() || consoleId == null) {
             return;
         }
-        
+
         // Normaliser l'ID de console pour la comparaison
         String normalizedId = ConsoleNameMapper.normalizeToCanonical(consoleId);
-        
+
         // Chercher la position de la console dans la liste
         int position = -1;
         for (int i = 0; i < consoles.size(); i++) {
@@ -391,9 +572,10 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                 break;
             }
         }
-        
+
         if (position >= 0) {
-            // Scroller vers la position avec un délai pour s'assurer que le RecyclerView est prêt
+            // Scroller vers la position avec un délai pour s'assurer que le RecyclerView
+            // est prêt
             final int finalPosition = position;
             final String finalConsoleId = consoleId;
             recyclerView.post(() -> {
@@ -407,190 +589,161 @@ public class ConsoleManagerActivity extends AppCompatActivity {
             Log.w(TAG, "Console not found for scrolling: " + consoleId);
         }
     }
-    
+
     /**
      * Scanner un répertoire de console et créer la config
+     * Délégué à ConsoleConfigHelper
      */
-    private ConsoleConfig scanConsoleDirectory(File dir, String consoleId) {
-        try {
-            ConsoleConfig config = new ConsoleConfig();
-            config.id = consoleId;
-            
-            // Vérifier si gamelist.json existe
-            File gamelistFile = new File(dir, "gamelist.json");
-            config.hasGamelist = gamelistFile.exists();
-            
-            // Vérifier si console.json existe pour les métadonnées
-            File consoleJsonFile = new File(dir, "console.json");
-            if (consoleJsonFile.exists()) {
-                // Charger depuis console.json
-                java.io.FileInputStream fis = new java.io.FileInputStream(consoleJsonFile);
-                byte[] buffer = new byte[(int) consoleJsonFile.length()];
-                fis.read(buffer);
-                fis.close();
-                String json = new String(buffer, "UTF-8");
-                
-                JSONObject obj = new JSONObject(json);
-                config.name = obj.optString("name", consoleId.toUpperCase());
-                config.fullName = obj.optString("fullName", getDefaultFullName(consoleId));
-                config.defaultCore = obj.optString("defaultCore", "auto");
-                config.color = obj.optString("color", "#FF0000");
-                config.isGeneric = obj.optBoolean("isGeneric", false);
-                
-                // Parse cores et extensions
-                config.cores = new ArrayList<>();
-                config.extensions = new ArrayList<>();
-                
-                JSONArray coresArray = obj.optJSONArray("cores");
-                if (coresArray != null) {
-                    for (int j = 0; j < coresArray.length(); j++) {
-                        config.cores.add(coresArray.getString(j));
-                    }
-                }
-                
-                JSONArray extsArray = obj.optJSONArray("extensions");
-                if (extsArray != null) {
-                    for (int j = 0; j < extsArray.length(); j++) {
-                        config.extensions.add(extsArray.getString(j));
-                    }
-                }
-            } else {
-                // Pas de console.json - utiliser des valeurs par défaut
-                String baseName = consoleId.contains("/") ? consoleId.substring(consoleId.lastIndexOf("/") + 1) : consoleId;
-                config.name = baseName.toUpperCase();
-                config.fullName = getDefaultFullName(baseName);
-                config.defaultCore = "fbneo"; // Par défaut pour les sous-consoles
-                config.color = "#FF0000";
-                config.isGeneric = false;
-                config.cores = new ArrayList<>();
-                config.extensions = new ArrayList<>();
-                config.extensions.add(".zip");
-            }
-            
-            // Marquer comme utilisant le scanner auto si pas de gamelist.json
-            config.usesAutoScan = !config.hasGamelist;
-            
-            Log.i(TAG, "Console scannée: " + consoleId + 
-                (config.hasGamelist ? " (avec gamelist.json)" : " (AUTO SCAN)"));
-            
-            return config;
-            
-        } catch (Exception e) {
-            Log.e(TAG, "Error scanning console directory: " + consoleId, e);
-            return null;
-        }
+    private ConsoleConfig loadConsoleConfig(File dir, String consoleId) {
+        return ConsoleConfigHelper.loadConsoleConfig(dir, consoleId);
     }
-    
+
     /**
      * Retourne le nom complet par défaut pour une console
+     * Délégué à ConsoleConfigHelper
      */
     private String getDefaultFullName(String consoleId) {
-        switch (consoleId.toLowerCase()) {
-            // Nintendo
-            case "nes": case "famicom": return "Nintendo Entertainment System";
-            case "snes": case "superfamicom": return "Super Nintendo Entertainment System";
-            case "n64": return "Nintendo 64";
-            case "gb": return "Game Boy";
-            case "gbc": return "Game Boy Color";
-            case "gba": return "Game Boy Advance";
-            case "nds": case "ds": return "Nintendo DS";
-            case "3ds": return "Nintendo 3DS";
-            case "virtualboy": case "vb": return "Virtual Boy";
-            
-            // Sega
-            case "megadrive": case "genesis": case "md": return "Sega Genesis / Mega Drive";
-            case "mastersystem": case "sms": return "Sega Master System";
-            case "gamegear": case "gg": return "Sega Game Gear";
-            case "saturn": return "Sega Saturn";
-            case "dreamcast": case "dc": return "Sega Dreamcast";
-            case "32x": return "Sega 32X";
-            case "segacd": case "megacd": return "Sega CD / Mega CD";
-            
-            // Sony
-            case "ps1": case "psx": case "playstation": return "Sony PlayStation";
-            case "ps2": return "Sony PlayStation 2";
-            case "psp": return "PlayStation Portable";
-            
-            // Atari
-            case "atari2600": case "a2600": return "Atari 2600";
-            case "atari5200": case "a5200": return "Atari 5200";
-            case "atari7800": case "a7800": return "Atari 7800";
-            case "atarist": case "st": return "Atari ST";
-            case "lynx": return "Atari Lynx";
-            case "jaguar": return "Atari Jaguar";
-            
-            // Other
-            case "pcengine": case "pce": case "tg16": return "PC Engine / TurboGrafx-16";
-            case "neogeo": case "ngp": return "Neo Geo Pocket";
-            case "wonderswan": case "ws": return "WonderSwan";
-            case "vectrex": return "Vectrex";
-            case "intellivision": return "Intellivision";
-            case "colecovision": return "ColecoVision";
-            case "c64": case "commodore64": return "Commodore 64";
-            case "amiga": return "Commodore Amiga";
-            case "msx": case "msx2": return "MSX / MSX2";
-            case "cpc": case "amstrad": return "Amstrad CPC";
-            case "pokemonmini": return "Pokemon Mini";
-            case "arcade": case "mame": return "Arcade / MAME";
-            
-            default: return consoleId.toUpperCase() + " (Custom Console)";
-        }
+        return ConsoleConfigHelper.getDefaultFullName(consoleId);
     }
-    
+
     private void showAddConsoleDialog() {
         showEditConsoleDialog(null);
     }
-    
+
     private void showEditConsoleDialog(ConsoleConfig existingConsole) {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_edit_console, null);
-        
+
         EditText idInput = dialogView.findViewById(R.id.consoleIdInput);
         EditText nameInput = dialogView.findViewById(R.id.consoleNameInput);
         EditText fullNameInput = dialogView.findViewById(R.id.consoleFullNameInput);
         Spinner coreSpinner = dialogView.findViewById(R.id.coreSpinnerDialog);
         EditText extensionsInput = dialogView.findViewById(R.id.extensionsInput);
         EditText colorInput = dialogView.findViewById(R.id.colorInput);
-        
+
         // Setup core spinner
         ArrayAdapter<String> coreAdapter = new ArrayAdapter<>(
-            this, R.layout.spinner_item, availableCores);
+                this, R.layout.spinner_item, availableCores);
         coreAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         coreSpinner.setAdapter(coreAdapter);
-        
+
         // If editing existing console, populate fields
         if (existingConsole != null) {
             idInput.setText(existingConsole.id);
             idInput.setEnabled(false); // Can't change ID
+        } else {
+            // New console: Auto-fill fields when ID loses focus
+            idInput.setOnFocusChangeListener((v, hasFocus) -> {
+                if (!hasFocus) {
+                    String id = idInput.getText().toString().trim();
+                    if (!id.isEmpty()) {
+                        String normalizedId = ConsoleNameMapper.normalizeToCanonical(id);
+
+                        // Fill Name if empty
+                        if (nameInput.getText().toString().isEmpty()) {
+                            nameInput.setText(id.toUpperCase());
+                        }
+
+                        // Fill Full Name if empty
+                        if (fullNameInput.getText().toString().isEmpty()) {
+                            fullNameInput.setText(ConsoleNameMapper.getFullName(normalizedId));
+                        }
+
+                        // Fill Extensions if empty
+                        if (extensionsInput.getText().toString().isEmpty()) {
+                            java.util.List<String> exts = com.retroplay.GamelistManager.INSTANCE
+                                    .getDefaultExtensions(normalizedId);
+                            extensionsInput.setText(String.join(", ", exts));
+                        }
+
+                        // Fill Color if empty
+                        if (colorInput.getText().toString().isEmpty()) {
+                            colorInput.setText(ConsoleNameHelper.getConsoleColor(normalizedId));
+                        }
+
+                        // Select Default Core
+                        String defaultCore = ConsoleNameHelper.getDefaultCore(normalizedId);
+                        int corePos = availableCores.indexOf(defaultCore);
+                        if (corePos >= 0) {
+                            coreSpinner.setSelection(corePos);
+                        }
+                    }
+                }
+            });
+        }
+
+        if (existingConsole != null) {
+            // Populate checks for existing console
             nameInput.setText(existingConsole.name);
             fullNameInput.setText(existingConsole.fullName);
             extensionsInput.setText(String.join(", ", existingConsole.extensions));
             colorInput.setText(existingConsole.color);
-            
+
             int corePosition = availableCores.indexOf(existingConsole.defaultCore);
             if (corePosition >= 0) {
                 coreSpinner.setSelection(corePosition);
             }
         }
-        
+
         // Setup scanner button
         MaterialButton scannerButton = dialogView.findViewById(R.id.scannerButton);
         scannerButton.setOnClickListener(v -> {
             String id = idInput.getText().toString().trim();
             String extensions = extensionsInput.getText().toString().trim();
-            
+
             if (id.isEmpty()) {
-                android.widget.Toast.makeText(this, "Console ID is required to scan", android.widget.Toast.LENGTH_SHORT).show();
+                android.widget.Toast.makeText(this, "Console ID is required to scan", android.widget.Toast.LENGTH_SHORT)
+                        .show();
                 return;
             }
-            
+
             // Lancer le scan
-            scanRomsAndGenerateGamelist(id, extensions);
+            GenerateGamelistUseCase.ProgressCallback progressCallback = new GenerateGamelistUseCase.ProgressCallback() {
+                private android.app.ProgressDialog progressDialog;
+
+                @Override
+                public void showProgress(String title, String message, boolean indeterminate) {
+                    runOnUiThread(() -> {
+                        progressDialog = new android.app.ProgressDialog(ConsoleManagerActivity.this);
+                        progressDialog.setTitle(title);
+                        progressDialog.setMessage(message);
+                        progressDialog.setIndeterminate(indeterminate);
+                        progressDialog.setCancelable(false);
+                        progressDialog.show();
+                    });
+                }
+
+                @Override
+                public void dismissProgress() {
+                    runOnUiThread(() -> {
+                        if (progressDialog != null) {
+                            progressDialog.dismiss();
+                            progressDialog = null;
+                        }
+                    });
+                }
+
+                @Override
+                public void showToast(String message, int duration) {
+                    runOnUiThread(() -> {
+                        android.widget.Toast.makeText(ConsoleManagerActivity.this, message, duration).show();
+                    });
+                }
+            };
+
+            GenerateGamelistUseCase.PreviewCallback previewCallback = new GenerateGamelistUseCase.PreviewCallback() {
+                @Override
+                public void showPreview(String consoleId, List<ScannedRom> roms, boolean gamelistExists) {
+                    showGamelistPreviewDialog(consoleId, roms, gamelistExists);
+                }
+            };
+
+            generateGamelistUseCase.scanRomsAndGenerateGamelist(id, extensions, progressCallback, previewCallback);
         });
-        
+
         builder.setView(dialogView);
         builder.setTitle(existingConsole == null ? "Add Console" : "Edit Console");
-        
+
         builder.setPositiveButton("SAVE", (dialog, which) -> {
             String id = idInput.getText().toString().trim();
             String name = nameInput.getText().toString().trim();
@@ -598,57 +751,59 @@ public class ConsoleManagerActivity extends AppCompatActivity {
             String defaultCore = coreSpinner.getSelectedItem().toString();
             String extensions = extensionsInput.getText().toString().trim();
             String color = colorInput.getText().toString().trim();
-            
+
             if (id.isEmpty() || name.isEmpty()) {
-                android.widget.Toast.makeText(this, "ID and Name are required", android.widget.Toast.LENGTH_SHORT).show();
+                android.widget.Toast.makeText(this, "ID and Name are required", android.widget.Toast.LENGTH_SHORT)
+                        .show();
                 return;
             }
-            
+
             saveConsoleConfig(id, name, fullName, defaultCore, extensions, color);
         });
-        
+
         builder.setNegativeButton("CANCEL", null);
         builder.show();
     }
-    
-    private void saveConsoleConfig(String id, String name, String fullName, String defaultCore, 
-                                    String extensions, String color) {
+
+    private void saveConsoleConfig(String id, String name, String fullName, String defaultCore,
+            String extensions, String color) {
         new Thread(() -> {
             try {
-                // Vérifier si le répertoire de la console existe
-                File consoleDir = new File(GAMELIBRARY_DIR + "/" + id);
-                
+                // Vérifier si le répertoire de la console existe (ROMs dans /roms/{console}/)
+                File consoleDir = new File(GameLibraryPaths.getRomsDirForConsole(id));
+
                 if (!consoleDir.exists()) {
                     runOnUiThread(() -> {
                         // Demander à l'utilisateur s'il veut créer le répertoire
                         new AlertDialog.Builder(this)
-                            .setTitle("Directory not found")
-                            .setMessage("The directory '" + id + "/' does not exist.\n\n" +
-                                       "Path: " + consoleDir.getAbsolutePath() + "\n\n" +
-                                       "Do you want to create it?")
-                            .setPositiveButton("CREATE", (dialog, which) -> {
-                                createConsoleDirectory(consoleDir, id, name, fullName, defaultCore, extensions, color);
-                            })
-                            .setNegativeButton("CANCEL", null)
-                            .show();
+                                .setTitle("Directory not found")
+                                .setMessage("The directory '" + id + "/' does not exist.\n\n" +
+                                        "Path: " + consoleDir.getAbsolutePath() + "\n\n" +
+                                        "Do you want to create it?")
+                                .setPositiveButton("CREATE", (dialog, which) -> {
+                                    createConsoleDirectory(consoleDir, id, name, fullName, defaultCore, extensions,
+                                            color);
+                                })
+                                .setNegativeButton("CANCEL", null)
+                                .show();
                     });
                     return;
                 }
-                
+
                 // Vérifier si gamelist.json existe
                 File gamelistFile = new File(consoleDir, "gamelist.json");
                 if (!gamelistFile.exists()) {
                     runOnUiThread(() -> {
                         new AlertDialog.Builder(this)
-                            .setTitle("gamelist.json not found")
-                            .setMessage("The file 'gamelist.json' is required in the console directory.\n\n" +
-                                       "Please create it manually before configuring the console.")
-                            .setPositiveButton("OK", null)
-                            .show();
+                                .setTitle("gamelist.json not found")
+                                .setMessage("The file 'gamelist.json' is required in the console directory.\n\n" +
+                                        "Please create it manually before configuring the console.")
+                                .setPositiveButton("OK", null)
+                                .show();
                     });
                     return;
                 }
-                
+
                 // Create console.json content
                 JSONObject config = new JSONObject();
                 config.put("name", name);
@@ -656,256 +811,122 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                 config.put("defaultCore", defaultCore);
                 config.put("color", color);
                 config.put("enabled", true);
-                
+
                 // Parse extensions
                 JSONArray extsArray = new JSONArray();
                 for (String ext : extensions.split(",")) {
                     extsArray.put(ext.trim());
                 }
                 config.put("extensions", extsArray);
-                
+
                 // Parse cores (for now, just use the default one)
                 JSONArray coresArray = new JSONArray();
                 coresArray.put(defaultCore);
                 config.put("cores", coresArray);
-                
+
                 // Save to file
-                String filePath = GAMELIBRARY_DIR + "/" + id + "/console.json";
+                // console.json reste à la racine de GameLibrary-Data (pas dans roms/)
+                String filePath = GameLibraryPaths.getConsoleConfigPath(id);
                 FileOutputStream fos = new FileOutputStream(filePath);
                 fos.write(config.toString(2).getBytes("UTF-8"));
                 fos.close();
-                
+
                 runOnUiThread(() -> {
-                    android.widget.Toast.makeText(this, "Console configuration saved: " + id, android.widget.Toast.LENGTH_SHORT).show();
+                    android.widget.Toast
+                            .makeText(this, "Console configuration saved: " + id, android.widget.Toast.LENGTH_SHORT)
+                            .show();
                     loadConsoles(); // Reload list
                 });
-                
+
                 Log.i(TAG, "Console config saved: " + filePath);
-                
+
             } catch (Exception e) {
                 Log.e(TAG, "Error saving console config", e);
                 runOnUiThread(() -> {
-                    android.widget.Toast.makeText(this, "Error: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
+                    android.widget.Toast.makeText(this, "Error: " + e.getMessage(), android.widget.Toast.LENGTH_LONG)
+                            .show();
                 });
             }
         }).start();
     }
-    
-    private void createConsoleDirectory(File consoleDir, String id, String name, String fullName, 
-                                       String defaultCore, String extensions, String color) {
+
+    private void createConsoleDirectory(File consoleDir, String id, String name, String fullName,
+            String defaultCore, String extensions, String color) {
         new Thread(() -> {
             try {
                 // Créer le répertoire
                 if (!consoleDir.mkdirs()) {
                     throw new Exception("Failed to create directory");
                 }
-                
+
                 // Créer un gamelist.json vide de base
                 File gamelistFile = new File(consoleDir, "gamelist.json");
                 JSONObject emptyGamelist = new JSONObject();
                 JSONArray emptyGames = new JSONArray();
                 emptyGamelist.put("games", emptyGames);
-                
+
                 FileOutputStream fos = new FileOutputStream(gamelistFile);
                 fos.write(emptyGamelist.toString(2).getBytes("UTF-8"));
                 fos.close();
-                
+
                 // Créer le répertoire media
                 new File(consoleDir, "media/box2d").mkdirs();
                 new File(consoleDir, "media/screenshot").mkdirs();
-                
+
                 runOnUiThread(() -> {
-                    android.widget.Toast.makeText(this, 
-                        "Directory created: " + id + "\nNow add ROMs and update gamelist.json", 
-                        android.widget.Toast.LENGTH_LONG).show();
+                    android.widget.Toast.makeText(this,
+                            "Directory created: " + id + "\nNow add ROMs and update gamelist.json",
+                            android.widget.Toast.LENGTH_LONG).show();
                 });
-                
+
                 // Maintenant sauvegarder la config
                 saveConsoleConfig(id, name, fullName, defaultCore, extensions, color);
-                
+
             } catch (Exception e) {
                 Log.e(TAG, "Error creating console directory", e);
                 runOnUiThread(() -> {
-                    android.widget.Toast.makeText(this, "Error creating directory: " + e.getMessage(), 
-                        android.widget.Toast.LENGTH_LONG).show();
+                    android.widget.Toast.makeText(this, "Error creating directory: " + e.getMessage(),
+                            android.widget.Toast.LENGTH_LONG).show();
                 });
             }
         }).start();
     }
-    
-    /**
-     * Scanner le répertoire d'une console et générer un gamelist.json
-     */
-    private void scanRomsAndGenerateGamelist(String consoleId, String extensionsStr) {
-        // Afficher un dialog de chargement
-        android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
-        progressDialog.setTitle("Scanning ROMs...");
-        progressDialog.setMessage("Please wait while scanning directory...");
-        progressDialog.setIndeterminate(true);
-        progressDialog.setCancelable(false);
-        progressDialog.show();
-        
-        new Thread(() -> {
-            try {
-                // Vérifier que le répertoire existe
-                File consoleDir = new File(GAMELIBRARY_DIR + "/" + consoleId);
-                if (!consoleDir.exists() || !consoleDir.isDirectory()) {
-                    runOnUiThread(() -> {
-                        progressDialog.dismiss();
-                        android.widget.Toast.makeText(this, 
-                            "Console directory not found: " + consoleDir.getAbsolutePath(), 
-                            android.widget.Toast.LENGTH_LONG).show();
-                    });
-                    return;
-                }
-                
-                // Charger les extensions depuis console.json si présent
-                List<String> extensions = new ArrayList<>();
-                File consoleJsonFile = new File(consoleDir, "console.json");
-                if (consoleJsonFile.exists()) {
-                    java.io.FileInputStream fis = new java.io.FileInputStream(consoleJsonFile);
-                    byte[] buffer = new byte[(int) consoleJsonFile.length()];
-                    fis.read(buffer);
-                    fis.close();
-                    String json = new String(buffer, "UTF-8");
-                    JSONObject consoleJson = new JSONObject(json);
-                    
-                    if (consoleJson.has("extensions")) {
-                        JSONArray extArray = consoleJson.getJSONArray("extensions");
-                        for (int i = 0; i < extArray.length(); i++) {
-                            extensions.add(extArray.getString(i).toLowerCase());
-                        }
-                    }
-                }
-                
-                // Si pas d'extensions dans console.json, utiliser celles fournies
-                if (extensions.isEmpty() && !extensionsStr.isEmpty()) {
-                    String[] parts = extensionsStr.split(",");
-                    for (String ext : parts) {
-                        String cleaned = ext.trim().toLowerCase();
-                        if (!cleaned.isEmpty()) {
-                            if (!cleaned.startsWith(".")) {
-                                cleaned = "." + cleaned;
-                            }
-                            extensions.add(cleaned);
-                        }
-                    }
-                }
-                
-                // Si toujours pas d'extensions, utiliser les extensions par défaut de RomScanner
-                if (extensions.isEmpty()) {
-                    Log.i(TAG, "No extensions specified, using default ROM extensions");
-                }
-                
-                // Scanner le répertoire pour les ROMs
-                File[] files = consoleDir.listFiles();
-                List<ScannedRom> scannedRoms = new ArrayList<>();
-                int romCounter = 1;
-                
-                if (files != null) {
-                    for (File file : files) {
-                        if (file.isFile()) {
-                            String fileName = file.getName();
-                            
-                            // Vérifier si c'est un ROM
-                            boolean isRom = false;
-                            if (!extensions.isEmpty()) {
-                                for (String ext : extensions) {
-                                    if (fileName.toLowerCase().endsWith(ext)) {
-                                        isRom = true;
-                                        break;
-                                    }
-                                }
-                            } else {
-                                // Utiliser la détection par défaut de RomScanner
-                                isRom = isRomFile(fileName);
-                            }
-                            
-                            if (isRom) {
-                                String baseName = getBaseNameFromFile(fileName);
-                                
-                                // Vérifier si les images existent
-                                File box2dImage = new File(consoleDir, "media/box2d/" + baseName + ".png");
-                                File screenshotImage = new File(consoleDir, "media/screenshots/" + baseName + ".png");
-                                
-                                ScannedRom rom = new ScannedRom();
-                                rom.id = String.valueOf(romCounter++);
-                                rom.name = baseName;
-                                rom.path = "./" + fileName;
-                                rom.hasBox2dImage = box2dImage.exists();
-                                rom.hasScreenshot = screenshotImage.exists();
-                                
-                                scannedRoms.add(rom);
-                            }
-                        }
-                    }
-                }
-                
-                final int romsFound = scannedRoms.size();
-                final List<ScannedRom> finalRoms = scannedRoms;
-                
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    
-                    if (romsFound == 0) {
-                        android.widget.Toast.makeText(this, 
-                            "No ROMs found in directory", 
-                            android.widget.Toast.LENGTH_LONG).show();
-                        return;
-                    }
-                    
-                    // Afficher le dialog de preview
-                    showGamelistPreviewDialog(consoleId, finalRoms);
-                });
-                
-            } catch (Exception e) {
-                Log.e(TAG, "Error scanning ROMs", e);
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    android.widget.Toast.makeText(this, 
-                        "Error scanning: " + e.getMessage(), 
-                        android.widget.Toast.LENGTH_LONG).show();
-                });
-            }
-        }).start();
-    }
-    
+
     /**
      * Afficher un dialog de preview avec les ROMs trouvés et options Merge/Replace
      */
-    private void showGamelistPreviewDialog(String consoleId, List<ScannedRom> roms) {
+    private void showGamelistPreviewDialog(String consoleId, List<ScannedRom> roms, boolean gamelistExists) {
         // Construire le message de preview
         StringBuilder message = new StringBuilder();
         message.append("Found ").append(roms.size()).append(" ROM(s) in directory:\n\n");
-        
+
         int maxPreview = Math.min(10, roms.size());
         for (int i = 0; i < maxPreview; i++) {
             ScannedRom rom = roms.get(i);
             message.append("- ").append(rom.name);
             if (rom.hasBox2dImage || rom.hasScreenshot) {
                 message.append(" [");
-                if (rom.hasBox2dImage) message.append("BOX");
-                if (rom.hasBox2dImage && rom.hasScreenshot) message.append(", ");
-                if (rom.hasScreenshot) message.append("SCREEN");
+                if (rom.hasBox2dImage)
+                    message.append("BOX");
+                if (rom.hasBox2dImage && rom.hasScreenshot)
+                    message.append(", ");
+                if (rom.hasScreenshot)
+                    message.append("SCREEN");
                 message.append("]");
             }
             message.append("\n");
         }
-        
+
         if (roms.size() > maxPreview) {
             message.append("... and ").append(roms.size() - maxPreview).append(" more\n");
         }
-        
+
         message.append("\n\nChoose an option:");
-        
-        // Vérifier si un gamelist.json existe déjà
-        File gamelistFile = new File(GAMELIBRARY_DIR + "/" + consoleId + "/gamelist.json");
-        boolean gamelistExists = gamelistFile.exists();
-        
+
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Gamelist Preview");
         builder.setMessage(message.toString());
-        
+
         if (gamelistExists) {
             builder.setPositiveButton("MERGE", (dialog, which) -> {
                 saveGeneratedGamelist(consoleId, roms, true);
@@ -918,298 +939,182 @@ public class ConsoleManagerActivity extends AppCompatActivity {
                 saveGeneratedGamelist(consoleId, roms, false);
             });
         }
-        
+
         builder.setNegativeButton("CANCEL", null);
         builder.show();
     }
-    
+
     /**
      * Sauvegarder le gamelist.json généré
      */
     private void saveGeneratedGamelist(String consoleId, List<ScannedRom> roms, boolean merge) {
-        android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
-        progressDialog.setTitle("Saving gamelist.json...");
-        progressDialog.setMessage("Please wait...");
-        progressDialog.setIndeterminate(true);
-        progressDialog.setCancelable(false);
-        progressDialog.show();
-        
-        new Thread(() -> {
-            try {
-                File gamelistFile = new File(GAMELIBRARY_DIR + "/" + consoleId + "/gamelist.json");
-                
-                JSONArray gamesArray = new JSONArray();
-                
-                // Si merge, charger l'existant d'abord
-                if (merge && gamelistFile.exists()) {
-                    java.io.FileInputStream fis = new java.io.FileInputStream(gamelistFile);
-                    byte[] buffer = new byte[(int) gamelistFile.length()];
-                    fis.read(buffer);
-                    fis.close();
-                    String json = new String(buffer, "UTF-8");
-                    
-                    JSONObject existingGamelist = new JSONObject(json);
-                    if (existingGamelist.has("games")) {
-                        gamesArray = existingGamelist.getJSONArray("games");
-                    }
-                }
-                
-                // Ajouter les nouveaux ROMs
-                for (ScannedRom rom : roms) {
-                    // Vérifier si le ROM existe déjà (si merge)
-                    boolean exists = false;
-                    if (merge) {
-                        for (int i = 0; i < gamesArray.length(); i++) {
-                            JSONObject game = gamesArray.getJSONObject(i);
-                            if (game.getString("path").equals(rom.path)) {
-                                exists = true;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    if (!exists) {
-                        JSONObject game = new JSONObject();
-                        game.put("id", rom.id);
-                        game.put("name", rom.name);
-                        game.put("path", rom.path);
-                        game.put("desc", "Custom ROM - No description available");
-                        game.put("image", rom.hasBox2dImage ? 
-                            "./media/box2d/" + rom.name + ".png" : "./media/box2d/fallback.png");
-                        game.put("screenshot", rom.hasScreenshot ? 
-                            "./media/screenshots/" + rom.name + ".png" : "./media/screenshots/fallback.png");
-                        game.put("thumbnail", rom.hasBox2dImage ? 
-                            "./media/box2d/" + rom.name + ".png" : "./media/box2d/fallback.png");
-                        game.put("releasedate", "Unknown");
-                        game.put("genre", "Custom");
-                        game.put("players", "1-2");
-                        
-                        gamesArray.put(game);
-                    }
-                }
-                
-                // Créer le gamelist final
-                JSONObject gamelist = new JSONObject();
-                gamelist.put("games", gamesArray);
-                
-                // Sauvegarder
-                FileOutputStream fos = new FileOutputStream(gamelistFile);
-                fos.write(gamelist.toString(2).getBytes("UTF-8"));
-                fos.close();
-                
+        GenerateGamelistUseCase.ProgressCallback progressCallback = new GenerateGamelistUseCase.ProgressCallback() {
+            private android.app.ProgressDialog progressDialog;
+
+            @Override
+            public void showProgress(String title, String message, boolean indeterminate) {
                 runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    android.widget.Toast.makeText(this, 
-                        "Gamelist saved successfully!\n" + roms.size() + " ROMs added", 
-                        android.widget.Toast.LENGTH_LONG).show();
-                    
-                    // Recharger la liste des consoles pour mettre à jour le statut hasGamelist
-                    loadConsoles();
-                    
-                    // Retourner un résultat pour que GameListActivity se rafraîchisse
-                    Intent resultIntent = new Intent();
-                    resultIntent.putExtra("gamelistGenerated", true);
-                    resultIntent.putExtra("consoleId", consoleId);
-                    setResult(RESULT_OK, resultIntent);
-                });
-                
-                Log.i(TAG, "Gamelist saved: " + consoleId + " with " + roms.size() + " ROMs");
-                
-            } catch (Exception e) {
-                Log.e(TAG, "Error saving gamelist", e);
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    android.widget.Toast.makeText(this, 
-                        "Error saving gamelist: " + e.getMessage(), 
-                        android.widget.Toast.LENGTH_LONG).show();
+                    progressDialog = new android.app.ProgressDialog(ConsoleManagerActivity.this);
+                    progressDialog.setTitle(title);
+                    progressDialog.setMessage(message);
+                    progressDialog.setIndeterminate(indeterminate);
+                    progressDialog.setCancelable(false);
+                    progressDialog.show();
                 });
             }
-        }).start();
+
+            @Override
+            public void dismissProgress() {
+                runOnUiThread(() -> {
+                    if (progressDialog != null) {
+                        progressDialog.dismiss();
+                        progressDialog = null;
+                    }
+                });
+            }
+
+            @Override
+            public void showToast(String message, int duration) {
+                runOnUiThread(() -> {
+                    android.widget.Toast.makeText(ConsoleManagerActivity.this, message, duration).show();
+                });
+            }
+        };
+
+        GenerateGamelistUseCase.SaveCallback saveCallback = new GenerateGamelistUseCase.SaveCallback() {
+            @Override
+            public void onGamelistSaved(String consoleId, int romsAdded) {
+                // Recharger la liste des consoles pour mettre à jour le statut hasGamelist
+                loadConsoles();
+
+                // Retourner un résultat pour que GameListActivity se rafraîchisse
+                Intent resultIntent = new Intent();
+                resultIntent.putExtra("gamelistGenerated", true);
+                resultIntent.putExtra("consoleId", consoleId);
+                setResult(RESULT_OK, resultIntent);
+            }
+        };
+
+        generateGamelistUseCase.saveGeneratedGamelist(consoleId, roms, merge, progressCallback, saveCallback);
     }
-    
+
     /**
      * Vérifier si un fichier est un ROM (utilise la logique de RomScanner)
      */
-    private boolean isRomFile(String fileName) {
-        String lowerName = fileName.toLowerCase();
-        return lowerName.endsWith(".nes") || lowerName.endsWith(".smc") || lowerName.endsWith(".sfc") ||
-               lowerName.endsWith(".z64") || lowerName.endsWith(".n64") || lowerName.endsWith(".v64") ||
-               lowerName.endsWith(".bin") || lowerName.endsWith(".md") || lowerName.endsWith(".gen") ||
-               lowerName.endsWith(".smd") || lowerName.endsWith(".gba") || lowerName.endsWith(".gb") ||
-               lowerName.endsWith(".gbc") || lowerName.endsWith(".nds") || lowerName.endsWith(".pbp") ||
-               lowerName.endsWith(".iso") || lowerName.endsWith(".cue") || lowerName.endsWith(".img") ||
-               lowerName.endsWith(".cso") || lowerName.endsWith(".zip") || lowerName.endsWith(".7z") ||
-               lowerName.endsWith(".rar") || lowerName.endsWith(".chd");
-    }
-    
-    /**
-     * Extraire le nom de base d'un fichier ROM (sans extension)
-     */
-    private String getBaseNameFromFile(String fileName) {
-        String baseName = fileName;
-        
-        // Enlever les extensions connues
-        String[] extensions = {".nes", ".smc", ".sfc", ".z64", ".n64", ".v64", ".bin", ".md", 
-                               ".gen", ".smd", ".gba", ".gb", ".gbc", ".nds", ".pbp", ".iso", 
-                               ".cue", ".img", ".cso", ".zip", ".7z", ".rar", ".chd"};
-        
-        for (String ext : extensions) {
-            if (baseName.toLowerCase().endsWith(ext)) {
-                baseName = baseName.substring(0, baseName.length() - ext.length());
-                break;
-            }
-        }
-        
-        return baseName;
-    }
-    
+
     /**
      * Classe pour stocker les infos d'un ROM scanné
      */
-    private static class ScannedRom {
-        String id;
-        String name;
-        String path;
-        boolean hasBox2dImage;
-        boolean hasScreenshot;
-    }
-    
+    // ScannedRom déplacé vers com.retroplay.models.ScannedRom
+
     // Console config data class
-    static class ConsoleConfig {
-        String id;
-        String name;
-        String fullName;
-        String defaultCore;
-        String color;
-        boolean isGeneric;
-        boolean hasGamelist;  // Indique si gamelist.json existe
-        boolean usesAutoScan; // Indique si le scanner automatique est utilisé
-        List<String> cores;
-        List<String> extensions;
-    }
-    
+    // ConsoleConfig déplacé vers com.retroplay.models.ConsoleConfig
+
     // AuditResult déplacé vers ScanConsoleUseCase.ScanResult
-    
+
     // RecyclerView Adapter
-    class ConsoleAdapter extends RecyclerView.Adapter<ConsoleAdapter.ViewHolder> {
-        
-        private List<ConsoleConfig> consoles;
-        
-        ConsoleAdapter(List<ConsoleConfig> consoles) {
-            this.consoles = consoles;
-        }
-        
-        @NonNull
-        @Override
-        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_console_manager, parent, false);
-            return new ViewHolder(view);
-        }
-        
-        @Override
-        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-            ConsoleConfig console = consoles.get(position);
-            
-            // Vérifier si c'est une sous-console (contient "/")
-            boolean isSubConsole = console.id.contains("/");
-            
-            if (isSubConsole) {
-                // Indenter visuellement les sous-consoles
-                holder.consoleName.setText("  └─ " + console.name);
-                holder.consoleFullName.setText("     " + console.fullName);
-            } else {
-                holder.consoleName.setText(console.name);
-                holder.consoleFullName.setText(console.fullName);
-            }
-            
-            holder.consoleCore.setText("Core: " + console.defaultCore);
-            
-            // Afficher le badge approprié
-            if (console.usesAutoScan) {
-                // Console sans gamelist.json - utilise le scanner automatique
-                holder.autoScanBadge.setVisibility(View.VISIBLE);
-                holder.genericBadge.setVisibility(View.GONE);
-            } else if (console.isGeneric) {
-                // Console générique
-                holder.genericBadge.setVisibility(View.VISIBLE);
-                holder.autoScanBadge.setVisibility(View.GONE);
-            } else {
-                // Console standard avec gamelist.json
-                holder.genericBadge.setVisibility(View.GONE);
-                holder.autoScanBadge.setVisibility(View.GONE);
-            }
-            
-            holder.editButton.setOnClickListener(v -> showEditConsoleDialog(console));
-            
-            // Bouton refresh - scanner/regénérer le gamelist.json
-            holder.refreshButton.setOnClickListener(v -> {
-                String extensions = String.join(", ", console.extensions);
-                scanRomsAndGenerateGamelist(console.id, extensions);
-            });
-            
-            holder.artworkButton.setOnClickListener(v -> showArtworkOptionsForConsole(console));
-        }
-        
-        @Override
-        public int getItemCount() {
-            return consoles.size();
-        }
-        
-        class ViewHolder extends RecyclerView.ViewHolder {
-            TextView consoleIcon;
-            TextView consoleName;
-            TextView consoleFullName;
-            TextView consoleCore;
-            TextView genericBadge;
-            TextView autoScanBadge;
-            TextView editButton;
-            TextView refreshButton;
-            TextView artworkButton;
-            
-            ViewHolder(View itemView) {
-                super(itemView);
-                consoleIcon = itemView.findViewById(R.id.consoleIcon);
-                consoleName = itemView.findViewById(R.id.consoleName);
-                consoleFullName = itemView.findViewById(R.id.consoleFullName);
-                consoleCore = itemView.findViewById(R.id.consoleCore);
-                genericBadge = itemView.findViewById(R.id.consoleGenericBadge);
-                autoScanBadge = itemView.findViewById(R.id.consoleAutoScanBadge);
-                editButton = itemView.findViewById(R.id.editButton);
-                refreshButton = itemView.findViewById(R.id.refreshButton);
-                artworkButton = itemView.findViewById(R.id.artworkButton);
-            }
-        }
-    }
-    
+
     /**
      * Installer la base de données de cheats depuis les assets
      */
     private void installCheatsDatabase() {
-        // Vérifier si le ZIP est déjà copié (mode lecture à la volée)
-        File cheatsZip = new File("/storage/emulated/0/GameLibrary-Data/cheats.zip");
-        
-        // Vérifier si les cheats sont déjà extraits (mode extraction)
-        File cheatsDir = new File("/storage/emulated/0/GameLibrary-Data/cheats");
-        boolean hasExtractedCheats = cheatsDir.exists() && cheatsDir.listFiles() != null && cheatsDir.listFiles().length > 10;
-        
-        if (cheatsZip.exists() || hasExtractedCheats) {
-            android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
-            builder.setTitle("Cheats Already Installed");
-            String message = cheatsZip.exists() ? 
-                "Cheats ZIP is already installed (on-the-fly mode).\n\nDo you want to reinstall?" :
-                "Cheats are already extracted.\n\nDo you want to reinstall?";
-            builder.setMessage(message);
-            builder.setPositiveButton("REINSTALL", (dialog, which) -> showCheatsInstallOptions());
-            builder.setNegativeButton("CANCEL", null);
-            builder.show();
-            return;
-        }
-        
-        // Première installation - Afficher les options
-        showCheatsInstallOptions();
+        InstallCheatsUseCase.DialogCallback dialogCallback = new InstallCheatsUseCase.DialogCallback() {
+            @Override
+            public void showInstallOptions() {
+                showCheatsInstallOptions();
+            }
+
+            @Override
+            public void showSystemSelector() {
+                showSystemSelector();
+            }
+
+            @Override
+            public void showReinstallDialog(String message, Runnable onReinstall) {
+                android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(
+                        ConsoleManagerActivity.this);
+                builder.setTitle("Reinstall Cheats");
+                builder.setMessage(message);
+                builder.setPositiveButton("REINSTALL", (dialog, which) -> onReinstall.run());
+                builder.setNegativeButton("CANCEL", null);
+                builder.show();
+            }
+
+            @Override
+            public void showAlreadyInstalledDialog(String message, Runnable onReinstall) {
+                android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(
+                        ConsoleManagerActivity.this);
+                builder.setTitle("Cheats Already Installed");
+                builder.setMessage(message);
+                builder.setPositiveButton("REINSTALL", (dialog, which) -> onReinstall.run());
+                builder.setNegativeButton("CANCEL", null);
+                builder.show();
+            }
+        };
+
+        InstallCheatsUseCase.ProgressCallback progressCallback = createProgressCallback();
+
+        installCheatsUseCase.checkAndInstallCheats(dialogCallback, progressCallback);
     }
-    
+
+    /**
+     * Crée un ProgressCallback pour InstallCheatsUseCase
+     */
+    private InstallCheatsUseCase.ProgressCallback createProgressCallback() {
+        return new InstallCheatsUseCase.ProgressCallback() {
+            private android.app.ProgressDialog progressDialog;
+
+            @Override
+            public void showProgress(String title, String message, int max, boolean indeterminate) {
+                runOnUiThread(() -> {
+                    progressDialog = new android.app.ProgressDialog(ConsoleManagerActivity.this);
+                    progressDialog.setTitle(title);
+                    progressDialog.setMessage(message);
+                    if (indeterminate) {
+                        progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER);
+                    } else {
+                        progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+                        progressDialog.setMax(max);
+                        progressDialog.setProgress(0);
+                    }
+                    progressDialog.setCancelable(false);
+                    progressDialog.show();
+                });
+            }
+
+            @Override
+            public void updateProgress(int progress, String message) {
+                runOnUiThread(() -> {
+                    if (progressDialog != null) {
+                        if (progress >= 0) {
+                            progressDialog.setProgress(progress);
+                        }
+                        if (message != null) {
+                            progressDialog.setMessage(message);
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void dismissProgress() {
+                runOnUiThread(() -> {
+                    if (progressDialog != null) {
+                        progressDialog.dismiss();
+                        progressDialog = null;
+                    }
+                });
+            }
+
+            @Override
+            public void showToast(String message, int duration) {
+                runOnUiThread(() -> {
+                    android.widget.Toast.makeText(ConsoleManagerActivity.this, message, duration).show();
+                });
+            }
+        };
+    }
+
     /**
      * Afficher les options d'installation des cheats
      */
@@ -1217,720 +1122,255 @@ public class ConsoleManagerActivity extends AppCompatActivity {
         android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
         builder.setTitle("Install Cheats Database");
         builder.setMessage("Choose installation method:\n\n" +
-            "1. ZIP MODE (Recommended)\n" +
-            "   - Instant installation\n" +
-            "   - 14 MB storage\n" +
-            "   - Read on-the-fly\n\n" +
-            "2. EXTRACT ALL\n" +
-            "   - 2-3 minutes installation\n" +
-            "   - 45 MB storage\n" +
-            "   - Faster game loading\n\n" +
-            "3. EXTRACT BY SYSTEM\n" +
-            "   - Choose which systems\n" +
-            "   - Custom storage size");
-        
+                "1. ZIP MODE (Recommended)\n" +
+                "   - Instant installation\n" +
+                "   - 14 MB storage\n" +
+                "   - Read on-the-fly\n\n" +
+                "2. EXTRACT ALL\n" +
+                "   - 2-3 minutes installation\n" +
+                "   - 45 MB storage\n" +
+                "   - Faster game loading\n\n" +
+                "3. EXTRACT BY SYSTEM\n" +
+                "   - Choose which systems\n" +
+                "   - Custom storage size");
+
         builder.setPositiveButton("ZIP MODE", (dialog, which) -> {
-            copyZipToDevice();
+            installCheatsUseCase.copyZipToDevice(createProgressCallback());
         });
-        
+
         builder.setNeutralButton("EXTRACT ALL", (dialog, which) -> {
-            performCheatsInstallation();
+            InstallCheatsUseCase.ProgressCallback progressCallback = createProgressCallback();
+            InstallCheatsUseCase.SystemProgressCallback systemCallback = new InstallCheatsUseCase.SystemProgressCallback() {
+                @Override
+                public void onSystemStart(String systemName, int systemIndex, int totalSystems) {
+                    // Utilisé par AssetFileHelper pour la copie depuis assets (fallback)
+                }
+
+                @Override
+                public void onFileProgress(String fileName) {
+                    // Utilisé par AssetFileHelper pour la progression
+                }
+            };
+            installCheatsUseCase.performCheatsInstallation(progressCallback, systemCallback);
         });
-        
+
         builder.setNegativeButton("BY SYSTEM", (dialog, which) -> {
             showSystemSelector();
         });
-        
+
         builder.show();
     }
-    
-    /**
-     * Copier cheats.zip sur le device (mode ZIP, instantané)
-     */
-    private void copyZipToDevice() {
-        android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
-        progressDialog.setTitle("Installing Cheats");
-        progressDialog.setMessage("Copying cheats.zip...");
-        progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER);
-        progressDialog.setCancelable(false);
-        progressDialog.show();
-        
-        new Thread(() -> {
-            try {
-                java.io.InputStream is = getAssets().open("cheats.zip");
-                File destFile = new File("/storage/emulated/0/GameLibrary-Data/cheats.zip");
-                java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
-                
-                byte[] buffer = new byte[65536];
-                int bytesRead;
-                while ((bytesRead = is.read(buffer)) != -1) {
-                    fos.write(buffer, 0, bytesRead);
-                }
-                
-                fos.close();
-                is.close();
-                
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    android.widget.Toast.makeText(this, 
-                        "Cheats ready (ZIP mode)!", 
-                        android.widget.Toast.LENGTH_LONG).show();
-                });
-                
-                Log.i(TAG, "Cheats ZIP copied to device");
-                
-            } catch (Exception e) {
-                Log.e(TAG, "Error copying cheats ZIP", e);
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    android.widget.Toast.makeText(this, 
-                        "Error: " + e.getMessage(), 
-                        android.widget.Toast.LENGTH_LONG).show();
-                });
-            }
-        }).start();
-    }
-    
+
     /**
      * Afficher le sélecteur de systèmes pour extraction partielle
      */
     private void showSystemSelector() {
-        String[] systems = {
-            "MAME 2003", "MAME 2003 Plus", "MAME 2010", "MAME 2015", "MAME 2016", "FBNeo",
-            "NES", "SNES", "N64", "GB", "GBC", "GBA",
-            "Genesis", "Master System", "Game Gear", "Sega CD", "32X",
-            "PSX", "PSP",
-            "Atari 2600", "Atari 5200", "Atari 7800", "Lynx",
-            "Neo Geo", "WonderSwan", "PC Engine", "Virtual Boy"
-        };
-        
+        String[] systems = InstallCheatsUseCase.getAvailableSystems();
         boolean[] selectedSystems = new boolean[systems.length];
-        
+
         android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
         builder.setTitle("Select Systems");
         builder.setMultiChoiceItems(systems, selectedSystems, (dialog, which, isChecked) -> {
             selectedSystems[which] = isChecked;
         });
-        
+
         builder.setPositiveButton("INSTALL", (dialog, which) -> {
             // Compter les systèmes sélectionnés
             int count = 0;
             for (boolean selected : selectedSystems) {
-                if (selected) count++;
+                if (selected)
+                    count++;
             }
-            
+
             if (count == 0) {
                 android.widget.Toast.makeText(this, "No systems selected", android.widget.Toast.LENGTH_SHORT).show();
                 return;
             }
-            
+
             // Construire la liste des systèmes sélectionnés
             java.util.List<String> selectedSystemsList = new java.util.ArrayList<>();
             for (int i = 0; i < systems.length; i++) {
                 if (selectedSystems[i]) {
-                    selectedSystemsList.add(getSystemFolderName(systems[i]));
+                    selectedSystemsList.add(InstallCheatsUseCase.getSystemFolderName(systems[i]));
                 }
             }
-            
-            extractSelectedSystems(selectedSystemsList);
+
+            installCheatsUseCase.extractSelectedSystems(selectedSystemsList, createProgressCallback());
         });
-        
+
         builder.setNegativeButton("CANCEL", null);
         builder.show();
     }
-    
-    /**
-     * Mapper le nom d'affichage au nom de dossier
-     */
-    private String getSystemFolderName(String displayName) {
-        switch (displayName) {
-            // Arcade systems
-            case "MAME 2003": return "mame2003";
-            case "MAME 2003 Plus": return "mame2003_plus";
-            case "MAME 2010": return "mame2010";
-            case "MAME 2015": return "mame2015";
-            case "MAME 2016": return "mame2016";
-            case "FBNeo": return "fbneo";
-            
-            // Console systems
-            case "NES": return "nes";
-            case "SNES": return "snes";
-            case "N64": return "n64";
-            case "GB": return "gb";
-            case "GBC": return "gbc";
-            case "GBA": return "gba";
-            case "Genesis": return "genesis";
-            case "Master System": return "mastersystem";
-            case "Game Gear": return "gamegear";
-            case "Sega CD": return "segacd";
-            case "32X": return "32x";
-            case "PSX": return "psx";
-            case "PSP": return "psp";
-            case "Atari 2600": return "atari2600";
-            case "Atari 5200": return "atari5200";
-            case "Atari 7800": return "atari7800";
-            case "Lynx": return "atarilynx";
-            case "Neo Geo": return "neogeo";
-            case "WonderSwan": return "wonderswan";
-            case "PC Engine": return "pce";
-            case "Virtual Boy": return "virtualboy";
-            default: return displayName.toLowerCase();
-        }
-    }
-    
-    /**
-     * Extraire seulement les systèmes sélectionnés depuis le ZIP
-     */
-    private void extractSelectedSystems(java.util.List<String> systems) {
-        android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
-        progressDialog.setTitle("Installing Cheats");
-        progressDialog.setMessage("Extracting selected systems...");
-        progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
-        progressDialog.setMax(systems.size());
-        progressDialog.setProgress(0);
-        progressDialog.setCancelable(false);
-        progressDialog.show();
-        
-        new Thread(() -> {
-            try {
-                String destPath = "/storage/emulated/0/GameLibrary-Data/cheats";
-                File destDir = new File(destPath);
-                if (!destDir.exists()) {
-                    destDir.mkdirs();
-                }
-                
-                java.io.InputStream assetStream = getAssets().open("cheats.zip");
-                java.util.zip.ZipInputStream zipStream = new java.util.zip.ZipInputStream(assetStream);
-                
-                int filesExtracted = 0;
-                int currentSystemIndex = 0;
-                String lastSystem = "";
-                java.util.zip.ZipEntry entry;
-                
-                while ((entry = zipStream.getNextEntry()) != null) {
-                    String entryName = entry.getName();
-                    
-                    // Vérifier si cette entrée appartient à un système sélectionné
-                    boolean shouldExtract = false;
-                    String currentSystem = "";
-                    
-                    for (String system : systems) {
-                        if (entryName.startsWith("retroarch/" + system + "/")) {
-                            shouldExtract = true;
-                            currentSystem = system;
-                            break;
-                        }
-                    }
-                    
-                    // Extraire aussi les overrides et user
-                    if (entryName.startsWith("retroarch/overrides/") || entryName.startsWith("user/")) {
-                        shouldExtract = true;
-                    }
-                    
-                    if (shouldExtract) {
-                        // Détecter changement de système
-                        if (!currentSystem.equals(lastSystem) && !currentSystem.isEmpty()) {
-                            lastSystem = currentSystem;
-                            currentSystemIndex++;
-                            final String systemName = currentSystem;
-                            final int sysIdx = currentSystemIndex;
-                            runOnUiThread(() -> {
-                                progressDialog.setProgress(sysIdx);
-                                progressDialog.setMessage("Extracting " + systemName.toUpperCase() + "...");
-                            });
-                        }
-                        
-                        File outputFile = new File(destDir, entryName);
-                        
-                        if (entry.isDirectory()) {
-                            outputFile.mkdirs();
-                        } else {
-                            outputFile.getParentFile().mkdirs();
-                            
-                            java.io.FileOutputStream fos = new java.io.FileOutputStream(outputFile);
-                            byte[] buffer = new byte[65536];
-                            int bytesRead;
-                            while ((bytesRead = zipStream.read(buffer)) != -1) {
-                                fos.write(buffer, 0, bytesRead);
-                            }
-                            fos.close();
-                            filesExtracted++;
-                        }
-                    }
-                    
-                    zipStream.closeEntry();
-                }
-                
-                zipStream.close();
-                assetStream.close();
-                
-                final int totalFiles = filesExtracted;
-                runOnUiThread(() -> {
-                    progressDialog.setProgress(systems.size());
-                    progressDialog.dismiss();
-                    android.widget.Toast.makeText(this, 
-                        "Cheats installed: " + totalFiles + " files (" + systems.size() + " systems)", 
-                        android.widget.Toast.LENGTH_LONG).show();
-                });
-                
-                Log.i(TAG, "Selected systems cheats extracted: " + totalFiles + " files");
-                
-            } catch (Exception e) {
-                Log.e(TAG, "Error extracting selected systems", e);
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    android.widget.Toast.makeText(this, 
-                        "Error: " + e.getMessage(), 
-                        android.widget.Toast.LENGTH_LONG).show();
-                });
-            }
-        }).start();
-    }
-    
-    /**
-     * Effectuer l'installation des cheats
-     */
-    private void performCheatsInstallation() {
-        android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
-        progressDialog.setTitle("Installing Cheats");
-        progressDialog.setMessage("Preparing...");
-        progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
-        progressDialog.setMax(100);
-        progressDialog.setProgress(0);
-        progressDialog.setCancelable(false);
-        progressDialog.show();
-        
-        new Thread(() -> {
-            try {
-                // Vérifier si cheats.zip existe dans les assets
-                boolean zipExists = false;
-                try {
-                    getAssets().open("cheats.zip").close();
-                    zipExists = true;
-                    Log.i(TAG, "✅ Found cheats.zip in assets, using fast extraction (ZIP method)");
-                    runOnUiThread(() -> {
-                        android.widget.Toast.makeText(this, "Using ZIP extraction (fast)", android.widget.Toast.LENGTH_SHORT).show();
-                    });
-                } catch (Exception e) {
-                    Log.w(TAG, "⚠️ cheats.zip not found in assets, using folder copy method (slow)");
-                    runOnUiThread(() -> {
-                        android.widget.Toast.makeText(this, "Using folder copy (slow)", android.widget.Toast.LENGTH_SHORT).show();
-                    });
-                }
-                
-                if (zipExists) {
-                    // Méthode rapide : Extraire le ZIP
-                    extractCheatsZip(progressDialog);
-                } else {
-                    // Méthode lente : Copier fichier par fichier (fallback)
-                    final int[] fileCount = {0};
-                    final String[] currentSystem = {""};
-                    
-                    copyAssetFolderWithSystemCallback("GameLibrary-Data/cheats", "/storage/emulated/0/GameLibrary-Data/cheats", 
-                        new SystemProgressCallback() {
-                            @Override
-                            public void onSystemStart(String systemName, int systemIndex, int totalSystems) {
-                                currentSystem[0] = systemName;
-                                runOnUiThread(() -> {
-                                    progressDialog.setMessage("Installing cheats...\n(" + systemIndex + "/" + totalSystems + ") " + systemName.toUpperCase());
-                                    int progress = (systemIndex * 100) / totalSystems;
-                                    progressDialog.setProgress(progress);
-                                });
-                            }
-                            
-                            @Override
-                            public void onFileProgress(String fileName) {
-                                fileCount[0]++;
-                            }
-                        });
-                    
-                    runOnUiThread(() -> {
-                        progressDialog.setProgress(100);
-                        progressDialog.dismiss();
-                        android.widget.Toast.makeText(this, 
-                            "Cheats installed: " + fileCount[0] + " files", 
-                            android.widget.Toast.LENGTH_LONG).show();
-                    });
-                    
-                    Log.i(TAG, "Cheats database installed: " + fileCount[0] + " files");
-                }
-                
-            } catch (Exception e) {
-                Log.e(TAG, "Error installing cheats", e);
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    android.widget.Toast.makeText(this, 
-                        "Error installing cheats: " + e.getMessage(), 
-                        android.widget.Toast.LENGTH_LONG).show();
-                });
-            }
-        }).start();
-    }
-    
-    /**
-     * Extraire cheats.zip depuis les assets (méthode rapide)
-     */
-    private void extractCheatsZip(android.app.ProgressDialog progressDialog) throws Exception {
-        String destPath = "/storage/emulated/0/GameLibrary-Data/cheats";
-        File destDir = new File(destPath);
-        if (!destDir.exists()) {
-            destDir.mkdirs();
-        }
-        
-        runOnUiThread(() -> {
-            progressDialog.setMessage("Extracting cheats.zip...");
-            progressDialog.setProgress(10);
-        });
-        
-        java.io.InputStream assetStream = getAssets().open("cheats.zip");
-        java.util.zip.ZipInputStream zipStream = new java.util.zip.ZipInputStream(assetStream);
-        
-        int fileCount = 0;
-        String currentSystem = "";
-        java.util.zip.ZipEntry entry;
-        
-        while ((entry = zipStream.getNextEntry()) != null) {
-            String entryName = entry.getName();
-            File outputFile = new File(destDir, entryName);
-            
-            if (entry.isDirectory()) {
-                outputFile.mkdirs();
-                
-                // Détecter les changements de système (ex: retroarch/nes/, retroarch/snes/)
-                if (entryName.startsWith("retroarch/") && entryName.endsWith("/")) {
-                    String[] parts = entryName.split("/");
-                    if (parts.length >= 2) {
-                        String newSystem = parts[1];
-                        if (!newSystem.equals(currentSystem) && !newSystem.equals("overrides")) {
-                            currentSystem = newSystem;
-                            final String systemName = currentSystem;
-                            runOnUiThread(() -> {
-                                progressDialog.setMessage("Extracting cheats...\n" + systemName.toUpperCase());
-                            });
-                        }
-                    }
-                }
-            } else {
-                // Créer les répertoires parents si nécessaires
-                outputFile.getParentFile().mkdirs();
-                
-                // Extraire le fichier avec buffer 64KB pour performance
-                java.io.FileOutputStream fos = new java.io.FileOutputStream(outputFile);
-                byte[] buffer = new byte[65536]; // 64KB buffer
-                int bytesRead;
-                while ((bytesRead = zipStream.read(buffer)) != -1) {
-                    fos.write(buffer, 0, bytesRead);
-                }
-                fos.close();
-                fileCount++;
-                
-                // Mettre à jour la progression tous les 1000 fichiers (moins fréquent = plus rapide)
-                if (fileCount % 1000 == 0) {
-                    final int count = fileCount;
-                    runOnUiThread(() -> {
-                        // Progression approximative (environ 10,000 fichiers total)
-                        int progress = Math.min(90, 10 + (count / 110));
-                        progressDialog.setProgress(progress);
-                    });
-                }
-            }
-            
-            zipStream.closeEntry();
-        }
-        
-        zipStream.close();
-        assetStream.close();
-        
-        final int totalFiles = fileCount;
-        runOnUiThread(() -> {
-            progressDialog.setProgress(100);
-            progressDialog.dismiss();
-            android.widget.Toast.makeText(this, 
-                "Cheats installed: " + totalFiles + " files (from ZIP)", 
-                android.widget.Toast.LENGTH_LONG).show();
-        });
-        
-        Log.i(TAG, "Cheats extracted from ZIP: " + totalFiles + " files");
-    }
-    
-    /**
-     * Interface de callback pour la copie de fichiers
-     */
-    private interface FileCopyCallback {
-        void onFileProgress(String fileName);
-    }
-    
-    /**
-     * Interface de callback pour la progression par système
-     */
-    private interface SystemProgressCallback {
-        void onSystemStart(String systemName, int systemIndex, int totalSystems);
-        void onFileProgress(String fileName);
-    }
-    
-    /**
-     * Copie récursivement un dossier cheats avec progression par système
-     */
-    private int copyAssetFolderWithSystemCallback(String assetPath, String destPath, SystemProgressCallback callback) throws Exception {
-        int filesCopied = 0;
-        
-        // Chemin vers retroarch (où sont les systèmes)
-        String retroarchPath = assetPath + "/retroarch";
-        String[] systems = getAssets().list(retroarchPath);
-        
-        if (systems == null || systems.length == 0) {
-            Log.w(TAG, "No systems found in " + retroarchPath);
-            return 0;
-        }
-        
-        // Compter seulement les vrais systèmes (pas overrides)
-        int totalSystems = 0;
-        for (String system : systems) {
-            if (!system.equals("overrides")) {
-                totalSystems++;
-            }
-        }
-        
-        int systemIndex = 0;
-        
-        // Copier chaque système
-        for (String system : systems) {
-            if (system.equals("overrides")) {
-                // Copier overrides à la fin sans notification
-                filesCopied += copyAssetFolderWithCallback(retroarchPath + "/overrides", destPath + "/retroarch/overrides", callback::onFileProgress);
-                continue;
-            }
-            
-            systemIndex++;
-            callback.onSystemStart(system, systemIndex, totalSystems);
-            
-            String systemAssetPath = retroarchPath + "/" + system;
-            String systemDestPath = destPath + "/retroarch/" + system;
-            
-            filesCopied += copyAssetFolderWithCallback(systemAssetPath, systemDestPath, callback::onFileProgress);
-        }
-        
-        // Copier aussi le dossier user si présent
-        try {
-            String userPath = assetPath + "/user";
-            String[] userFiles = getAssets().list(userPath);
-            if (userFiles != null && userFiles.length > 0) {
-                filesCopied += copyAssetFolderWithCallback(userPath, destPath + "/user", callback::onFileProgress);
-            }
-        } catch (Exception e) {
-            Log.d(TAG, "No user cheats folder");
-        }
-        
-        return filesCopied;
-    }
-    
-    /**
-     * Copie récursivement un dossier depuis assets avec callback
-     */
-    private int copyAssetFolderWithCallback(String assetPath, String destPath, FileCopyCallback callback) throws Exception {
-        int filesCopied = 0;
-        
-        String[] files = getAssets().list(assetPath);
-        if (files == null || files.length == 0) {
-            return 0;
-        }
-        
-        // Créer le répertoire de destination
-        File destDir = new File(destPath);
-        if (!destDir.exists()) {
-            destDir.mkdirs();
-        }
-        
-        for (String fileName : files) {
-            String assetFilePath = assetPath + "/" + fileName;
-            String destFilePath = destPath + "/" + fileName;
-            
-            try {
-                // Vérifier si c'est un dossier ou un fichier
-                String[] subFiles = getAssets().list(assetFilePath);
-                if (subFiles != null && subFiles.length > 0) {
-                    // C'est un dossier, copie récursive
-                    filesCopied += copyAssetFolderWithCallback(assetFilePath, destFilePath, callback);
-                } else {
-                    // C'est un fichier
-                    File destFile = new File(destFilePath);
-                    if (!destFile.exists()) {
-                        java.io.InputStream is = getAssets().open(assetFilePath);
-                        java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
-                        
-                        byte[] buffer = new byte[8192];
-                        int bytesRead;
-                        while ((bytesRead = is.read(buffer)) != -1) {
-                            fos.write(buffer, 0, bytesRead);
-                        }
-                        
-                        is.close();
-                        fos.close();
-                        filesCopied++;
-                        
-                        // Notifier la progression
-                        if (callback != null) {
-                            callback.onFileProgress(fileName);
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "Error copying " + assetFilePath + ": " + e.getMessage());
-            }
-        }
-        
-        return filesCopied;
-    }
-    
+
+    // File I/O methods déplacées vers com.retroplay.utils.AssetFileHelper
+
     private void showGlobalArtworkDialog(boolean missingOnly) {
         if (consoles == null || consoles.isEmpty()) {
             android.widget.Toast.makeText(this, "No consoles configured", android.widget.Toast.LENGTH_SHORT).show();
             return;
         }
         String title = missingOnly ? "Download Missing Artwork" : "Refresh All Artwork";
-        String message = missingOnly ?
-                "Download missing boxarts and screenshots for all consoles?" :
-                "Download and replace all boxarts and screenshots for all consoles?";
+        String message = missingOnly ? "Download missing boxarts and screenshots for all consoles?"
+                : "Download and replace all boxarts and screenshots for all consoles?";
         new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setMessage(message)
-                .setPositiveButton("Start", (dialog, which) -> downloadArtworksForConsoles(new ArrayList<>(consoles), missingOnly))
+                .setPositiveButton("Start", (dialog, which) -> {
+                    DownloadArtworksUseCase.ProgressCallback progressCallback = new DownloadArtworksUseCase.ProgressCallback() {
+                        private android.app.ProgressDialog progressDialog;
+
+                        @Override
+                        public void showProgress(String title, String message, int max, boolean indeterminate) {
+                            runOnUiThread(() -> {
+                                progressDialog = new android.app.ProgressDialog(ConsoleManagerActivity.this);
+                                progressDialog.setTitle(title);
+                                progressDialog.setMessage(message);
+                                if (indeterminate) {
+                                    progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER);
+                                    progressDialog.setIndeterminate(true);
+                                } else {
+                                    progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+                                    progressDialog.setMax(max);
+                                    progressDialog.setProgress(0);
+                                }
+                                progressDialog.setCancelable(false);
+                                progressDialog.show();
+                            });
+                        }
+
+                        @Override
+                        public void updateProgress(int progress, String message) {
+                            runOnUiThread(() -> {
+                                if (progressDialog != null) {
+                                    if (progress >= 0) {
+                                        progressDialog.setProgress(progress);
+                                    }
+                                    if (message != null) {
+                                        progressDialog.setMessage(message);
+                                    }
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void dismissProgress() {
+                            runOnUiThread(() -> {
+                                if (progressDialog != null) {
+                                    progressDialog.dismiss();
+                                    progressDialog = null;
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void showToast(String message, int duration) {
+                            runOnUiThread(() -> {
+                                android.widget.Toast.makeText(ConsoleManagerActivity.this, message, duration).show();
+                            });
+                        }
+
+                        @Override
+                        public void showResultDialog(String title, String message) {
+                            runOnUiThread(() -> {
+                                new AlertDialog.Builder(ConsoleManagerActivity.this)
+                                        .setTitle(title)
+                                        .setMessage(message)
+                                        .setPositiveButton("OK", null)
+                                        .show();
+                            });
+                        }
+                    };
+
+                    downloadArtworksUseCase.downloadArtworksForConsoles(new ArrayList<>(consoles), missingOnly,
+                            progressCallback);
+                })
                 .setNegativeButton("Cancel", null)
                 .show();
     }
-    
+
     private void showArtworkOptionsForConsole(ConsoleConfig console) {
         if (console == null) {
             return;
         }
-        String[] options = new String[]{"Download missing", "Download all"};
+        String[] options = new String[] { "Download missing", "Download all" };
         new AlertDialog.Builder(this)
                 .setTitle("Artwork - " + console.name)
                 .setItems(options, (dialog, which) -> {
+                    DownloadArtworksUseCase.ProgressCallback progressCallback = new DownloadArtworksUseCase.ProgressCallback() {
+                        private android.app.ProgressDialog progressDialog;
+
+                        @Override
+                        public void showProgress(String title, String message, int max, boolean indeterminate) {
+                            runOnUiThread(() -> {
+                                progressDialog = new android.app.ProgressDialog(ConsoleManagerActivity.this);
+                                progressDialog.setTitle(title);
+                                progressDialog.setMessage(message);
+                                if (indeterminate) {
+                                    progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER);
+                                    progressDialog.setIndeterminate(true);
+                                } else {
+                                    progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+                                    progressDialog.setMax(max);
+                                    progressDialog.setProgress(0);
+                                }
+                                progressDialog.setCancelable(false);
+                                progressDialog.show();
+                            });
+                        }
+
+                        @Override
+                        public void updateProgress(int progress, String message) {
+                            runOnUiThread(() -> {
+                                if (progressDialog != null) {
+                                    if (progress >= 0) {
+                                        progressDialog.setProgress(progress);
+                                    }
+                                    if (message != null) {
+                                        progressDialog.setMessage(message);
+                                    }
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void dismissProgress() {
+                            runOnUiThread(() -> {
+                                if (progressDialog != null) {
+                                    progressDialog.dismiss();
+                                    progressDialog = null;
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void showToast(String message, int duration) {
+                            runOnUiThread(() -> {
+                                android.widget.Toast.makeText(ConsoleManagerActivity.this, message, duration).show();
+                            });
+                        }
+
+                        @Override
+                        public void showResultDialog(String title, String message) {
+                            runOnUiThread(() -> {
+                                new AlertDialog.Builder(ConsoleManagerActivity.this)
+                                        .setTitle(title)
+                                        .setMessage(message)
+                                        .setPositiveButton("OK", null)
+                                        .show();
+                            });
+                        }
+                    };
+
                     if (which == 0) {
-                        downloadArtworksForConsoles(Collections.singletonList(console), true);
+                        downloadArtworksUseCase.downloadArtworksForConsoles(Collections.singletonList(console), true,
+                                progressCallback);
                     } else if (which == 1) {
-                        downloadArtworksForConsoles(Collections.singletonList(console), false);
+                        downloadArtworksUseCase.downloadArtworksForConsoles(Collections.singletonList(console), false,
+                                progressCallback);
                     }
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
     }
-    
-    private void downloadArtworksForConsoles(List<ConsoleConfig> targetConsoles, boolean missingOnly) {
-        if (targetConsoles == null || targetConsoles.isEmpty()) {
-            android.widget.Toast.makeText(this, "No consoles selected", android.widget.Toast.LENGTH_SHORT).show();
-            return;
-        }
-        android.app.ProgressDialog progressDialog = new android.app.ProgressDialog(this);
-        progressDialog.setTitle(missingOnly ? "Downloading Missing Art" : "Refreshing Art");
-        progressDialog.setMessage("Preparing...");
-        progressDialog.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
-        progressDialog.setIndeterminate(true);
-        progressDialog.setCancelable(false);
-        progressDialog.show();
-        
-        new Thread(() -> {
-            Map<ConsoleConfig, List<String>> romMap = new HashMap<>();
-            int totalGames = 0;
-            for (ConsoleConfig console : targetConsoles) {
-                List<String> roms = getRomBaseNames(console.id);
-                romMap.put(console, roms);
-                totalGames += roms.size();
-            }
-            
-            if (totalGames == 0) {
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    android.widget.Toast.makeText(this, "No ROMs found for selected consoles", android.widget.Toast.LENGTH_LONG).show();
-                });
-                return;
-            }
-            
-            final int maxProgress = totalGames;
-            runOnUiThread(() -> {
-                progressDialog.setIndeterminate(false);
-                progressDialog.setMax(maxProgress);
-                progressDialog.setProgress(0);
-            });
-            
-            int processed = 0;
-            int downloaded = 0;
-            int skipped = 0;
-            int errors = 0;
-            StringBuilder errorLog = new StringBuilder();
-            
-            for (ConsoleConfig console : targetConsoles) {
-                List<String> roms = romMap.get(console);
-                if (roms == null || roms.isEmpty()) {
-                    continue;
-                }
-                
-                for (String baseName : roms) {
-                    final String progressMessage = console.name + " - " + baseName;
-                    runOnUiThread(() -> progressDialog.setMessage(progressMessage));
-                    
-                    try {
-                        ArtworkDownloadHelper.DownloadResult result = ArtworkDownloadHelper.downloadArtwork(console.id, baseName, !missingOnly, missingOnly);
-                        if (result.error != null) {
-                            errors++;
-                            errorLog.append(console.name).append(" / ").append(baseName).append(": ").append(result.error).append("\n");
-                        } else if (result.hasAnyDownload()) {
-                            downloaded++;
-                        } else if (result.skipped) {
-                            skipped++;
-                        }
-                    } catch (Exception e) {
-                        errors++;
-                        errorLog.append(console.name).append(" / ").append(baseName).append(": ").append(e.getMessage()).append("\n");
-                        Log.e(TAG, "Artwork download failed", e);
-                    }
-                    
-                    processed++;
-                    final int currentProgress = processed;
-                    runOnUiThread(() -> progressDialog.setProgress(currentProgress));
-                }
-            }
-            
-            final int processedFinal = processed;
-            final int downloadedFinal = downloaded;
-            final int skippedFinal = skipped;
-            final int errorsFinal = errors;
-            final String errorSummary = errorLog.toString();
-            
-            runOnUiThread(() -> {
-                progressDialog.dismiss();
-                StringBuilder summary = new StringBuilder();
-                summary.append("Games processed: ").append(processedFinal).append("\n");
-                summary.append("Downloaded: ").append(downloadedFinal).append("\n");
-                summary.append("Skipped: ").append(skippedFinal).append("\n");
-                if (errorsFinal > 0) {
-                    summary.append("Errors: ").append(errorsFinal).append("\n\n").append(errorSummary);
-                }
-                new AlertDialog.Builder(this)
-                        .setTitle("Artwork Download")
-                        .setMessage(summary.toString())
-                        .setPositiveButton("OK", null)
-                        .show();
-            });
-        }).start();
-    }
-    
-    private List<String> getRomBaseNames(String consoleId) {
-        List<String> roms = new ArrayList<>();
-        File consoleDir = new File(GAMELIBRARY_DIR + "/" + consoleId);
-        if (!consoleDir.exists() || !consoleDir.isDirectory()) {
-            return roms;
-        }
-        File[] files = consoleDir.listFiles();
-        if (files == null) {
-            return roms;
-        }
-        for (File file : files) {
-            if (file.isFile() && isRomFile(file.getName())) {
-                roms.add(getBaseNameFromFile(file.getName()));
-            }
-        }
-        return roms;
-    }
+
 }

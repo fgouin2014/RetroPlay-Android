@@ -30,8 +30,27 @@ object DatabaseManager {
     @Deprecated("Use HashCalculator.calculateHash() instead", ReplaceWith("HashCalculator.calculateHash(File(filePath))"))
     fun calculateCRC32(filePath: String): String? {
             val file = File(filePath)
+        if (!file.exists()) {
+            Log.w(TAG, "File not found for CRC calculation: $filePath")
+            return null
+        }
+        
+        Log.d(TAG, "Calculating CRC32 for: ${file.name} (exists: ${file.exists()}, size: ${file.length()} bytes)")
         val hash = com.retroplay.scraper.HashCalculator.calculateHash(file)
-        return hash?.crc32
+        
+        if (hash == null) {
+            Log.w(TAG, "HashCalculator returned null for: $filePath")
+            return null
+        }
+        
+        val crc = hash.crc32
+        if (crc != null) {
+            Log.i(TAG, "✅ CRC32 calculated: $crc for ${file.name}")
+        } else {
+            Log.w(TAG, "⚠️ CRC32 is null in GameHash for: $filePath (MD5: ${hash.md5}, SHA1: ${hash.sha1})")
+        }
+        
+        return crc
     }
     
     /**
@@ -83,19 +102,42 @@ object DatabaseManager {
     }
     
     fun lookupGame(crc: String, console: String): GameInfo? {
+        if (crc.isBlank()) {
+            Log.w(TAG, "lookupGame called with empty CRC for console: $console")
+            return null
+        }
+        
+        // Normaliser le CRC (uppercase, pas d'espaces)
+        val normalizedCrc = crc.trim().uppercase()
+        Log.d(TAG, "Looking up game: CRC=$normalizedCrc, Console=$console")
+        
         val consoleCache = gameCache[console]
         if (consoleCache != null) {
-            val cached = consoleCache[crc]
+            val cached = consoleCache[normalizedCrc]
             if (cached != null) {
-                Log.d(TAG, "Cache hit for CRC $crc: ${cached.name}")
+                Log.i(TAG, "✅ Cache hit for CRC $normalizedCrc: ${cached.name}")
                 return cached
+            } else {
+                Log.d(TAG, "Cache miss for CRC $normalizedCrc (cache has ${consoleCache.size} entries)")
+                // Log first few CRC keys for debugging
+                if (consoleCache.isNotEmpty()) {
+                    val sampleKeys = consoleCache.keys.take(3)
+                    Log.d(TAG, "Sample CRC keys in cache: $sampleKeys")
+                }
             }
         }
         
-        Log.d(TAG, "Cache miss for CRC $crc, loading from database...")
+        Log.d(TAG, "Loading database for $console (CRC: $normalizedCrc)...")
         loadDatabase(console)
         
-        return gameCache[console]?.get(crc)
+        val result = gameCache[console]?.get(normalizedCrc)
+        if (result != null) {
+            Log.i(TAG, "✅ Game found in database: ${result.name} (CRC: $normalizedCrc)")
+        } else {
+            Log.w(TAG, "❌ Game not found in database: CRC=$normalizedCrc, Console=$console (DB has ${gameCache[console]?.size ?: 0} entries)")
+        }
+        
+        return result
     }
 
     /**
@@ -254,7 +296,7 @@ object DatabaseManager {
             "gamegear" -> "Sega - Game Gear"
             "mastersystem", "sms" -> "Sega - Master System - Mark III"
             "saturn" -> "Sega - Saturn"
-            "dreamcast" -> "Sega - Dreamcast"
+
             "atari2600" -> "Atari - 2600"
             "lynx", "atarilynx" -> "Atari - Lynx"
             else -> console

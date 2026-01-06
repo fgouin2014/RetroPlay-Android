@@ -289,6 +289,7 @@ void LibretroDroid::create(
     const std::string& soFilePath,
     const std::string& systemDir,
     const std::string& savesDir,
+    const std::string& cacheDir,
     std::vector<Variable> variables,
     const ShaderManager::Config& shaderConfig,
     float refreshRate,
@@ -303,7 +304,7 @@ void LibretroDroid::create(
 
     resetGlobalVariables();
 
-    Environment::getInstance().initialize(systemDir, savesDir, &callback_get_current_framebuffer);
+    Environment::getInstance().initialize(systemDir, savesDir, cacheDir, &callback_get_current_framebuffer);
     Environment::getInstance().setLanguage(language);
     Environment::getInstance().setEnableVirtualFileSystem(enableVirtualFileSystem);
     Environment::getInstance().setEnableMicrophone(enableMicrophone);

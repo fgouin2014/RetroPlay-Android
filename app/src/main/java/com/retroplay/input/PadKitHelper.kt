@@ -107,13 +107,14 @@ object PadKitHelper {
     
     fun loadSettings(prefs: android.content.SharedPreferences, console: String): TouchControllerSettingsManager.Settings {
         val key = "gamepad_${console}_settings"
-        val scale = prefs.getFloat("${key}_scale", 1.0f)
+        // Utiliser les mêmes valeurs par défaut que TouchControllerSettingsManager.Settings()
+        val scale = prefs.getFloat("${key}_scale", TouchControllerSettingsManager.DEFAULT_SCALE)
         
         return TouchControllerSettingsManager.Settings(
             scale = scale,
-            rotation = prefs.getFloat("${key}_rotation", 0.0f),
-            marginX = prefs.getFloat("${key}_marginX", 0.0f),
-            marginY = prefs.getFloat("${key}_marginY", 0.0f),
+            rotation = prefs.getFloat("${key}_rotation", TouchControllerSettingsManager.DEFAULT_ROTATION),
+            marginX = prefs.getFloat("${key}_marginX", TouchControllerSettingsManager.DEFAULT_MARGIN_X),
+            marginY = prefs.getFloat("${key}_marginY", TouchControllerSettingsManager.DEFAULT_MARGIN_Y),
             swapAnalogSticks = prefs.getBoolean("${key}_swap", false),
             invertAnalogLeftY = prefs.getBoolean("${key}_invertLeftY", prefs.getBoolean("${key}_invertY", false)),
             invertAnalogRightY = prefs.getBoolean("${key}_invertRightY", prefs.getBoolean("${key}_invertY", false)),
@@ -138,5 +139,6 @@ object PadKitHelper {
             putBoolean("${key}_lightgun_allow_offscreen", settings.lightgunAllowOffscreen)
             apply()
         }
+        Log.d(TAG, "Saved gamepad settings for $console: scale=${settings.scale}, rotation=${settings.rotation}, marginX=${settings.marginX}, marginY=${settings.marginY}")
     }
 }

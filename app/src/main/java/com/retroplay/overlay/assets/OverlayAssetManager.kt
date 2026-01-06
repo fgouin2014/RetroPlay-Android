@@ -437,8 +437,7 @@ class OverlayAssetManager(private val context: Context) {
                     overlayLower.contains("saturn")
                 
                 // Dreamcast
-                "dreamcast", "dc" -> 
-                    overlayLower.contains("dreamcast") || overlayLower == "dc"
+
                 
                 // Atari 7800 (tester AVANT 2600 pour éviter substring)
                 "atari7800", "atari-7800", "atari 7800" -> 
@@ -490,7 +489,7 @@ class OverlayAssetManager(private val context: Context) {
         // flat-nes, flat-psx, etc. sont spécifiques
         val consoleSpecificKeywords = listOf(
             "nes", "snes", "psx", "genesis", "n64", "gba", "gameboy",
-            "arcade", "saturn", "dreamcast", "psp", "atari", "lynx"
+            "arcade", "saturn", "psp", "atari", "lynx"
         )
         return !consoleSpecificKeywords.any { overlayName.contains(it) }
     }
@@ -530,7 +529,7 @@ class OverlayAssetManager(private val context: Context) {
             overlayName.contains("psp") -> compatibleConsoles.add("psp")
             overlayName.contains("pce") -> compatibleConsoles.addAll(listOf("pce", "tg16"))
             overlayName.contains("saturn") -> compatibleConsoles.add("saturn")
-            overlayName.contains("dreamcast") -> compatibleConsoles.add("dreamcast")
+
             overlayName.contains("atari2600") -> compatibleConsoles.add("atari2600")
             overlayName.contains("atari7800") -> compatibleConsoles.add("atari7800")
             overlayName.contains("atarilynx") || overlayName.contains("lynx") -> compatibleConsoles.add("atarilynx")
@@ -595,7 +594,7 @@ class OverlayAssetManager(private val context: Context) {
             "psp" -> "psp"
             "pce", "pcengine", "turbografx", "tg16" -> "pc-fx" // selon packages
             "saturn" -> "saturn"
-            "dreamcast", "dc" -> "dreamcast"
+
             "arcade", "mame", "fbneo" -> "arcade"
             "neogeo" -> "neogeo"
             "virtualboy" -> "virtualboy"

@@ -106,6 +106,8 @@ object CoreVariableManager {
             val key = variable.key.lowercase()
             val corePrefix = coreId.lowercase()
             
+
+            
             // Cas spécial : cores Mednafen (mednafen_wswan, mednafen_ngp, mednafen_pce, mednafen_lynx)
             // Les variables utilisent juste le nom de la console sans préfixe "mednafen_"
             // Ex: coreId = "mednafen_wswan" -> variables = "wswan_60hz_mode", "wswan_frameskip", etc.
@@ -207,6 +209,7 @@ object CoreVariableManager {
         // Ajouter/modifier toutes les variables
         variables.forEach { (key, value) ->
             json.put(key, value)
+            Log.d(TAG, "Saving variable: $key = $value")
         }
         
         // Sauvegarder
@@ -214,7 +217,10 @@ object CoreVariableManager {
             .putString(prefKey, json.toString())
             .apply()
         
-        Log.i(TAG, "Saved ${variables.size} variables for game $gameId (core: $coreId)")
+        Log.i(TAG, "Saved ${variables.size} variables for game $gameId (core: $coreId) in key $prefKey")
+        // Vérifier la sauvegarde en rechargeant
+        val verifyString = prefs.getString(prefKey, "{}")
+        Log.d(TAG, "Verification: saved JSON contains ${JSONObject(verifyString ?: "{}").length()} keys")
     }
     
     /**
@@ -230,10 +236,15 @@ object CoreVariableManager {
         
         val result = mutableMapOf<String, String>()
         json.keys().forEach { key ->
-            result[key] = json.getString(key)
+            val value = json.getString(key)
+            result[key] = value
+            Log.d(TAG, "Loaded variable: $key = $value")
         }
         
-        Log.i(TAG, "Loaded ${result.size} variables for game $gameId (core: $coreId)")
+        Log.i(TAG, "Loaded ${result.size} variables for game $gameId (core: $coreId) from key $prefKey")
+        if (result.isEmpty()) {
+            Log.w(TAG, "No variables found for key $prefKey (JSON was: $jsonString)")
+        }
         return result
     }
     
@@ -249,6 +260,8 @@ object CoreVariableManager {
     
     /**
      * Applique les valeurs sauvegardées aux CoreVariable
+     * CRITIQUE: Applique la valeur sauvegardée même si possibleValues est vide ou si la valeur n'est pas dans la liste
+     * (certaines options peuvent avoir des valeurs numériques ou des valeurs valides qui ne sont pas listées)
      */
     fun applyLoadedValues(
         variables: List<CoreVariable>,
@@ -256,8 +269,17 @@ object CoreVariableManager {
     ): List<CoreVariable> {
         return variables.map { variable ->
             val savedValue = loadedValues[variable.key]
-            if (savedValue != null && variable.possibleValues.contains(savedValue)) {
-                variable.copy(currentValue = savedValue)
+            if (savedValue != null) {
+                // Si possibleValues est vide, toujours appliquer la valeur sauvegardée
+                // Sinon, vérifier que la valeur est dans possibleValues (validation)
+                val shouldApply = variable.possibleValues.isEmpty() || variable.possibleValues.contains(savedValue)
+                if (shouldApply) {
+                    Log.d(TAG, "Applying saved value for ${variable.key}: ${variable.currentValue} -> $savedValue")
+                    variable.copy(currentValue = savedValue)
+                } else {
+                    Log.w(TAG, "Saved value '$savedValue' for ${variable.key} is not in possibleValues ${variable.possibleValues}, keeping default ${variable.currentValue}")
+                    variable
+                }
             } else {
                 variable
             }

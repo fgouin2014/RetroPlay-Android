@@ -62,6 +62,7 @@ object CoreSelector {
                 CoreInfo("parallel_n64", "ParaLLEl N64", "parallel_n64_libretro_android.so", "Fast and accurate"),
                 CoreInfo("mupen64plus_next", "Mupen64Plus Next", "mupen64plus_next_libretro_android.so", "High compatibility")
             )
+
             "nes" -> listOf(
                 CoreInfo("fceumm", "FCEUmm", "fceumm_libretro_android.so", "Best NES emulator")
             )
@@ -92,7 +93,9 @@ object CoreSelector {
      */
     fun getCurrentCore(context: Context, gamePath: String, console: String): CoreInfo? {
         val relativePath = if (gamePath.contains("/GameLibrary-Data/")) {
-            gamePath.substringAfter("/GameLibrary-Data/")
+            var path = gamePath.substringAfter("/GameLibrary-Data/")
+            if (path.startsWith("/")) path = path.substring(1)
+            path
         } else {
             return null
         }
@@ -116,7 +119,9 @@ object CoreSelector {
      */
     fun setCoreOverride(gamePath: String, coreId: String, reason: String = "User selected") {
         val relativePath = if (gamePath.contains("/GameLibrary-Data/")) {
-            gamePath.substringAfter("/GameLibrary-Data/")
+            var path = gamePath.substringAfter("/GameLibrary-Data/")
+            if (path.startsWith("/")) path = path.substring(1)
+            path
         } else {
             Log.e(TAG, "Invalid game path: $gamePath")
             return
@@ -132,7 +137,9 @@ object CoreSelector {
      */
     fun removeCoreOverride(gamePath: String) {
         val relativePath = if (gamePath.contains("/GameLibrary-Data/")) {
-            gamePath.substringAfter("/GameLibrary-Data/")
+            var path = gamePath.substringAfter("/GameLibrary-Data/")
+            if (path.startsWith("/")) path = path.substring(1)
+            path
         } else {
             Log.e(TAG, "Invalid game path: $gamePath")
             return
@@ -148,7 +155,9 @@ object CoreSelector {
      */
     fun hasOverride(gamePath: String): Boolean {
         val relativePath = if (gamePath.contains("/GameLibrary-Data/")) {
-            gamePath.substringAfter("/GameLibrary-Data/")
+            var path = gamePath.substringAfter("/GameLibrary-Data/")
+            if (path.startsWith("/")) path = path.substring(1)
+            path
         } else {
             return false
         }
@@ -173,7 +182,9 @@ fun CoreSelectorDialog(
      val hasOverride = remember { CoreSelector.hasOverride(currentGamePath) }
      val currentCoreId = remember { 
          val relativePath = if (currentGamePath.contains("/GameLibrary-Data/")) {
-             currentGamePath.substringAfter("/GameLibrary-Data/")
+             var path = currentGamePath.substringAfter("/GameLibrary-Data/")
+             if (path.startsWith("/")) path = path.substring(1)
+             path
          } else ""
          if (relativePath.isNotEmpty()) {
              CoreOverrideManager.getInstance().getCoreOverride(relativePath)

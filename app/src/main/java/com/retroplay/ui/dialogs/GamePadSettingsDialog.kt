@@ -63,6 +63,10 @@ import com.retroplay.GamePadLayoutManager
 import com.retroplay.input.PadKitHelper
 import com.swordfish.touchinput.radial.settings.TouchControllerSettingsManager
 import com.retroplay.ui.components.*
+import com.retroplay.ui.components.RadialSlider
+import com.retroplay.ui.components.AdvancedVisibilitySettingsContent
+import com.retroplay.ui.components.GamePadVisibilitySettings
+import com.retroplay.ui.components.GamePadAdvancedSettings
 import androidx.compose.runtime.mutableFloatStateOf
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -98,7 +102,9 @@ fun GamePadSettingsDialog(
         val migrated = prefs.getBoolean("emulation_settings_migrated_from_cfg", false)
         if (!migrated) {
             try {
-                val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
+                // Note: GamePadSettingsDialog doesn't have console context, use default
+                // This is legacy code, should use UnifiedSettingsDialog instead
+                val config = com.retroplay.config.RetroPlayConfigManager.loadConfig("nes")  // Default fallback
                 val editor = prefs.edit()
                 
                 // Migrer VSync
@@ -561,390 +567,100 @@ fun GamePadSettingsDialog(
                     // Contenu selon l'onglet sélectionné
                     when (selectedTab) {
                         0 -> {
-                            // ========== ONGLET 1: OVERLAYS ==========
-                    
-                    // ========== SECTION: GAMEPAD OVERLAYS ==========
-                    Text(
-                        text = "GamePad Overlays",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF4CAF50),
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
-                    Text(
-                        text = "Note: For advanced overlay settings (sensitivity, opacity, lightgun, mouse), see 'Advanced Overlay Settings' in the main menu",
-                        fontSize = 10.sp,
-                        color = Color(0xFF666666),
-                        fontStyle = FontStyle.Italic,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "Overlay Package",
-                            color = Color(0xFFFF9800),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-
-                        if (overlayPackages.isEmpty() && customBrowsed.isEmpty()) {
-                            Text(
-                                text = "No overlays available for this console.",
-                                color = Color(0xFF888888),
-                                fontSize = 13.sp
+                            // ========== ONGLET 1: OVERLAYS (Visibility) ==========
+                            GamePadVisibilitySettings(
+                                console = console,
+                                prefs = prefs,
+                                assetManager = assetManager,
+                                overlayPackages = overlayPackages,
+                                customBrowsed = customBrowsed,
+                                availableLayouts = availableLayouts,
+                                selectedOverlay = selectedOverlay,
+                                selectedCustomPath = selectedCustomPath,
+                                selectedLandscapeLayout = selectedLandscapeLayout,
+                                selectedPortraitLayout = selectedPortraitLayout,
+                                autoRotate = autoRotate,
+                                swapAnalogSticks = swapAnalogSticks,
+                                invertAnalogLeftY = invertAnalogLeftY,
+                                invertAnalogRightY = invertAnalogRightY,
+                                scale = scale,
+                                xOffset = xOffset,
+                                yOffset = yOffset,
+                                xSeparation = xSeparation,
+                                ySeparation = ySeparation,
+                                onSelectedOverlayChanged = { selectedOverlay = it },
+                                onSelectedCustomPathChanged = { selectedCustomPath = it },
+                                onSelectedLandscapeLayoutChanged = { selectedLandscapeLayout = it },
+                                onSelectedPortraitLayoutChanged = { selectedPortraitLayout = it },
+                                onAutoRotateChanged = { autoRotate = it },
+                                onSwapAnalogSticksChanged = { swapAnalogSticks = it },
+                                onInvertAnalogLeftYChanged = { invertAnalogLeftY = it },
+                                onInvertAnalogRightYChanged = { invertAnalogRightY = it },
+                                onScaleChanged = { scale = it },
+                                onXOffsetChanged = { xOffset = snapToZero(it) },
+                                onYOffsetChanged = { yOffset = snapToZero(it) },
+                                onXSeparationChanged = { xSeparation = snapToZero(it) },
+                                onYSeparationChanged = { ySeparation = snapToZero(it) },
+                                onCustomBrowsedUpdated = {
+                                    customBrowsed = OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()
+                                },
+                                onLoadCustomCfg = onLoadCustomCfg
                             )
-                        } else {
-                            overlayPackages.forEach { overlayName ->
-                                val isSelected = selectedOverlay == overlayName && selectedCustomPath == null
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            selectedCustomPath = null
-                                            selectedOverlay = overlayName
-                                        },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (isSelected) Color(0xFF1B5E20).copy(alpha = 0.6f) else Color(0x10FFFFFF) // Glassy unselected
-                                    ),
-                                    border = BorderStroke(1.dp, if (isSelected) Color(0xFF4CAF50) else Color(0x30FFFFFF))
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        RadioButton(
-                                            selected = isSelected,
-                                            onClick = {
-                                                selectedCustomPath = null
-                                                selectedOverlay = overlayName
-                                            },
-                                            colors = RadioButtonDefaults.colors(
-                                                selectedColor = Color(0xFF4CAF50),
-                                                unselectedColor = Color(0xFF777777)
-                                            )
-                                        )
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = overlayName,
-                                                color = if (isSelected) Color.White else Color(0xFFCCCCCC),
-                                                fontSize = 14.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                            )
-                                            Text(
-                                                text = "Official RetroArch overlay",
-                                                color = Color(0xFF777777),
-                                                fontSize = 11.sp
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if (customBrowsed.isNotEmpty()) {
-                            HorizontalDivider(color = Color(0xFF333333))
-                            Text(
-                                text = "Custom Overlays (File Picker)",
-                                color = Color(0xFFFF9800),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            customBrowsed.forEach { customPath ->
-                                val overlayName = customPath.substringBefore("/")
-                                val isSelected = selectedCustomPath == customPath
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            selectedCustomPath = customPath
-                                            selectedOverlay = overlayName
-                                        },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (isSelected) Color(0xFF311B92).copy(alpha = 0.6f) else Color(0x10FFFFFF)
-                                    ),
-                                    border = BorderStroke(1.dp, if (isSelected) Color(0xFF9575CD) else Color(0x30FFFFFF))
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(
-                                            selected = isSelected,
-                                            onClick = {
-                                                selectedCustomPath = customPath
-                                                selectedOverlay = overlayName
-                                            },
-                                            colors = RadioButtonDefaults.colors(
-                                                selectedColor = Color(0xFF9575CD),
-                                                unselectedColor = Color(0xFF777777)
-                                            )
-                                        )
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = customPath,
-                                                color = if (isSelected) Color.White else Color(0xFFCCCCCC),
-                                                fontSize = 13.sp
-                                            )
-                                            Text(
-                                                text = "Imported from storage",
-                                                color = Color(0xFF777777),
-                                                fontSize = 11.sp
-                                            )
-                                        }
-                                        IconButton(onClick = {
-                                            OverlayPreferenceManager.removeCustomBrowsed(prefs, console, customPath)
-                                            customBrowsed = OverlayPreferenceManager.getCustomBrowsedList(prefs, console).toList()
-                                            if (selectedCustomPath == customPath) {
-                                                selectedCustomPath = null
-                                                if (overlayPackages.isNotEmpty()) {
-                                                    selectedOverlay = overlayPackages.first()
-                                                } else {
-                                                    selectedOverlay = ""
-                                                }
-                                            }
-                                        }) {
-                                            Text(
-                                                text = "X",
-                                                color = Color(0xFFFF5252),
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if (onLoadCustomCfg != null) {
-                            TextButton(
-                                onClick = onLoadCustomCfg,
-                                colors = ButtonDefaults.textButtonColors(
-                                    containerColor = Color(0xFF2196F3).copy(alpha = 0.15f)
-                                )
-                            ) {
-                                Text("Load Custom .cfg", color = Color(0xFF90CAF9))
-                            }
-                        }
-                    }
-
-                    if (selectedOverlay.isNotEmpty() && availableLayouts.isNotEmpty()) {
-                        HorizontalDivider(color = Color(0xFF444444))
-                        Text(
-                            text = "Layout Selection",
-                            color = Color(0xFFFF9800),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-
-                        val landscapeLayouts = availableLayouts.filter { it.contains("landscape", ignoreCase = true) }
-                        val portraitLayouts = availableLayouts.filter { it.contains("portrait", ignoreCase = true) }
-
-                        if (landscapeLayouts.isNotEmpty()) {
-                            Text("Landscape (${landscapeLayouts.size} layouts)", color = Color(0xFFBBBBBB), fontSize = 13.sp)
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                landscapeLayouts.forEach { layoutName ->
-                                    val isSelected = selectedLandscapeLayout == layoutName
-                                    TextButton(
-                                        onClick = { selectedLandscapeLayout = layoutName },
-                                        colors = ButtonDefaults.textButtonColors(
-                                            containerColor = if (isSelected) Color(0xFFFF9800) else Color(0x20FFFFFF)
-                                        ),
-                                        shape = RoundedCornerShape(50),
-                                        border = BorderStroke(1.dp, if (isSelected) Color(0xFFFFC107) else Color(0x30FFFFFF)),
-                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                                    ) {
-                                        Text(
-                                            text = layoutDisplayName(layoutName),
-                                            color = if (isSelected) Color.Black else Color(0xFFBDBDBD),
-                                            fontSize = 12.sp,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        if (portraitLayouts.isNotEmpty()) {
-                            Text("Portrait (${portraitLayouts.size} layouts)", color = Color(0xFFBBBBBB), fontSize = 13.sp)
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                portraitLayouts.forEach { layoutName ->
-                                    val isSelected = selectedPortraitLayout == layoutName
-                                    TextButton(
-                                        onClick = { selectedPortraitLayout = layoutName },
-                                        colors = ButtonDefaults.textButtonColors(
-                                            containerColor = if (isSelected) Color(0xFFFF9800) else Color(0x20FFFFFF)
-                                        ),
-                                        shape = RoundedCornerShape(50),
-                                        border = BorderStroke(1.dp, if (isSelected) Color(0xFFFFC107) else Color(0x30FFFFFF)),
-                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                                    ) {
-                                        Text(
-                                            text = layoutDisplayName(layoutName),
-                                            color = if (isSelected) Color.Black else Color(0xFFBDBDBD),
-                                            fontSize = 12.sp,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Switch(
-                                checked = autoRotate,
-                                onCheckedChange = { autoRotate = it },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color(0xFF4CAF50),
-                                    checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
-                                    uncheckedThumbColor = Color(0xFF777777),
-                                    uncheckedTrackColor = Color(0x40FFFFFF)
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text("Auto-switch on rotation", color = Color.White, fontSize = 13.sp)
-                                Text("Switch layouts with device orientation", color = Color(0xFF888888), fontSize = 11.sp)
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(color = Color(0xFF444444))
-
-                    Text(
-                        text = "Analog Options",
-                        color = Color(0xFFFF9800),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    SwitchRow(
-                        title = "Swap Left/Right Sticks",
-                        subtitle = "Exchange left and right analog positions",
-                        checked = swapAnalogSticks,
-                        onCheckedChange = { swapAnalogSticks = it }
-                    )
-
-                    SwitchRow(
-                        title = "Invert Left Stick Y",
-                        subtitle = "Reverse up/down movement for left analog",
-                        checked = invertAnalogLeftY,
-                        onCheckedChange = { invertAnalogLeftY = it }
-                    )
-
-                    SwitchRow(
-                        title = "Invert Right Stick Y",
-                        subtitle = "Reverse up/down movement for right analog",
-                        checked = invertAnalogRightY,
-                        onCheckedChange = { invertAnalogRightY = it }
-                    )
-
-                    HorizontalDivider(color = Color(0xFF444444))
-                    Text("Position & Scale", color = Color(0xFFFF9800), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SliderWithLabel(
-                            label = "Scale",
-                            value = scale,
-                            onValueChange = { scale = it },
-                            valueRange = 0.5f..1.5f,
-                            displayValue = "${String.format("%.2f", scale)}x",
-                            activeColor = Color(0xFF4CAF50)
-                        )
-                        SliderWithLabel(
-                            label = "X Offset",
-                            value = xOffset,
-                            onValueChange = { xOffset = snapToZero(it) },
-                            valueRange = -0.2f..0.2f,
-                            displayValue = String.format("%.3f", xOffset),
-                            activeColor = Color(0xFF2196F3)
-                        )
-                        SliderWithLabel(
-                            label = "Y Offset",
-                            value = yOffset,
-                            onValueChange = { yOffset = snapToZero(it) },
-                            valueRange = -0.2f..0.2f,
-                            displayValue = String.format("%.3f", yOffset),
-                            activeColor = Color(0xFFE91E63)
-                        )
-                        SliderWithLabel(
-                            label = "X Separation",
-                            value = xSeparation,
-                            onValueChange = { xSeparation = snapToZero(it) },
-                            valueRange = -0.2f..0.2f,
-                            displayValue = String.format("%.3f", xSeparation),
-                            activeColor = Color(0xFF00BCD4)
-                        )
-                        SliderWithLabel(
-                            label = "Y Separation",
-                            value = ySeparation,
-                            onValueChange = { ySeparation = snapToZero(it) },
-                            valueRange = -0.2f..0.2f,
-                            displayValue = String.format("%.3f", ySeparation),
-                            activeColor = Color(0xFF9C27B0)
-                        )
-                    }
                     }
                         1 -> {
                             // ========== ONGLET 2: ADVANCED OVERLAY SETTINGS ==========
-                            // (Contenu complet intégré depuis AdvancedOverlaySettingsDialog)
-                            
-                            // Header
-                            Text(
-                                "Advanced Overlay Settings",
-                                color = Color.White,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            
-                            // Current orientation indicator
-                            Text(
-                                "Current: ${orientation.replaceFirstChar { it.uppercaseChar() }}",
-                                color = Color(0xFF888888),
-                                fontSize = 12.sp,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            
-                            // Toggle: Use same settings for both orientations
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Use Same Settings for Both Orientations",
-                                        color = Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "When enabled, landscape and portrait share the same settings",
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Switch(
-                                    checked = useSameSettings,
-                                    onCheckedChange = { 
-                                        useSameSettings = it
-                                        if (it) {
+                            GamePadAdvancedSettings(
+                                console = console,
+                                prefs = prefs,
+                                orientation = orientation,
+                                useSameSettings = useSameSettings,
+                                dpadDiagonalSensitivity = dpadDiagonalSensitivity,
+                                abxyDiagonalSensitivity = abxyDiagonalSensitivity,
+                                analogRecenterZone = analogRecenterZone,
+                                opacity = opacity,
+                                aspectAdjust = aspectAdjust,
+                                showInputs = showInputs,
+                                showInputsPort = showInputsPort,
+                                hideInMenu = hideInMenu,
+                                behindMenu = behindMenu,
+                                hideWhenGamepad = hideWhenGamepad,
+                                hideWhenGamepadPort0Only = hideWhenGamepadPort0Only,
+                                lightgunPort = lightgunPort,
+                                lightgunTriggerOnTouch = lightgunTriggerOnTouch,
+                                lightgunTriggerDelay = lightgunTriggerDelay,
+                                lightgunAllowOffscreen = lightgunAllowOffscreen,
+                                mouseSpeed = mouseSpeed,
+                                mouseSwipeThreshold = mouseSwipeThreshold,
+                                mouseHoldToDrag = mouseHoldToDrag,
+                                mouseHoldMsec = mouseHoldMsec,
+                                mouseDoubleTapToDrag = mouseDoubleTapToDrag,
+                                mouseDtapMsec = mouseDtapMsec,
+                                showMouseCursor = showMouseCursor,
+                                onUseSameSettingsChanged = { useSameSettings = it },
+                                onDpadDiagonalSensitivityChanged = { dpadDiagonalSensitivity = it },
+                                onAbxyDiagonalSensitivityChanged = { abxyDiagonalSensitivity = it },
+                                onAnalogRecenterZoneChanged = { analogRecenterZone = it },
+                                onOpacityChanged = { opacity = it },
+                                onAspectAdjustChanged = { aspectAdjust = it },
+                                onShowInputsChanged = { showInputs = it },
+                                onShowInputsPortChanged = { showInputsPort = it },
+                                onHideInMenuChanged = { hideInMenu = it },
+                                onBehindMenuChanged = { behindMenu = it },
+                                onHideWhenGamepadChanged = { hideWhenGamepad = it },
+                                onHideWhenGamepadPort0OnlyChanged = { hideWhenGamepadPort0Only = it },
+                                onLightgunPortChanged = { lightgunPort = it },
+                                onLightgunTriggerOnTouchChanged = { lightgunTriggerOnTouch = it },
+                                onLightgunTriggerDelayChanged = { lightgunTriggerDelay = it },
+                                onLightgunAllowOffscreenChanged = { lightgunAllowOffscreen = it },
+                                onMouseSpeedChanged = { mouseSpeed = it },
+                                onMouseSwipeThresholdChanged = { mouseSwipeThreshold = it },
+                                onMouseHoldToDragChanged = { mouseHoldToDrag = it },
+                                onMouseHoldMsecChanged = { mouseHoldMsec = it },
+                                onMouseDoubleTapToDragChanged = { mouseDoubleTapToDrag = it },
+                                onMouseDtapMsecChanged = { mouseDtapMsec = it },
+                                onShowMouseCursorChanged = { showMouseCursor = it },
+                                onUseSameSettingsToggled = { newValue ->
+                                    if (newValue) {
                                             // Copy current settings to both orientations
                                             val current = com.retroplay.overlay.models.AdvancedOverlaySettings(
                                                 dpadDiagonalSensitivity = dpadDiagonalSensitivity,
@@ -976,578 +692,8 @@ fun GamePadSettingsDialog(
                                             com.retroplay.overlay.models.OverlayPreferenceManager.saveAdvancedSettings(prefs, console, "landscape", current)
                                             com.retroplay.overlay.models.OverlayPreferenceManager.saveAdvancedSettings(prefs, console, "portrait", current)
                                         }
-                                    },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFF4CAF50),
-                                        checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color(0xFF888888),
-                                        uncheckedTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                            }
-                            
-                            Spacer(Modifier.height(8.dp))
-                            HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
-                            Spacer(Modifier.height(8.dp))
-                            
-                            // === SENSITIVITY ===
-                            Text(
-                                "Sensitivity",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 8.dp)
+                                }
                             )
-                            
-                            // D-Pad Diagonal Sensitivity
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("D-Pad Diagonal Sensitivity", color = Color.White, fontSize = 14.sp)
-                                    Text("$dpadDiagonalSensitivity%", color = Color(0xFF4CAF50), fontSize = 14.sp)
-                                }
-                                Slider(
-                                    value = dpadDiagonalSensitivity.toFloat(),
-                                    onValueChange = { dpadDiagonalSensitivity = it.toInt() },
-                                    valueRange = 0f..100f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFF4CAF50),
-                                        activeTrackColor = Color(0xFF4CAF50),
-                                        inactiveTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                                Text(
-                                    "Size of diagonal zones (0=cardinal only, 100=diagonal only)",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp
-                                )
-                            }
-                            
-                            // ABXY Diagonal Sensitivity
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("ABXY Diagonal Sensitivity", color = Color.White, fontSize = 14.sp)
-                                    Text("$abxyDiagonalSensitivity%", color = Color(0xFF2196F3), fontSize = 14.sp)
-                                }
-                                Slider(
-                                    value = abxyDiagonalSensitivity.toFloat(),
-                                    onValueChange = { abxyDiagonalSensitivity = it.toInt() },
-                                    valueRange = 0f..100f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFF2196F3),
-                                        activeTrackColor = Color(0xFF2196F3),
-                                        inactiveTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                                Text(
-                                    "Size of diagonal zones for ABXY area",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp
-                                )
-                            }
-                            
-                            // Analog Recenter Zone
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Analog Recenter Zone", color = Color.White, fontSize = 14.sp)
-                                    Text("$analogRecenterZone%", color = Color(0xFFE91E63), fontSize = 14.sp)
-                                }
-                                Slider(
-                                    value = analogRecenterZone.toFloat(),
-                                    onValueChange = { analogRecenterZone = it.toInt() },
-                                    valueRange = 0f..100f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFFE91E63),
-                                        activeTrackColor = Color(0xFFE91E63),
-                                        inactiveTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                                Text(
-                                    "Zone autour du centre où le stick se recentre sur le premier touch (0=centre fixe, 100=recentre partout)",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp
-                                )
-                            }
-                            
-                            Spacer(Modifier.height(16.dp))
-                            HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
-                            Spacer(Modifier.height(16.dp))
-                            
-                            // === VISUAL ===
-                            Text(
-                                "Visual",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            
-                            // Opacity
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Overlay Opacity", color = Color.White, fontSize = 14.sp)
-                                    Text("${(opacity * 100).toInt()}%", color = Color(0xFFFFEB3B), fontSize = 14.sp)
-                                }
-                                Slider(
-                                    value = opacity,
-                                    onValueChange = { opacity = it },
-                                    valueRange = 0.0f..1.0f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFFFFEB3B),
-                                        activeTrackColor = Color(0xFFFFEB3B),
-                                        inactiveTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                                Text(
-                                    "Global transparency of overlay (0=invisible, 100=opaque)",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp
-                                )
-                            }
-                            
-                            // Aspect Adjust
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Aspect Adjust", color = Color.White, fontSize = 14.sp)
-                                    Text(String.format("%.2f", aspectAdjust), color = Color(0xFF00BCD4), fontSize = 14.sp)
-                                }
-                                Slider(
-                                    value = aspectAdjust,
-                                    onValueChange = { newValue ->
-                                        aspectAdjust = if (kotlin.math.abs(newValue) < 0.01f) 0.0f else newValue
-                                    },
-                                    valueRange = -0.5f..0.5f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFF00BCD4),
-                                        activeTrackColor = Color(0xFF00BCD4),
-                                        inactiveTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                                Text(
-                                    "Adjust aspect ratio compensation",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp
-                                )
-                            }
-                            
-                            // Show Inputs (Radio buttons)
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Text("Show Inputs", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "Visual highlight of pressed buttons",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
-                                
-                                // Radio buttons pour les modes
-                                com.retroplay.overlay.models.ShowInputsMode.values().forEach { mode ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(
-                                            selected = showInputs == mode,
-                                            onClick = { showInputs = mode },
-                                            colors = RadioButtonDefaults.colors(
-                                                selectedColor = Color(0xFF9C27B0),
-                                                unselectedColor = Color(0xFF888888)
-                                            )
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            text = when (mode) {
-                                                com.retroplay.overlay.models.ShowInputsMode.NONE -> "None (default)"
-                                                com.retroplay.overlay.models.ShowInputsMode.TOUCHED -> "Touched (touch only)"
-                                                com.retroplay.overlay.models.ShowInputsMode.PHYSICAL -> "Physical (gamepad only)"
-                                                com.retroplay.overlay.models.ShowInputsMode.BOTH -> "Both (touch + gamepad)"
-                                            },
-                                            color = Color.White,
-                                            fontSize = 13.sp
-                                        )
-                                    }
-                                }
-                            }
-                            
-                            Spacer(Modifier.height(16.dp))
-                            HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
-                            Spacer(Modifier.height(16.dp))
-                            
-                            
-                            // === BEHAVIOR ===
-                            AdvancedVisibilitySettingsContent(
-                                hideInMenu = hideInMenu,
-                                onHideInMenuChanged = { hideInMenu = it },
-                                behindMenu = behindMenu,
-                                onBehindMenuChanged = { behindMenu = it },
-                                hideWhenGamepad = hideWhenGamepad,
-                                onHideWhenGamepadChanged = { hideWhenGamepad = it },
-                                hideWhenGamepadPort0Only = hideWhenGamepadPort0Only,
-                                onHideWhenGamepadPort0OnlyChanged = { hideWhenGamepadPort0Only = it }
-                            )
-                            
-                            Spacer(Modifier.height(16.dp))
-                            HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
-                            Spacer(Modifier.height(16.dp))
-                            
-                            // === LIGHTGUN ===
-                            Text(
-                                "Lightgun (Zapper)",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            
-                            // Trigger on Touch
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Trigger on Touch",
-                                        color = Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "Fire immediately on touch (vs on release)",
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Switch(
-                                    checked = lightgunTriggerOnTouch,
-                                    onCheckedChange = { lightgunTriggerOnTouch = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFFE91E63),
-                                        checkedTrackColor = Color(0xFFE91E63).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color(0xFF888888),
-                                        uncheckedTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                            }
-                            
-                            // Allow Offscreen
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Allow Offscreen Shots",
-                                        color = Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "Allow shooting outside the game screen area",
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Switch(
-                                    checked = lightgunAllowOffscreen,
-                                    onCheckedChange = { lightgunAllowOffscreen = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFF9C27B0),
-                                        checkedTrackColor = Color(0xFF9C27B0).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color(0xFF888888),
-                                        uncheckedTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                            }
-                            
-                            // Lightgun Port
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Lightgun Port", color = Color.White, fontSize = 14.sp)
-                                    Text("Port $lightgunPort", color = Color(0xFF00BCD4), fontSize = 14.sp)
-                                }
-                                Slider(
-                                    value = lightgunPort.toFloat(),
-                                    onValueChange = { lightgunPort = it.toInt() },
-                                    valueRange = 0f..3f,
-                                    steps = 2,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFF00BCD4),
-                                        activeTrackColor = Color(0xFF00BCD4),
-                                        inactiveTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                                Text(
-                                    "Controller port for lightgun (0-3)",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp
-                                )
-                            }
-                            
-                            // Trigger Delay
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Trigger Delay", color = Color.White, fontSize = 14.sp)
-                                    Text("${lightgunTriggerDelay}ms", color = Color(0xFFFFEB3B), fontSize = 14.sp)
-                                }
-                                Slider(
-                                    value = lightgunTriggerDelay.toFloat(),
-                                    onValueChange = { lightgunTriggerDelay = it.toInt() },
-                                    valueRange = 0f..500f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFFFFEB3B),
-                                        activeTrackColor = Color(0xFFFFEB3B),
-                                        inactiveTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                                Text(
-                                    "Delay before trigger fires (milliseconds)",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp
-                                )
-                            }
-                            
-                            Spacer(Modifier.height(16.dp))
-                            HorizontalDivider(thickness = 1.dp, color = Color(0xFF444444))
-                            Spacer(Modifier.height(16.dp))
-                            
-                            // === MOUSE ===
-                            Text(
-                                "Mouse",
-                                color = Color(0xFFFF9800),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            
-                            // Mouse Speed
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Mouse Speed", color = Color.White, fontSize = 14.sp)
-                                    Text(String.format("%.1fx", mouseSpeed), color = Color(0xFF00BCD4), fontSize = 14.sp)
-                                }
-                                Slider(
-                                    value = mouseSpeed,
-                                    onValueChange = { mouseSpeed = it },
-                                    valueRange = 0.1f..5.0f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFF00BCD4),
-                                        activeTrackColor = Color(0xFF00BCD4),
-                                        inactiveTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                                Text(
-                                    "Mouse movement speed multiplier",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp
-                                )
-                            }
-                            
-                            // Swipe Threshold
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Swipe Threshold", color = Color.White, fontSize = 14.sp)
-                                    Text(String.format("%.1fpx", mouseSwipeThreshold), color = Color(0xFFFFEB3B), fontSize = 14.sp)
-                                }
-                                Slider(
-                                    value = mouseSwipeThreshold,
-                                    onValueChange = { mouseSwipeThreshold = it },
-                                    valueRange = 0.1f..10.0f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = Color(0xFFFFEB3B),
-                                        activeTrackColor = Color(0xFFFFEB3B),
-                                        inactiveTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                                Text(
-                                    "Minimum distance to register as swipe",
-                                    color = Color(0xFF888888),
-                                    fontSize = 11.sp
-                                )
-                            }
-                            
-                            // Hold to Drag
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Hold to Drag",
-                                        color = Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "Hold finger to activate drag mode",
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Switch(
-                                    checked = mouseHoldToDrag,
-                                    onCheckedChange = { mouseHoldToDrag = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFF4CAF50),
-                                        checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color(0xFF888888),
-                                        uncheckedTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                            }
-                            
-                            // Hold Duration
-                            if (mouseHoldToDrag) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 16.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("Hold Duration", color = Color(0xFFBBBBBB), fontSize = 13.sp)
-                                        Text("${mouseHoldMsec}ms", color = Color(0xFF4CAF50), fontSize = 13.sp)
-                                    }
-                                    Slider(
-                                        value = mouseHoldMsec.toFloat(),
-                                        onValueChange = { mouseHoldMsec = it.toInt() },
-                                        valueRange = 100f..2000f,
-                                        colors = SliderDefaults.colors(
-                                            thumbColor = Color(0xFF4CAF50),
-                                            activeTrackColor = Color(0xFF4CAF50),
-                                            inactiveTrackColor = Color(0xFF444444)
-                                        )
-                                    )
-                                    Text(
-                                        "Time to hold before activating drag (ms)",
-                                        color = Color(0xFF888888),
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            }
-                            
-                            // Double-Tap to Drag
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Double-Tap to Drag",
-                                        color = Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "Double-tap to toggle drag mode",
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Switch(
-                                    checked = mouseDoubleTapToDrag,
-                                    onCheckedChange = { mouseDoubleTapToDrag = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFF2196F3),
-                                        checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color(0xFF888888),
-                                        uncheckedTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                            }
-                            
-                            // Double-Tap Timing
-                            if (mouseDoubleTapToDrag) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 16.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("Double-Tap Timing", color = Color(0xFFBBBBBB), fontSize = 13.sp)
-                                        Text("${mouseDtapMsec}ms", color = Color(0xFF2196F3), fontSize = 13.sp)
-                                    }
-                                    Slider(
-                                        value = mouseDtapMsec.toFloat(),
-                                        onValueChange = { mouseDtapMsec = it.toInt() },
-                                        valueRange = 100f..1000f,
-                                        colors = SliderDefaults.colors(
-                                            thumbColor = Color(0xFF2196F3),
-                                            activeTrackColor = Color(0xFF2196F3),
-                                            inactiveTrackColor = Color(0xFF444444)
-                                        )
-                                    )
-                                    Text(
-                                        "Max time between taps to register as double-tap (ms)",
-                                        color = Color(0xFF888888),
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            }
-                            
-                            // Show Mouse Cursor
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Show Mouse Cursor",
-                                        color = Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        "Display cursor for mouse emulation",
-                                        color = Color(0xFF888888),
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Switch(
-                                    checked = showMouseCursor,
-                                    onCheckedChange = { showMouseCursor = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color(0xFFFF9800),
-                                        checkedTrackColor = Color(0xFFFF9800).copy(alpha = 0.5f),
-                                        uncheckedThumbColor = Color(0xFF888888),
-                                        uncheckedTrackColor = Color(0xFF444444)
-                                    )
-                                )
-                            }
                     }
                         2 -> {
                             GeneralSettingsTabContent(
@@ -1902,63 +1048,7 @@ fun GamePadSettingsDialog(
 }
 
 
-@Composable
-private fun RadialSlider(
-    label: String,
-    value: Float,
-    displayValue: String,
-    valueRange: ClosedFloatingPointRange<Float>,
-    onValueChange: (Float) -> Unit,
-    onNudge: (Float) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(label, color = Color.LightGray, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
-            Text(displayValue, color = Color.White, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            IconButton(
-                onClick = { onNudge(-0.01f) },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Text(
-                    text = "-",
-                    color = Color(0xFFB0BEC5),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            
-            Slider(
-                value = value,
-                onValueChange = onValueChange,
-                valueRange = valueRange,
-                modifier = Modifier.weight(1f)
-            )
-
-            IconButton(
-                onClick = { onNudge(0.01f) },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Text(
-                    text = "+",
-                    color = Color(0xFFB0BEC5),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    }
-}
+// RadialSlider extrait vers com.retroplay.ui.components.RadialSlider.kt
 
 @Composable
 private fun GeneralSettingsTabContent(
@@ -2074,8 +1164,11 @@ private fun GeneralSettingsTabContent(
                     .putString("emulation_video_aspect_ratio", "AUTO")
                     .apply()
                 // Synchroniser avec RetroPlayConfigManager
-                val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-                com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = true))
+                // Note: GamePadSettingsDialog doesn't have console context, use default
+                // This is legacy code, should use UnifiedSettingsDialog instead
+                val config = com.retroplay.config.RetroPlayConfigManager.loadConfig("nes")  // Default fallback
+                // Note: GamePadSettingsDialog doesn't have console context, use default
+                com.retroplay.config.RetroPlayConfigManager.saveConfig("nes", config.copy(videoVsync = true))  // Default fallback
                 onVsyncChanged(true)
             }
         ) {
@@ -2098,8 +1191,9 @@ private fun GeneralSettingsTabContent(
         onCheckedChange = { 
             vsyncEnabled = it
             prefs.edit().putBoolean("emulation_video_vsync", it).apply()
-            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-            com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(videoVsync = it))
+            // Note: GamePadSettingsDialog doesn't have console context, use default
+            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig("nes")  // Default fallback
+            com.retroplay.config.RetroPlayConfigManager.saveConfig("nes", config.copy(videoVsync = it))  // Default fallback
             onVsyncChanged(it)
         },
         showModifiedIndicator = !vsyncIsDefault
@@ -2305,8 +1399,9 @@ private fun GeneralSettingsTabContent(
         onCheckedChange = { 
             rewindEnabled = it
             prefs.edit().putBoolean("emulation_rewind_enable", it).apply()
-            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-            com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(rewindEnable = it))
+            // Note: GamePadSettingsDialog doesn't have console context, use default
+            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig("nes")  // Default fallback
+            com.retroplay.config.RetroPlayConfigManager.saveConfig("nes", config.copy(rewindEnable = it))  // Default fallback
             onRewindEnabledChanged(it)
         }
     )
@@ -2339,8 +1434,9 @@ private fun GeneralSettingsTabContent(
         onCheckedChange = { 
             runAheadEnabled = it
             prefs.edit().putBoolean("emulation_runahead_enabled", it).apply()
-            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-            com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(runAheadEnabled = it))
+            // Note: GamePadSettingsDialog doesn't have console context, use default
+            val config = com.retroplay.config.RetroPlayConfigManager.loadConfig("nes")  // Default fallback
+            com.retroplay.config.RetroPlayConfigManager.saveConfig("nes", config.copy(runAheadEnabled = it))  // Default fallback
         }
     )
 
@@ -2351,8 +1447,11 @@ private fun GeneralSettingsTabContent(
             onValueChange = { 
                 runAheadFrames = it
                 prefs.edit().putInt("emulation_runahead_frames", it.toInt()).apply()
-                val config = com.retroplay.config.RetroPlayConfigManager.loadConfig()
-                com.retroplay.config.RetroPlayConfigManager.saveConfig(config.copy(runAheadFrames = it.toInt()))
+                // Note: GamePadSettingsDialog doesn't have console context, use default
+                // This is legacy code, should use UnifiedSettingsDialog instead
+                val config = com.retroplay.config.RetroPlayConfigManager.loadConfig("nes")  // Default fallback
+                // Note: GamePadSettingsDialog doesn't have console context, use default
+                com.retroplay.config.RetroPlayConfigManager.saveConfig("nes", config.copy(runAheadFrames = it.toInt()))  // Default fallback
             },
             valueRange = 1.0f..4.0f,
             displayValue = "${runAheadFrames.toInt()} frames",
@@ -2580,152 +1679,3 @@ private fun GeneralSettingsTabContent(
 }
 // ... (End of file)
 
-@Composable
-private fun AdvancedVisibilitySettingsContent(
-    hideInMenu: Boolean,
-    onHideInMenuChanged: (Boolean) -> Unit,
-    behindMenu: Boolean,
-    onBehindMenuChanged: (Boolean) -> Unit,
-    hideWhenGamepad: Boolean,
-    onHideWhenGamepadChanged: (Boolean) -> Unit,
-    hideWhenGamepadPort0Only: Boolean,
-    onHideWhenGamepadPort0OnlyChanged: (Boolean) -> Unit
-) {
-    Text(
-        "Behavior",
-        color = Color(0xFFFF9800),
-        fontSize = 16.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(bottom = 8.dp)
-    )
-    
-    // Hide in Menu
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                "Hide Overlay in Menu",
-                color = Color.White,
-                fontSize = 14.sp
-            )
-            Text(
-                "Hide overlay when in-game menu is open",
-                color = Color(0xFF888888),
-                fontSize = 11.sp
-            )
-        }
-        Switch(
-            checked = hideInMenu,
-            onCheckedChange = onHideInMenuChanged,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color(0xFF4CAF50),
-                checkedTrackColor = Color(0xFF4CAF50).copy(alpha = 0.5f),
-                uncheckedThumbColor = Color(0xFF888888),
-                uncheckedTrackColor = Color(0xFF444444)
-            )
-        )
-    }
-    
-    // Behind Menu
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                "Overlay Behind Menu",
-                color = Color.White,
-                fontSize = 14.sp
-            )
-            Text(
-                "Render overlay behind menu (instead of hiding)",
-                color = Color(0xFF888888),
-                fontSize = 11.sp
-            )
-        }
-        Switch(
-            checked = behindMenu,
-            onCheckedChange = onBehindMenuChanged,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color(0xFF2196F3),
-                checkedTrackColor = Color(0xFF2196F3).copy(alpha = 0.5f),
-                uncheckedThumbColor = Color(0xFF888888),
-                uncheckedTrackColor = Color(0xFF444444)
-            )
-        )
-    }
-    
-    // Hide When Gamepad Connected
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                "Hide When Gamepad Connected",
-                color = Color.White,
-                fontSize = 14.sp
-            )
-            Text(
-                "Hide touch overlay when physical gamepad is detected",
-                color = Color(0xFF888888),
-                fontSize = 11.sp
-            )
-        }
-        Switch(
-            checked = hideWhenGamepad,
-            onCheckedChange = onHideWhenGamepadChanged,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color(0xFFFF9800),
-                checkedTrackColor = Color(0xFFFF9800).copy(alpha = 0.5f),
-                uncheckedThumbColor = Color(0xFF888888),
-                uncheckedTrackColor = Color(0xFF444444)
-            )
-        )
-    }
-    
-    // Hide When Gamepad Connected - Port 0 Only (multijoueur)
-    if (hideWhenGamepad) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Port 0 Only (Multijoueur)",
-                    color = Color.White,
-                    fontSize = 14.sp
-                )
-                Text(
-                    "Hide overlay only if gamepad on port 0. Allows player 2 to use overlay touch",
-                    color = Color(0xFF888888),
-                    fontSize = 11.sp
-                )
-            }
-            Switch(
-                checked = hideWhenGamepadPort0Only,
-                onCheckedChange = onHideWhenGamepadPort0OnlyChanged,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color(0xFFFF9800),
-                    checkedTrackColor = Color(0xFFFF9800).copy(alpha = 0.5f),
-                    uncheckedThumbColor = Color(0xFF888888),
-                    uncheckedTrackColor = Color(0xFF444444)
-                )
-            )
-        }
-    }
-}

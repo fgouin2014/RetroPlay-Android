@@ -141,6 +141,7 @@ private fun GameInfoContent(
         GameInfoDialog(
             gameInfo = gameInfo,
             gameCRC = gameCRC, // Display CRC
+            configId = configId, // Config ID used for config file name
             console = console,
             cheatFile = cheatFile,
             onDismiss = onDismiss,
@@ -150,8 +151,9 @@ private fun GameInfoContent(
 
     if (showPerGameConfig) {
         PerGameConfigDialog(
-            gameCRC = configId, // Use configId (Serial/CRC/Name) for storage
+            gameCRC = configId ?: "", // Use configId (Serial/CRC/Name) for compatibility
             gameName = gameInfo?.name ?: initialName,
+            console = console ?: "nes", // Console name required for config path
             onDismiss = { showPerGameConfig = false },
             onSave = {
                 showPerGameConfig = false

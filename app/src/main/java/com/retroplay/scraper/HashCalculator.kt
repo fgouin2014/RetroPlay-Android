@@ -3,18 +3,25 @@ package com.retroplay.scraper
 import android.util.Log
 import java.io.File
 import java.io.FileInputStream
+import java.io.InputStream
 import java.security.MessageDigest
 import java.util.zip.CRC32
 import java.util.zip.ZipFile
+import org.apache.commons.compress.archivers.sevenz.SevenZFile
 
 /**
  * HashCalculator - Calcul unifié de hash pour identification des ROMs
  * 
  * Style sselph's scraper: utilise SHA1 > MD5 > CRC32 pour identification
  * Gère automatiquement:
- * - Extraction depuis archives ZIP
- * - Headers spéciaux (NES iNES, etc.)
- * - Calcul de tous les hashes en une seule passe
+ * - Calcul depuis archives ZIP et .7z (streaming sans extraction complète)
+ * - Headers spéciaux (NES iNES, etc.) même dans les archives
+ * - Calcul de tous les hashes (CRC32, MD5, SHA1) en une seule passe
+ * 
+ * Performance:
+ * - ZIP: Utilise ZipFile.getInputStream() pour streaming
+ * - .7z: Utilise SevenZFile.read() pour streaming
+ * - Pas d'extraction complète sur disque, calcul direct depuis l'archive
  */
 object HashCalculator {
     private const val TAG = "HashCalculator"
@@ -51,10 +58,12 @@ object HashCalculator {
     
     /**
      * Calcule tous les hashes (CRC32, MD5, SHA1) pour un fichier ROM
-     * Gère automatiquement les archives ZIP et les headers spéciaux
+     * Gère automatiquement les archives ZIP/.7z et les headers spéciaux
      * 
-     * @param romFile Fichier ROM ou archive ZIP
+     * @param romFile Fichier ROM ou archive ZIP/.7z
      * @return GameHash avec tous les hashes calculés, ou null en cas d'erreur
+     * 
+     * Note: Pour les archives, le calcul se fait en streaming sans extraction complète
      */
     fun calculateHash(romFile: File): GameHash? {
         return try {
@@ -63,14 +72,30 @@ object HashCalculator {
                 return null
             }
             
+            Log.d(TAG, "Calculating hash for: ${romFile.name} (${romFile.length()} bytes)")
+            
             // Si c'est une archive ZIP, extraire et calculer sur la ROM à l'intérieur
             if (romFile.name.endsWith(".zip", ignoreCase = true) || 
                 romFile.name.endsWith(".7z", ignoreCase = true)) {
-                return calculateHashFromArchive(romFile)
+                Log.d(TAG, "Archive detected: ${romFile.name}, calculating hash from archive...")
+                val result = calculateHashFromArchive(romFile)
+                if (result == null) {
+                    Log.w(TAG, "Failed to calculate hash from archive: ${romFile.name}")
+                } else {
+                    Log.i(TAG, "✅ Hash calculated from archive: CRC32=${result.crc32}, MD5=${result.md5}, SHA1=${result.sha1}")
+                }
+                return result
             }
             
             // Fichier ROM direct
-            calculateHashFromFile(romFile)
+            Log.d(TAG, "Direct ROM file, calculating hash...")
+            val result = calculateHashFromFile(romFile)
+            if (result == null) {
+                Log.w(TAG, "Failed to calculate hash from file: ${romFile.name}")
+            } else {
+                Log.i(TAG, "✅ Hash calculated from file: CRC32=${result.crc32}, MD5=${result.md5}, SHA1=${result.sha1}")
+            }
+            result
             
         } catch (e: Exception) {
             Log.e(TAG, "Error calculating hash for ${romFile.name}: ${e.message}", e)
@@ -139,78 +164,21 @@ object HashCalculator {
     }
     
     /**
-     * Calcule les hashes pour une ROM dans une archive ZIP
+     * Calcule les hashes pour une ROM dans une archive ZIP ou .7z
+     * Calcul en streaming sans extraction complète sur disque
      */
     private fun calculateHashFromArchive(archiveFile: File): GameHash? {
         return try {
-            if (!archiveFile.name.endsWith(".zip", ignoreCase = true)) {
-                Log.w(TAG, "Only .zip archives supported for now (not .7z)")
-                return null
-            }
-            
-            ZipFile(archiveFile).use { zip ->
-                // Trouver le premier fichier ROM dans l'archive
-                val entry = zip.entries().asSequence().firstOrNull { entry ->
-                    !entry.isDirectory && isRomExtension(entry.name)
+            when {
+                archiveFile.name.endsWith(".zip", ignoreCase = true) -> {
+                    calculateHashFromZip(archiveFile)
                 }
-                
-                if (entry == null) {
-                    Log.w(TAG, "No ROM file found in archive: ${archiveFile.name}")
-                    return null
+                archiveFile.name.endsWith(".7z", ignoreCase = true) -> {
+                    calculateHashFrom7z(archiveFile)
                 }
-                
-                Log.d(TAG, "Found ROM in archive: ${entry.name}")
-                
-                // Calculer les hashes sur la ROM extraite
-                zip.getInputStream(entry).use { stream ->
-                    val crc32 = CRC32()
-                    val md5 = MessageDigest.getInstance("MD5")
-                    val sha1 = MessageDigest.getInstance("SHA-1")
-                    
-                    val buffer = ByteArray(BUFFER_SIZE)
-                    var skipBytes = 0
-                    
-                    // Vérifier si c'est une ROM NES avec header iNES
-                    if (entry.name.endsWith(".nes", ignoreCase = true)) {
-                        val header = ByteArray(4)
-                        val headerRead = stream.read(header)
-                        
-                        if (headerRead == 4 && 
-                            header[0] == 'N'.code.toByte() && 
-                            header[1] == 'E'.code.toByte() && 
-                            header[2] == 'S'.code.toByte() && 
-                            header[3] == 0x1A.toByte()) {
-                            // Skip remaining 12 bytes of iNES header (already read 4)
-                            stream.skip(12)
-                            skipBytes = 16
-                            Log.d(TAG, "iNES header detected in ${entry.name}, skipping 16 bytes")
-                        } else {
-                            // Pas iNES, inclure les 4 bytes lus
-                            crc32.update(header, 0, 4)
-                            md5.update(header, 0, 4)
-                            sha1.update(header, 0, 4)
-                        }
-                    }
-                    
-                    // Calculer tous les hashes sur le reste des données
-                    var bytesRead: Int
-                    while (stream.read(buffer).also { bytesRead = it } != -1) {
-                        crc32.update(buffer, 0, bytesRead)
-                        md5.update(buffer, 0, bytesRead)
-                        sha1.update(buffer, 0, bytesRead)
-                    }
-                    
-                    val crc32Value = crc32.value.toString(16).uppercase().padStart(8, '0')
-                    val md5Value = md5.digest().joinToString("") { "%02x".format(it) }
-                    val sha1Value = sha1.digest().joinToString("") { "%02x".format(it) }
-                    
-                    Log.d(TAG, "Hashes from ZIP: ${archiveFile.name} → ${entry.name} = CRC32=$crc32Value, MD5=$md5Value, SHA1=$sha1Value")
-                    
-                    GameHash(
-                        crc32 = crc32Value,
-                        md5 = md5Value,
-                        sha1 = sha1Value
-                    )
+                else -> {
+                    Log.w(TAG, "Unsupported archive format: ${archiveFile.name}")
+                    null
                 }
             }
         } catch (e: Exception) {
@@ -220,22 +188,221 @@ object HashCalculator {
     }
     
     /**
+     * Calcule les hashes pour une ROM dans une archive ZIP
+     * Utilise ZipFile.getInputStream() pour streaming sans extraction complète
+     */
+    private fun calculateHashFromZip(zipFile: File): GameHash? {
+        return try {
+            ZipFile(zipFile).use { zip ->
+                // Trouver le premier fichier ROM dans l'archive
+                val entry = zip.entries().asSequence().firstOrNull { entry ->
+                    !entry.isDirectory && isRomExtension(entry.name)
+                }
+                
+                if (entry == null) {
+                    Log.w(TAG, "No ROM file found in ZIP: ${zipFile.name}")
+                    return null
+                }
+                
+                Log.d(TAG, "Found ROM in ZIP: ${entry.name}")
+                
+                // Calculer les hashes en streaming depuis l'archive (pas d'extraction complète)
+                zip.getInputStream(entry).use { stream ->
+                    calculateHashFromStream(stream, entry.name, "ZIP")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating hash from ZIP: ${e.message}", e)
+            null
+        }
+    }
+    
+    /**
+     * Calcule les hashes pour une ROM dans une archive .7z
+     * Utilise SevenZFile.read() pour streaming sans extraction complète
+     */
+    private fun calculateHashFrom7z(sevenZFile: File): GameHash? {
+        return try {
+            SevenZFile(sevenZFile).use { archive ->
+                // Trouver le premier fichier ROM dans l'archive
+                var romEntry: org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry? = null
+                
+                while (true) {
+                    val entry = archive.nextEntry ?: break
+                    
+                    if (!entry.isDirectory && isRomExtension(entry.name)) {
+                        romEntry = entry
+                        break
+                    }
+                }
+                
+                if (romEntry == null) {
+                    Log.w(TAG, "No ROM file found in .7z: ${sevenZFile.name}")
+                    return null
+                }
+                
+                Log.d(TAG, "Found ROM in .7z: ${romEntry.name}")
+                
+                // Calculer les hashes directement depuis SevenZFile (streaming)
+                val crc32 = CRC32()
+                val md5 = MessageDigest.getInstance("MD5")
+                val sha1 = MessageDigest.getInstance("SHA-1")
+                
+                val buffer = ByteArray(BUFFER_SIZE)
+                
+                // Vérifier si c'est une ROM NES avec header iNES
+                if (romEntry.name.endsWith(".nes", ignoreCase = true)) {
+                    val header = ByteArray(4)
+                    val headerRead = archive.read(header)
+                    
+                    if (headerRead == 4 && 
+                        header[0] == 'N'.code.toByte() && 
+                        header[1] == 'E'.code.toByte() && 
+                        header[2] == 'S'.code.toByte() && 
+                        header[3] == 0x1A.toByte()) {
+                        // Skip remaining 12 bytes of iNES header (already read 4)
+                        val skipBuffer = ByteArray(12)
+                        archive.read(skipBuffer)
+                        Log.d(TAG, "iNES header detected in ${romEntry.name}, skipping 16 bytes")
+                    } else {
+                        // Pas iNES, inclure les bytes lus dans le hash
+                        if (headerRead > 0) {
+                            crc32.update(header, 0, headerRead)
+                            md5.update(header, 0, headerRead)
+                            sha1.update(header, 0, headerRead)
+                        }
+                    }
+                }
+                
+                // Calculer tous les hashes sur le reste des données (streaming depuis .7z)
+                var bytesRead: Int
+                while (archive.read(buffer).also { bytesRead = it } != -1) {
+                    crc32.update(buffer, 0, bytesRead)
+                    md5.update(buffer, 0, bytesRead)
+                    sha1.update(buffer, 0, bytesRead)
+                }
+                
+                val crc32Value = crc32.value.toString(16).uppercase().padStart(8, '0')
+                val md5Value = md5.digest().joinToString("") { "%02x".format(it) }
+                val sha1Value = sha1.digest().joinToString("") { "%02x".format(it) }
+                
+                Log.d(TAG, "Hashes from .7z: ${sevenZFile.name} → ${romEntry.name} = CRC32=$crc32Value, MD5=$md5Value, SHA1=$sha1Value")
+                
+                GameHash(
+                    crc32 = crc32Value,
+                    md5 = md5Value,
+                    sha1 = sha1Value
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating hash from .7z: ${e.message}", e)
+            null
+        }
+    }
+    
+    /**
+     * Calcule les hashes depuis un InputStream (générique pour ZIP et .7z)
+     * Gère automatiquement les headers spéciaux (iNES, etc.)
+     */
+    private fun calculateHashFromStream(
+        stream: InputStream,
+        entryName: String,
+        archiveType: String
+    ): GameHash? {
+        return try {
+            val crc32 = CRC32()
+            val md5 = MessageDigest.getInstance("MD5")
+            val sha1 = MessageDigest.getInstance("SHA-1")
+            
+            val buffer = ByteArray(BUFFER_SIZE)
+            
+            // Vérifier si c'est une ROM NES avec header iNES
+            if (entryName.endsWith(".nes", ignoreCase = true)) {
+                val header = ByteArray(4)
+                val headerRead = stream.read(header)
+                
+                if (headerRead == 4 && 
+                    header[0] == 'N'.code.toByte() && 
+                    header[1] == 'E'.code.toByte() && 
+                    header[2] == 'S'.code.toByte() && 
+                    header[3] == 0x1A.toByte()) {
+                    // Skip remaining 12 bytes of iNES header (already read 4)
+                    stream.skip(12)
+                    Log.d(TAG, "iNES header detected in $entryName, skipping 16 bytes")
+                } else {
+                    // Pas iNES, inclure les 4 bytes lus dans le hash
+                    if (headerRead > 0) {
+                        crc32.update(header, 0, headerRead)
+                        md5.update(header, 0, headerRead)
+                        sha1.update(header, 0, headerRead)
+                    }
+                }
+            }
+            
+            // Calculer tous les hashes sur le reste des données (streaming)
+            var bytesRead: Int
+            while (stream.read(buffer).also { bytesRead = it } != -1) {
+                crc32.update(buffer, 0, bytesRead)
+                md5.update(buffer, 0, bytesRead)
+                sha1.update(buffer, 0, bytesRead)
+            }
+            
+            val crc32Value = crc32.value.toString(16).uppercase().padStart(8, '0')
+            val md5Value = md5.digest().joinToString("") { "%02x".format(it) }
+            val sha1Value = sha1.digest().joinToString("") { "%02x".format(it) }
+            
+            Log.d(TAG, "Hashes from $archiveType: $entryName = CRC32=$crc32Value, MD5=$md5Value, SHA1=$sha1Value")
+            
+            GameHash(
+                crc32 = crc32Value,
+                md5 = md5Value,
+                sha1 = sha1Value
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating hash from stream: ${e.message}", e)
+            null
+        }
+    }
+    
+    /**
      * Vérifie si une extension de fichier est une ROM valide
+     * Inclut tous les formats supportés par RetroArch/Libretro
      */
     private fun isRomExtension(fileName: String): Boolean {
         val extensions = listOf(
-            ".nes", ".unh", ".unf",  // NES
-            ".sfc", ".smc",          // SNES
-            ".gb", ".gbc", ".gba",   // Game Boy
-            ".bin", ".gen", ".md",   // Genesis/Mega Drive
-            ".sms", ".gg",           // Master System / Game Gear
-            ".32x",                   // 32X
-            ".lnx",                   // Lynx
-            ".a26", ".a52", ".a78",   // Atari
-            ".ngp", ".ngc",           // Neo Geo Pocket
-            ".ws", ".wsc",            // WonderSwan
-            ".pce", ".sgx",           // PC Engine
-            ".z64", ".n64", ".v64"    // N64
+            // NES
+            ".nes", ".unh", ".unf", ".fds",
+            // SNES
+            ".sfc", ".smc", ".fig",
+            // Game Boy
+            ".gb", ".gbc", ".gba",
+            // Genesis/Mega Drive
+            ".bin", ".gen", ".md", ".smd",
+            // Master System / Game Gear
+            ".sms", ".gg",
+            // 32X
+            ".32x",
+            // Lynx
+            ".lnx",
+            // Atari
+            ".a26", ".a52", ".a78",
+            // Neo Geo Pocket
+            ".ngp", ".ngc",
+            // WonderSwan
+            ".ws", ".wsc",
+            // PC Engine / TurboGrafx-16
+            ".pce", ".sgx", ".sgd",
+            // N64
+            ".z64", ".n64", ".v64", ".u64",
+            // PlayStation
+            ".cue", ".bin", ".img", ".iso", ".pbp",
+            // Saturn
+            ".iso", ".bin", ".cue",
+
+            // PSP
+            ".iso", ".cso", ".pbp",
+            // Autres
+            ".rom", ".bin"
         )
         
         return extensions.any { fileName.endsWith(it, ignoreCase = true) }

@@ -93,7 +93,9 @@ class RetroArchEmulatorViewModel : ViewModel() {
             val gameInfo = DatabaseManager.lookupGameByName(initialGameName, console)
             if (gameInfo != null) {
                 gameCRC = gameInfo.crc
-                RetroPlayConfigManager.updateConfigValue("last_resolved_crc", gameInfo.crc) // Optional debug
+                // Note: updateConfigValue now requires console parameter
+                // This is a debug value, skip for now
+                // RetroPlayConfigManager.updateConfigValue(console, "last_resolved_crc", gameInfo.crc) // Optional debug
             }
         }
         

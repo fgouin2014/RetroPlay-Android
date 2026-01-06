@@ -62,6 +62,7 @@ import com.retroplay.database.GameInfo
 import com.retroplay.database.DatabaseManager
 import com.retroplay.database.SmartConfigManager
 import java.io.File
+import android.os.Environment
 
 import com.swordfish.libretrodroid.ShaderConfig
 import gg.padkit.PadKit
@@ -93,6 +94,30 @@ import com.retroplay.rewind.RewindManager
 import com.retroplay.config.RetroPlayConfigManager
 import com.retroplay.helpers.EmulatorConfigHelper
 import com.retroplay.helpers.ControllerHelper
+import com.retroplay.helpers.CoreDisplayHelper
+import com.retroplay.helpers.UriFileHelper
+import com.retroplay.helpers.ZapperCoordinateHelper
+import com.retroplay.managers.DialogStateManager
+import com.retroplay.managers.OverlayManager
+import com.retroplay.managers.CoreManager
+import com.retroplay.managers.InputManager
+import com.retroplay.usecases.ApplyCheatUseCase
+import com.retroplay.usecases.LoadCoreUseCase
+import com.retroplay.usecases.LoadOverlayUseCase
+import com.retroplay.usecases.TakeScreenshotUseCase
+import com.retroplay.usecases.SaveStateUseCase
+import com.retroplay.usecases.EmulatorControlsUseCase
+import com.retroplay.usecases.HandleHotkeyUseCase
+import com.retroplay.usecases.HandleZapperUseCase
+import com.retroplay.usecases.CorePathResolverUseCase
+import com.retroplay.usecases.LoadCoreVariablesUseCase
+import com.retroplay.usecases.CheatManagerUseCase
+import com.retroplay.usecases.ConfigFileHandlerUseCase
+import com.retroplay.usecases.ActivityLifecycleUseCase
+import com.retroplay.usecases.FullscreenSetupUseCase
+import com.retroplay.CrosshairMode
+import com.retroplay.CoreVariable
+import androidx.compose.runtime.MutableState
 
 /**
  * RetroArch Emulator Activity
@@ -110,35 +135,13 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     
     companion object {
         private const val TAG = "RetroArchEmulator"
-        private const val CRASH_PREFS = "core_crash_detection"
-        private const val KEY_LAST_GAME = "last_game_path"
-        private const val KEY_LAST_CORE = "last_core_attempted"
-        private const val KEY_TIMESTAMP = "crash_timestamp"
-        private const val CRASH_TIMEOUT_MS = 2000L // 2 secondes pour considérer un crash
         
         /**
          * Convertit le nom technique du core en nom d'affichage lisible
+         * Délégué à CoreDisplayHelper
          */
         private fun getCoreDisplayName(coreFileName: String): String {
-            val coreName = coreFileName.replace("_libretro_android.so", "")
-            return when (coreName.lowercase()) {
-                "fbneo" -> "FBNeo"
-                "mame2003_plus" -> "MAME 2003 Plus"
-                "mame2003" -> "MAME 2003"
-                "mame2010" -> "MAME 2010"
-                "fceumm" -> "FCEUmm"
-                "mesen" -> "Mesen"
-                "snes9x" -> "Snes9x"
-                "parallel_n64" -> "ParaLLEl N64"
-                "mupen64plus_next" -> "Mupen64Plus Next"
-                "gambatte" -> "Gambatte"
-                "libmgba", "mgba" -> "mGBA"
-                "pcsx_rearmed" -> "PCSX ReARMed"
-                "ppsspp" -> "PPSSPP"
-                "genesis_plus_gx" -> "Genesis Plus GX"
-                "picodrive" -> "PicoDrive"
-                else -> coreName.uppercase().replace("_", " ")
-            }
+            return CoreDisplayHelper.getCoreDisplayName(coreFileName)
         }
         
     }
@@ -150,6 +153,18 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private lateinit var screenshotGameId: String
     private lateinit var prefs: SharedPreferences
     private lateinit var cheatApplier: com.retroplay.cheat.CheatApplier
+    private lateinit var applyCheatUseCase: ApplyCheatUseCase
+    private lateinit var takeScreenshotUseCase: TakeScreenshotUseCase
+    private lateinit var saveStateUseCase: SaveStateUseCase
+    private lateinit var handleHotkeyUseCase: HandleHotkeyUseCase
+    private lateinit var emulatorControlsUseCase: EmulatorControlsUseCase
+    private lateinit var handleZapperUseCase: HandleZapperUseCase
+    private lateinit var corePathResolverUseCase: CorePathResolverUseCase
+    private lateinit var loadCoreVariablesUseCase: LoadCoreVariablesUseCase
+    private lateinit var cheatManagerUseCase: CheatManagerUseCase
+    private lateinit var configFileHandlerUseCase: ConfigFileHandlerUseCase
+    private lateinit var activityLifecycleUseCase: ActivityLifecycleUseCase
+    private lateinit var fullscreenSetupUseCase: FullscreenSetupUseCase
     private var currentCoreFilePath: String? = null
     
     /**
@@ -162,53 +177,42 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     private var loadedCheats = mutableListOf<com.retroplay.cheat.CheatManager.Cheat>()  // Cheats loaded for current game
     private var rewindManager: RewindManager? = null
     private var runAheadManager: com.retroplay.runahead.RunAheadManager? = null
-    private var retroPlayConfig: RetroPlayConfigManager.RetroPlayConfig = RetroPlayConfigManager.loadConfig()
+    // Note: retroPlayConfig will be initialized in onCreate with console
+    private lateinit var retroPlayConfig: RetroPlayConfigManager.RetroPlayConfig
     private var runAheadEnabledConfig: Boolean = false
     private var runAheadFramesConfig: Int = 0
     
     // Autoconfig system (RetroArch gamepad autoconfiguration)
     private lateinit var autoconfigManager: com.retroplay.input.AutoconfigManager
     private lateinit var nativeControllerManager: com.retroplay.input.NativeControllerManager
-    private lateinit var zapperManager: com.retroplay.input.ZapperManager
+    // private lateinit var zapperManager: com.retroplay.input.ZapperManager
     
     // Zapper support (NES light gun)
     private var isZapperGame: Boolean = false
     private var zapperPort: Int = 1  // Port par défaut: 1 (index) = Port 2 NES. 0 = Port 1 pour Chiller
     
-    // États des menus
-    private val showMainMenu = mutableStateOf(false)
-    private val showGamePadSettings = mutableStateOf(false)
-    private val showQuickMenu = mutableStateOf(false)
-    private val overlaysVisible = mutableStateOf(true)
-    private val showCoreErrorDialog = mutableStateOf(false)
-    private val showCoreSelectorFromError = mutableStateOf(false)
+    // Managers centralisés
+    private val dialogStateManager = DialogStateManager()
+    private lateinit var overlayManager: OverlayManager
+    private lateinit var coreManager: CoreManager
+    private lateinit var inputManager: InputManager
+    
+    // Variables associées aux dialogs
     private var failedCoreName = ""
     private var controllerConfigurationDone = false  // Flag pour éviter de configurer plusieurs fois
-    private val showCoreChangeConfirmDialog = mutableStateOf(false)
     private var coreChangeConfirmMessage = ""
     
-    // Turbo menus
-    private val showTurboSettings = mutableStateOf(false)
-    private val showQuickTurbo = mutableStateOf(false)
+    // Résultat du chargement de core (utilisé dans callbacks asynchrones)
+    private var loadCoreResult: com.retroplay.usecases.LoadCoreUseCase.LoadCoreResult? = null
     
-    // États pour DIP Switches, Core Options, Game Info et Cheats
-    private val showDipSwitchDialog = mutableStateOf(false)
-    private val showCoreOptionsDialog = mutableStateOf(false)
-    private val showGameInfoDialog = mutableStateOf(false)
-    
-    // État pour le dialog des extensions N64
-    private val showN64ExtensionsDialog = mutableStateOf(false)
+    // État pour le dialog des extensions N64 (données spécifiques)
     private val n64ExtensionsInfo = mutableStateOf<List<Pair<Int, String>>>(emptyList())
-    private val showCheatsDialog = mutableStateOf(false)
-    private val showSmartConfigDialog = mutableStateOf(false)
-    private val showPerGameConfigDialog = mutableStateOf(false)
     
     // Game Metadata for Info Dialog
     private val gameInfo = mutableStateOf<GameInfo?>(null)
     private val cheatFile = mutableStateOf<File?>(null)
-
-
-    private val showDiskSwapperDialog = mutableStateOf(false)
+    
+    // Configuration per-game
     private var perGameConfigCRC: String? = null
     private var customConfigId: String? = null // Separate ID for Config (e.g. Serial) vs Content (CRC)
     private var perGameConfigGameName: String = ""
@@ -221,112 +225,21 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     // File picker pour custom .cfg (initialisé AVANT onCreate avec lateinit)
     private lateinit var pickCustomCfgLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>
     
-    // File browser custom pour .cfg (évite problèmes SAF Android)
-    private val showCfgBrowser = mutableStateOf(false)
-    
     /**
      * Gérer le fichier .cfg sélectionné (LECTURE SEULE - aucune modification)
      * Utilise ContentResolver pour gérer les content:// URIs correctement
+     * Délègue au LoadOverlayUseCase
      */
     private fun handleCustomCfgSelection(uri: android.net.Uri) {
-        try {
-            Log.i(TAG, "Overlay .cfg selected: $uri")
-            
-            // Obtenir le nom du fichier via ContentResolver
-            val fileName = getFileNameFromUri(uri) ?: run {
-                Toast.makeText(this, "Cannot get file name", Toast.LENGTH_SHORT).show()
-                return
-            }
-            
-            Log.i(TAG, "File name: $fileName")
-            
-            // Vérifier que c'est bien un .cfg
-            if (!fileName.endsWith(".cfg", ignoreCase = true)) {
-                Toast.makeText(this, "Please select a .cfg file", Toast.LENGTH_SHORT).show()
-                return
-            }
-            
-            // Lire le contenu du fichier pour détecter le type d'overlay
-            val cfgContent = readFileFromUri(uri) ?: run {
-                Toast.makeText(this, "Cannot read file content", Toast.LENGTH_SHORT).show()
-                return
-            }
-            
-            // Extraire le nom du dossier parent depuis l'URI
-            // Ex: primary:RetroPlay-Data/overlays/gamepads/flat/dreamcast.cfg → "flat"
-            val overlayName = extractOverlayFolderFromUri(uri) ?: 
-                detectOverlayNameFromContent(cfgContent, fileName)
-            
-            if (overlayName.isEmpty()) {
-                Toast.makeText(this, "Cannot detect overlay type from .cfg", Toast.LENGTH_SHORT).show()
-                return
-            }
-            
-            Log.i(TAG, "Detected overlay name: $overlayName")
-            
-            // Créer le path custom (overlayName/fileName)
-            val customPath = "$overlayName/$fileName"
-            
-            // Sauvegarder dans la liste des customs browsés
-            com.retroplay.overlay.models.OverlayPreferenceManager.saveCustomBrowsed(prefs, console, customPath)
-            
-            // Sauvegarder aussi comme preference active avec le nom du .cfg custom!
-            val pref = com.retroplay.overlay.models.OverlayPreference(
-                enabled = true,
-                overlayName = overlayName,
-                customCfgName = fileName,  // "dreamcast.cfg" pour custom, null pour standard
-                landscapeLayout = "landscape-A",
-                portraitLayout = "portrait-A",
-                autoRotate = true
-            )
-            com.retroplay.overlay.models.OverlayPreferenceManager.save(prefs, console, pref)
-            
-            Log.i(TAG, "Saved custom overlay: $customPath for console: $console")
-            Toast.makeText(this, "Custom overlay '$overlayName' loaded!", Toast.LENGTH_LONG).show()
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading overlay .cfg", e)
-            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+        if (::configFileHandlerUseCase.isInitialized) {
+            configFileHandlerUseCase.handleCustomCfgSelection(uri)
+        } else {
+            Log.e(TAG, "ConfigFileHandlerUseCase not initialized")
+            Toast.makeText(this, "Config handler not ready", Toast.LENGTH_SHORT).show()
         }
     }
     
-    /**
-     * Obtenir le nom du fichier depuis un content:// URI
-     */
-    private fun getFileNameFromUri(uri: android.net.Uri): String? {
-        var fileName: String? = null
-        
-        // Méthode 1: Query via ContentResolver
-        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (nameIndex >= 0) {
-                    fileName = cursor.getString(nameIndex)
-                }
-            }
-        }
-        
-        // Méthode 2: Fallback - Extraire depuis l'URI
-        if (fileName == null) {
-            fileName = uri.lastPathSegment
-        }
-        
-        return fileName
-    }
-    
-    /**
-     * Lire le contenu d'un fichier depuis son URI
-     */
-    private fun readFileFromUri(uri: android.net.Uri): String? {
-        return try {
-            contentResolver.openInputStream(uri)?.use { inputStream ->
-                inputStream.bufferedReader().use { it.readText() }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error reading file from URI", e)
-            null
-        }
-    }
+    // Fonctions getFileNameFromUri et readFileFromUri déplacées vers UriFileHelper
     
     /**
      * Apply per-game configuration overrides (if exists).
@@ -339,114 +252,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      */
 
     
-    /**
-     * Extraire le nom du dossier overlay depuis l'URI
-     * Ex: content://.../primary:RetroPlay-Data/overlays/gamepads/flat/nes.cfg → "flat"
-     */
-    private fun extractOverlayFolderFromUri(uri: android.net.Uri): String? {
-        return try {
-            // DECODE %2F → / pour gérer les URIs encodés!
-            val uriString = java.net.URLDecoder.decode(uri.toString(), "UTF-8")
-            Log.d(TAG, "Extracting overlay folder from URI: $uriString")
-            
-            // Chercher pattern /overlays/gamepads/XXX/ ou /overlays/keyboards/XXX/
-            val gamepadPattern = Regex("""/overlays/gamepads/([^/]+)/""")
-            val keyboardPattern = Regex("""/overlays/keyboards/([^/]+)/""")
-            
-            val gamepadMatch = gamepadPattern.find(uriString)
-            if (gamepadMatch != null) {
-                val folder = gamepadMatch.groupValues[1]
-                Log.i(TAG, "Extracted overlay folder from URI (gamepads): $folder")
-                return folder
-            }
-            
-            val keyboardMatch = keyboardPattern.find(uriString)
-            if (keyboardMatch != null) {
-                val folder = keyboardMatch.groupValues[1]
-                Log.i(TAG, "Extracted overlay folder from URI (keyboards): $folder")
-                return folder
-            }
-            
-            Log.w(TAG, "No overlay folder pattern found in URI")
-            null
-        } catch (e: Exception) {
-            Log.e(TAG, "Error extracting overlay folder from URI", e)
-            null
-        }
-    }
-    
-    /**
-     * Détecter le nom de l'overlay depuis le contenu du .cfg
-     * IMPORTANT: Le overlay name est le NOM DU DOSSIER, pas le nom du fichier!
-     * Ex: flat/dreamcast.cfg → overlayName = "flat" (pas "dreamcast")
-     */
-    private fun detectOverlayNameFromContent(cfgContent: String, fileName: String): String {
-        val baseFileName = fileName.substringBeforeLast(".cfg")
-        
-        // Méthode 1: Parser le contenu pour trouver le path des images
-        // Ex: overlay0_desc0_overlay = img/A.png → overlay dans même dossier (utiliser fileName)
-        // Ex: overlay0_desc0_overlay = ../flat/img/A.png → overlay = "flat"
-        // Ex: overlay0_desc0_overlay = dreamcast/img/A.png → overlay = "dreamcast"
-        val imgPathPattern = Regex("""overlay\d+_desc\d+_overlay\s*=\s*["']?([^"'\r\n]+)""")
-        val imgMatch = imgPathPattern.find(cfgContent)
-        
-        if (imgMatch != null) {
-            val imgPath = imgMatch.groupValues[1].trim()
-            Log.d(TAG, "Found image path in .cfg: $imgPath")
-            
-            // Cas 1: Path commence par "../" (remonte d'un dossier)
-            // Ex: ../flat/img/A.png → overlay = "flat"
-            if (imgPath.startsWith("../")) {
-                val overlayName = imgPath.removePrefix("../").substringBefore("/")
-                Log.i(TAG, "Detected overlay from ../ path: $overlayName")
-                return overlayName
-            }
-            
-            // Cas 2: Path contient un dossier parent (mais pas img/)
-            // Ex: dreamcast/img/A.png → overlay = "dreamcast"
-            // Ex: flat/img/A.png → overlay = "flat"
-            if (imgPath.contains("/") && !imgPath.startsWith("img/")) {
-                val overlayName = imgPath.substringBefore("/")
-                Log.i(TAG, "Detected overlay from image path: $overlayName")
-                return overlayName
-            }
-            
-            // Cas 3: Path direct = img/A.png
-            // → Overlay name = nom du fichier .cfg
-            // Ex: flat.cfg avec img/A.png → overlay = "flat"
-            if (imgPath.startsWith("img/")) {
-                Log.i(TAG, "Direct img/ path, using fileName as overlay: $baseFileName")
-                return baseFileName
-            }
-        }
-        
-        // Méthode 2: Chercher la ligne overlay_name (si elle existe)
-        // Ex: overlay0_name = "landscape" indique que c'est un multi-layout
-        val overlayNamePattern = Regex("""overlay\d+_name\s*=\s*["']([^"']+)["']""")
-        val nameMatch = overlayNamePattern.find(cfgContent)
-        if (nameMatch != null) {
-            Log.d(TAG, "Found overlay0_name in .cfg, using fileName as overlay: $baseFileName")
-            return baseFileName
-        }
-        
-        // Méthode 3: Liste des overlays "dossiers" connus
-        // Si le fileName correspond à un overlay qui a son propre dossier, l'utiliser
-        val knownFolderOverlays = listOf(
-            "flat", "dual-shock", "arcade-anim", "lite", "neo-retropad",
-            "nes", "nes-small", "snes", "psx", "gba", "n64", "genesis",
-            "arcade", "gameboy", "quadpad", "scummvm", "retropad",
-            "720-med", "flip_phone", "gb_anim_portrait", "gba-grey"
-        )
-        
-        if (knownFolderOverlays.any { it.equals(baseFileName, ignoreCase = true) }) {
-            Log.i(TAG, "FileName matches known folder overlay: $baseFileName")
-            return baseFileName
-        }
-        
-        // Méthode 4 (Fallback): Utiliser le nom du fichier
-        Log.w(TAG, "Could not detect overlay from content, using fileName: $baseFileName")
-        return baseFileName
-    }
+    // Fonctions extractOverlayFolderFromUri et detectOverlayNameFromContent déplacées vers UriFileHelper
     
     /**
      * Configure tous les contrôleurs après que le jeu soit chargé (appelé après le premier FrameRendered)
@@ -467,27 +273,11 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * @param delayMs Délai en millisecondes avant de terminer (pour laisser les dialogs s'afficher)
      */
     private fun safeFinishActivity(currentCore: String?, delayMs: Long = 0) {
-        val isMame2010 = currentCore?.contains("mame2010", ignoreCase = true) == true
-        
-        if (delayMs > 0) {
-            // Retarder la fermeture pour laisser le temps aux dialogs de s'afficher
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                if (isMame2010) {
-                    Log.w(TAG, "⚠️ MAME2010 detected - using process kill to avoid destructor crash")
-                    android.os.Process.killProcess(android.os.Process.myPid())
-                } else {
-                    Log.i(TAG, "✓ Normal activity finish (returning to GameDetails)")
-                    finish() // Retourne à GameDetailsActivity
-                }
-            }, delayMs)
+        if (::activityLifecycleUseCase.isInitialized) {
+            activityLifecycleUseCase.safeFinishActivity(currentCore, delayMs)
         } else {
-            if (isMame2010) {
-                Log.w(TAG, "⚠️ MAME2010 detected - using process kill to avoid destructor crash")
-                android.os.Process.killProcess(android.os.Process.myPid())
-            } else {
-                Log.i(TAG, "✓ Normal activity finish (returning to GameDetails)")
-                finish() // Retourne à GameDetailsActivity
-            }
+            Log.e(TAG, "ActivityLifecycleUseCase not initialized")
+            finish()
         }
     }
     
@@ -499,20 +289,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * @param delayMs Délai avant déclenchement (0 = immédiat)
      */
     private fun sendLightgunTrigger(port: Int, delayMs: Int) {
-        val sendTrigger = Runnable {
-            // Envoyer un pulse rapide de BUTTON_A (DOWN puis UP)
-            retroView.sendKeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BUTTON_A, port)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                retroView.sendKeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BUTTON_A, port)
-            }, 50)  // 50ms pulse
-            
-            Log.d(TAG, "[ZAPPER] Trigger FIRED on port ${port+1} (delay: ${delayMs}ms)")
-        }
-        
-        if (delayMs > 0) {
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(sendTrigger, delayMs.toLong())
+        if (::handleZapperUseCase.isInitialized) {
+            handleZapperUseCase.sendLightgunTrigger(port, delayMs)
         } else {
-            sendTrigger.run()
+            Log.e(TAG, "HandleZapperUseCase not initialized")
         }
     }
     
@@ -523,48 +303,10 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * @param event Touch event contenant le nombre de doigts
      */
     private fun handleMultiTouchActions(event: android.view.MotionEvent) {
-        // Ne traiter que les événements DOWN (pas MOVE/UP) pour éviter déclenchements multiples
-        if (event.actionMasked != android.view.MotionEvent.ACTION_DOWN && 
-            event.actionMasked != android.view.MotionEvent.ACTION_POINTER_DOWN) {
-            return
-        }
-        
-        // Get orientation from context
-        val isLandscapeForSettings = this@RetroArchEmulatorActivity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-        val orientationForSettings = if (isLandscapeForSettings) "landscape" else "portrait"
-        val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, orientationForSettings)
-        val fingerCount = event.pointerCount
-        
-        // Support multi-touch (2/3/4 doigts) - Compatible RetroArch overlay_lightgun_action enum
-        if (fingerCount > 1 && fingerCount <= 4) {
-            val actionId = when (fingerCount) {
-                2 -> lightgunSettings.lightgunTwoTouchInput
-                3 -> lightgunSettings.lightgunThreeTouchInput
-                4 -> lightgunSettings.lightgunFourTouchInput
-                else -> 0
-            }
-            
-            if (actionId > 0) {
-                sendLightgunAction(actionId, lightgunSettings.lightgunPort)
-                // Convertir actionId en nom d'action pour le log
-                val actionName = when (actionId) {
-                    1 -> "gun_trigger"
-                    2 -> "gun_reload"
-                    3 -> "gun_aux_a"
-                    4 -> "gun_aux_b"
-                    5 -> "gun_aux_c"
-                    6 -> "gun_start"
-                    7 -> "gun_select"
-                    8 -> "gun_dpad_up"
-                    9 -> "gun_dpad_down"
-                    10 -> "gun_dpad_left"
-                    11 -> "gun_dpad_right"
-                    else -> "unknown($actionId)"
-                }
-                Log.i(TAG, "[ZAPPER] Multi-touch: $fingerCount fingers → action $actionId ($actionName)")
-            } else {
-                Log.d(TAG, "[ZAPPER] Multi-touch: $fingerCount fingers detected but no action configured (actionId=0)")
-            }
+        if (::handleZapperUseCase.isInitialized) {
+            handleZapperUseCase.handleMultiTouchActions(event)
+        } else {
+            Log.e(TAG, "HandleZapperUseCase not initialized")
         }
     }
     
@@ -576,61 +318,16 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * @param port Port du lightgun
      */
     private fun sendLightgunAction(actionId: Int, port: Int) {
-        val keyCode = when (actionId) {
-            1 -> android.view.KeyEvent.KEYCODE_BUTTON_A       // LIGHTGUN_TRIGGER (utilise BUTTON_A comme trigger)
-            2 -> android.view.KeyEvent.KEYCODE_BUTTON_SELECT  // LIGHTGUN_RELOAD (offscreen shot)
-            3 -> android.view.KeyEvent.KEYCODE_BUTTON_A       // LIGHTGUN_AUX_A
-            4 -> android.view.KeyEvent.KEYCODE_BUTTON_B       // LIGHTGUN_AUX_B
-            5 -> android.view.KeyEvent.KEYCODE_BUTTON_X       // LIGHTGUN_AUX_C
-            6 -> android.view.KeyEvent.KEYCODE_BUTTON_START   // LIGHTGUN_START
-            7 -> android.view.KeyEvent.KEYCODE_BUTTON_SELECT  // LIGHTGUN_SELECT
-            8 -> android.view.KeyEvent.KEYCODE_DPAD_UP        // LIGHTGUN_DPAD_UP
-            9 -> android.view.KeyEvent.KEYCODE_DPAD_DOWN      // LIGHTGUN_DPAD_DOWN
-            10 -> android.view.KeyEvent.KEYCODE_DPAD_LEFT     // LIGHTGUN_DPAD_LEFT
-            11 -> android.view.KeyEvent.KEYCODE_DPAD_RIGHT    // LIGHTGUN_DPAD_RIGHT
-            else -> return  // 0 = none
-        }
-        
-        // Envoyer pulse rapide
-        retroView.sendKeyEvent(android.view.KeyEvent.ACTION_DOWN, keyCode, port)
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            retroView.sendKeyEvent(android.view.KeyEvent.ACTION_UP, keyCode, port)
-        }, 50)
-        
-        Log.d(TAG, "[ZAPPER] Multi-touch action $actionId sent: keyCode=$keyCode on port ${port+1}")
-    }
-    
-    // P3: Quick tap detection - Compatible RetroArch android_check_quick_tap()
-    // Stocke le timestamp du dernier tap pour détecter les taps rapides (< 200ms)
-    private var lastZapperTapTime: Long = 0
-    private var quickTapResetHandler: android.os.Handler? = null
-    private val quickTapResetRunnable = Runnable {
-        // Reset après 200ms si aucun nouveau tap (compatible RetroArch ligne 809-811)
-        if (lastZapperTapTime > 0) {
-            val timeSinceLastTap = android.os.SystemClock.elapsedRealtime() - lastZapperTapTime
-            if (timeSinceLastTap >= 200) {
-                lastZapperTapTime = 0
-                Log.d(TAG, "[ZAPPER] Quick tap timer reset (>200ms)")
-            }
+        if (::handleZapperUseCase.isInitialized) {
+            handleZapperUseCase.sendLightgunAction(actionId, port)
+        } else {
+            Log.e(TAG, "HandleZapperUseCase not initialized")
         }
     }
     
     /**
-     * Gestion des touches Zapper - Envoie position POINTER + trigger au port 2
-     * Port 1 (index 0) = Manette standard (Start/Select pour menus)
-     * Port 2 (index 1) = Zapper (RETRO_DEVICE_POINTER configuré)
-     * 
-     * Utilise RETRO_DEVICE_POINTER (6) pour envoyer coordonnées exactes au core FCEUmm
-     * 
-     * P3: Quick tap detection - Détecte les taps rapides (< 200ms) pour améliorer réactivité
-     * Compatible RetroArch android_check_quick_tap() (lignes 805-815)
-     * 
-     * @param event Touch event
-     * @param gameViewBounds Bounds exacts du GLRetroView (zone de jeu)
-     * @param triggerOnTouch Si true, tir instantané au DOWN, sinon au UP
-     * @param allowOffscreen Si false, clamp position aux bounds
-     * @param triggerDelay Délai en ms avant déclenchement du trigger
-     * @param lightgunPort Port du lightgun (0-3, -1 = tous)
+     * Gestion des touches Zapper - Délègue au HandleZapperUseCase
+     * CRITIQUE: Cette méthode est essentielle pour le fonctionnement du zapper.
      */
     private fun handleZapperTouch(
         event: android.view.MotionEvent,
@@ -638,436 +335,71 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         triggerOnTouch: Boolean = true,
         allowOffscreen: Boolean = true,
         triggerDelay: Int = 0,
-        lightgunPort: Int = 1  // Port 2 (index 1) = Zapper NES traditionnel
+        lightgunPort: Int = 1,
+        pulseDuration: Int = 16
     ): Boolean {
-        // CRITIQUE: Si lightgunPort = -1 (all ports), utiliser le port par défaut (1 = port 2 NES)
-        val actualPort = if (lightgunPort < 0) 1 else lightgunPort.coerceIn(0, 3)
-        
-        if (!isZapperGame) {
-            return false
-        }
-        
-        // Vérifier si bounds disponibles
-        val bounds = gameViewBounds
-        if (bounds == null) {
-            Log.w(TAG, "[ZAPPER] GLRetroView bounds not available yet, ignoring touch")
-            return false
-        }
-        
-        // Touch coordinates (écran)
-        val touchX = event.x
-        val touchY = event.y
-        
-        // Vérifier si touch est DANS le GLRetroView (zone de jeu)
-        val isInGameArea = touchX >= bounds.left && touchX <= bounds.right &&
-                          touchY >= bounds.top && touchY <= bounds.bottom
-        
-        if (!isInGameArea) {
-            // Touch hors zone de jeu (dans les overlays, bars, etc.)
-            if (!allowOffscreen) {
-                Log.d(TAG, "[ZAPPER] Touch OUTSIDE game area and allowOffscreen=false - ignored")
-                return false
-            }
-            // Si allowOffscreen=true, clamp aux bounds
-            Log.d(TAG, "[ZAPPER] Touch OUTSIDE game area, clamping to bounds")
-        }
-        
-        // CRITIQUE FIX: Les bounds incluent l'offset vertical (QuickActionsBar + portrait offset)
-        // Mais le touch est en coordonnées ÉCRAN absolues!
-        // Il faut ajuster pour que le milieu de l'écran visible = milieu du jeu NES
-        
-        val viewport = retroView.viewport  // RectF(left, top, right, bottom) normalisé [0-1]
-        
-        // CORRECTION PORTRAIT: Convertir touchY (coordonnées ÉCRAN) en coordonnées VIEW
-        // bounds.top peut être négatif (View déborde en haut de l'écran)
-        // Exemple: bounds.top=-537, bounds.bottom=1803, touchY=1170 (centre écran)
-        // touchYInView = 1170 - (-537) = 1707 (coordonnées dans le View)
-        val touchXInView = touchX - bounds.left
-        val touchYInView = touchY - bounds.top
-        
-        // CORRECTION VIEWPORT: LibretroDroid retourne (0,0,1,1) même avec letterboxing!
-        // Récupérer le VRAI ratio d'aspect depuis le core (au lieu de deviner)
-        val coreAspectRatio = try {
-            retroView.getAspectRatio()
-        } catch (e: Exception) {
-            Log.w(TAG, "[ZAPPER] Cannot get aspect ratio from core, using NES default (256:240)")
-            256f / 240f  // Fallback NES
-        }
-        
-        // Récupérer les dimensions de rendu du core (pour debug)
-        val gameWidth = try { retroView.getGameGeometryWidth() } catch (e: Exception) { 256 }
-        val gameHeight = try { retroView.getGameGeometryHeight() } catch (e: Exception) { 240 }
-        
-        val screenAspectRatio = bounds.width / bounds.height
-        
-        val actualViewport = if (screenAspectRatio > coreAspectRatio) {
-            // Écran plus large que le jeu → Bandes noires à gauche/droite
-            val gameWidth = bounds.height * coreAspectRatio
-            val letterboxWidth = (bounds.width - gameWidth) / 2f
-            val left = letterboxWidth / bounds.width
-            val right = 1f - left
-            android.graphics.RectF(left, 0f, right, 1f)
+        if (::handleZapperUseCase.isInitialized) {
+            return handleZapperUseCase.handleZapperTouch(
+                event,
+                gameViewBounds,
+                triggerOnTouch,
+                allowOffscreen,
+                triggerDelay,
+                lightgunPort,
+                pulseDuration
+            )
         } else {
-            // Écran plus haut que le jeu → Bandes noires en haut/bas (portrait typique)
-            val gameHeight = bounds.width / coreAspectRatio
-            val letterboxHeight = (bounds.height - gameHeight) / 2f
-            val top = letterboxHeight / bounds.height
-            val bottom = 1f - top
-            android.graphics.RectF(0f, top, 1f, bottom)
-        }
-        
-        // Appliquer le viewport CORRIGÉ (si letterboxing)
-        val viewportTop = actualViewport.top * bounds.height
-        val viewportBottom = actualViewport.bottom * bounds.height
-        val viewportLeft = actualViewport.left * bounds.width
-        val viewportRight = actualViewport.right * bounds.width
-        
-        val clampedX = touchXInView.coerceIn(viewportLeft, viewportRight)
-        val clampedY = touchYInView.coerceIn(viewportTop, viewportBottom)
-        
-        val viewportWidth = viewportRight - viewportLeft
-        val viewportHeight = viewportBottom - viewportTop
-        
-        val relativeX = (clampedX - viewportLeft) / viewportWidth
-        val relativeY = (clampedY - viewportTop) / viewportHeight
-        
-        // LibretroDroid ATTEND [0, 1] et fait la conversion [-0x7fff, +0x7fff] lui-même !
-        // Formule dans input.cpp: (pointerScreenXAxis - 0.5f) * 2.0 * 0x7fff
-        // POINTER_PRESSED = (X >= 0 && Y >= 0) donc on DOIT envoyer [0, 1] !
-        
-        // CALCULS DÉTAILLÉS pour debug (simulation des conversions)
-        // LibretroDroid: result = 2.0 * (relativeY - 0.5f) * 32767
-        val libretroX = ((relativeX - 0.5f) * 2.0f * 32767f).toInt()  // Conversion LibretroDroid
-        val libretroY = ((relativeY - 0.5f) * 2.0f * 32767f).toInt()
-        
-        // Conversion FCEUmm (simulation de libretro.c ligne 2442-2443, 2454-2455)
-        // Lire les valeurs de crop overscan depuis le .cfg
-        val config = if (console == "nes") {
-            CoreConfigManager.loadConfig(this, "FCEUmm")
-        } else {
-            emptyMap()
-        }
-        val cropTop = config["fceumm_overscan_v_top"]?.toIntOrNull() ?: 8
-        val cropLeft = config["fceumm_overscan_h_left"]?.toIntOrNull() ?: 0
-        
-        val fceummOffsetX = (cropLeft * 0x120) - 1  // Ex: (0 * 0x120) - 1 = -1
-        val fceummOffsetY = (cropTop * 0x133) + 1   // Ex: (8 * 0x133) + 1 = 2457
-        
-        // max_width et max_height dans FCEUmm = dimensions APRÈS crop
-        val maxWidth = gameWidth   // 256 (pas de crop horizontal)
-        val maxHeight = gameHeight // 224 (avec crop 8+8) ou 240 (sans crop)
-        
-        val fceummX = ((libretroX + (32767 + fceummOffsetX)) * maxWidth) / ((32767 + fceummOffsetX) * 2)
-        val fceummY = ((libretroY + (32767 + fceummOffsetY)) * maxHeight) / ((32767 + fceummOffsetY) * 2)
-        
-        // DEBUG: Calculer où FCEUmm va dessiner le crosshair (NES coords 0-255, 0-239)
-        // Le crosshair FCEUmm est dessiné à FCEU_DrawGunSight(buf, mousedata[0], mousedata[1])
-        // Donc si crosshair est "trop bas" → fceummY est trop grand → relativeY trop grand
-        
-        // CONVERSION INVERSE: Où FCEUmm pense qu'on vise en pixels écran (pour debug)
-        // fceummX/Y sont en coordonnées NES (0-255, 0-239)
-        // max_height dans FCEUmm = gameHeight (224 avec crop, 240 sans crop)
-        // Pour convertir en pixels viewport: fceummY / gameHeight * viewportHeight + viewportTop
-        val fceummCrosshairXInViewport = (fceummX / gameWidth.toFloat()) * viewportWidth + viewportLeft
-        val fceummCrosshairYInViewport = (fceummY / gameHeight.toFloat()) * viewportHeight + viewportTop
-        val fceummCrosshairXOnScreen = fceummCrosshairXInViewport + bounds.left
-        val fceummCrosshairYOnScreen = fceummCrosshairYInViewport + bounds.top
-        
-        // Calculer l'écart entre notre touch et où FCEUmm pense qu'on vise
-        val deltaX = touchX - fceummCrosshairXOnScreen
-        val deltaY = touchY - fceummCrosshairYOnScreen
-        
-        when (event.actionMasked) {
-            android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
-                // Envoyer position POINTER au core (pour coordonnées X/Y)
-                retroView.sendMotionEvent(
-                    com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
-                    relativeX,  // 0.0 à 1.0 (LibretroDroid convertit)
-                    relativeY,  // 0.0 à 1.0
-                    actualPort  // Port configuré (index 0-3), corrigé si -1
-                )
-                
-                if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-                    // P3: Quick tap detection - Compatible RetroArch android_check_quick_tap() (lignes 805-815)
-                    val currentTime = android.os.SystemClock.elapsedRealtime()
-                    val timeSinceLastTap = if (lastZapperTapTime > 0) currentTime - lastZapperTapTime else Long.MAX_VALUE
-                    val isQuickTap = timeSinceLastTap < 200
-                    lastZapperTapTime = currentTime
-                    
-                    // Reset le handler précédent et programmer un nouveau reset après 200ms
-                    quickTapResetHandler?.removeCallbacks(quickTapResetRunnable)
-                    quickTapResetHandler = android.os.Handler(android.os.Looper.getMainLooper())
-                    quickTapResetHandler?.postDelayed(quickTapResetRunnable, 200)
-                    
-                    if (isQuickTap && timeSinceLastTap != Long.MAX_VALUE) {
-                        Log.d(TAG, "[ZAPPER] Quick tap detected (${timeSinceLastTap}ms < 200ms)")
-                    }
-                    
-                    // Déclencher le trigger selon l'option triggerOnTouch
-                    if (triggerOnTouch) {
-                        // Optimisation quick tap: Réduire triggerDelay pour quick taps
-                        val optimizedTriggerDelay = if (isQuickTap && triggerDelay > 0) {
-                            kotlin.math.max(0, triggerDelay - 50)  // Réduire délai de 50ms pour quick taps
-                        } else {
-                            triggerDelay
-                        }
-                        
-                        // Optimisation quick tap: Pulse réduit pour meilleure réactivité
-                        val pulseDuration = if (isQuickTap) 8 else 16  // 8ms pour quick taps, 16ms normal (1 frame)
-                        
-                        if (optimizedTriggerDelay > 0) {
-                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                retroView.sendMouseButton(
-                                    com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                                    true,  // Pressed
-                                    actualPort
-                                )
-                                Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $actualPort (triggerOnTouch=true, delay=${optimizedTriggerDelay}ms${if (isQuickTap) ", quick tap optimized" else ""})")
-                                
-                                // Maintenir le trigger pendant pulseDuration pour meilleure détection
-                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                    retroView.sendMouseButton(
-                                        com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                                        false,  // Released
-                                        actualPort
-                                    )
-                                    Log.d(TAG, "[ZAPPER] MOUSE BUTTON LEFT released after ${pulseDuration}ms pulse${if (isQuickTap) " (quick tap optimized)" else ""}")
-                                }, pulseDuration.toLong())
-                            }, optimizedTriggerDelay.toLong())
-                        } else {
-                            // Pas de délai: envoi immédiat
-                            retroView.sendMouseButton(
-                                com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                                true,  // Pressed
-                                actualPort
-                            )
-                            Log.i(TAG, "[ZAPPER] MOUSE BUTTON LEFT pressed on port $actualPort (triggerOnTouch=true, no delay${if (isQuickTap) ", quick tap optimized" else ""})")
-                            
-                            // Maintenir le trigger pendant pulseDuration pour meilleure détection
-                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                retroView.sendMouseButton(
-                                    com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                                    false,  // Released
-                                    actualPort
-                                )
-                                Log.d(TAG, "[ZAPPER] MOUSE BUTTON LEFT released after ${pulseDuration}ms pulse${if (isQuickTap) " (quick tap optimized)" else ""}")
-                            }, pulseDuration.toLong())
-                        }
-                    } else {
-                        Log.i(TAG, "[ZAPPER] Touch DOWN registered, waiting for UP to trigger (triggerOnTouch=false${if (isQuickTap) ", quick tap" else ""})")
-                    }
-                    
-                    Log.d(TAG, "[ZAPPER CONVERSIONS]")
-                    Log.d(TAG, "  1. Touch écran (raw):      (${touchX.toInt()}, ${touchY.toInt()})")
-                    Log.d(TAG, "  2. GLRetroView bounds:     left=${bounds.left.toInt()}, top=${bounds.top.toInt()}, right=${bounds.right.toInt()}, bottom=${bounds.bottom.toInt()}")
-                    Log.d(TAG, "  3. Touch in View coords:   (${touchXInView.toInt()}, ${touchYInView.toInt()})")
-                    Log.d(TAG, "  4. Game Geometry:          ${gameWidth}x${gameHeight} (ratio: $coreAspectRatio, crop: top=$cropTop bottom=${config["fceumm_overscan_v_bottom"] ?: "8"})")
-                    Log.d(TAG, "  5. Viewport LibretroDroid: left=${viewport.left}, top=${viewport.top}, right=${viewport.right}, bottom=${viewport.bottom}")
-                    Log.d(TAG, "  6. Viewport CORRECTED:     left=${actualViewport.left}, top=${actualViewport.top}, right=${actualViewport.right}, bottom=${actualViewport.bottom}")
-                    Log.d(TAG, "  7. Viewport pixels (View): left=${viewportLeft.toInt()}, top=${viewportTop.toInt()}, right=${viewportRight.toInt()}, bottom=${viewportBottom.toInt()}")
-                    Log.d(TAG, "  8. Touch dans viewport?    $isInGameArea")
-                    Log.d(TAG, "  9. Clamped to viewport:    (${clampedX.toInt()}, ${clampedY.toInt()})")
-                    Log.d(TAG, "  10. Relative [0-1]:        ($relativeX, $relativeY)")
-                    Log.d(TAG, "  11. Libretro int16:        ($libretroX, $libretroY)")
-                    Log.d(TAG, "  12. FCEUmm offsets:        X=$fceummOffsetX Y=$fceummOffsetY")
-                    Log.d(TAG, "  13. FCEUmm NES [0-${maxWidth-1}]x[0-${maxHeight-1}]: ($fceummX, $fceummY)")
-                    val nesValid = fceummX in 0 until maxWidth && fceummY in 0 until maxHeight
-                    Log.d(TAG, "  14. NES coords valid?      $nesValid")
-                    Log.d(TAG, "  15. FCEUmm crosshair (screen): (${fceummCrosshairXOnScreen.toInt()}, ${fceummCrosshairYOnScreen.toInt()})")
-                    Log.d(TAG, "  16. Delta (touch - FCEUmm): (${deltaX.toInt()}px, ${deltaY.toInt()}px) ${if (deltaY > 0) "FCEUmm trop BAS" else if (deltaY < 0) "FCEUmm trop HAUT" else "ALIGNÉ"}")
-                    Log.d(TAG, "  17. Port: $actualPort | PRESSED: ${relativeX >= 0f && relativeY >= 0f}")
-                    
-                    // NOTE: En mode RetroPointer, le trigger est AUTOMATIQUE via POINTER_PRESSED
-                    // FCEUmm lit: input_cb(port, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED)
-                    // LibretroDroid calcule: POINTER_PRESSED = (X >= 0 && Y >= 0) ? 1 : 0
-                    // Donc pas besoin d'envoyer BUTTON_A! Le trigger est automatique!
-                    
-                    // Gérer multi-touch (2/3/4 doigts) pour actions START/SELECT/etc.
-                    handleMultiTouchActions(event)
-                }
-                return true
-            }
-            
-            android.view.MotionEvent.ACTION_UP -> {
-                // Si triggerOnTouch = false, déclencher le trigger MAINTENANT (au release)
-                if (!triggerOnTouch) {
-                    retroView.sendMouseButton(
-                        com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                        true,  // Pressed
-                        actualPort
-                    )
-                    Log.i(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT pressed on port $actualPort (triggerOnTouch=false, firing on UP)")
-                    
-                    // Attendre triggerDelay si configuré
-                    if (triggerDelay > 0) {
-                        Thread.sleep(triggerDelay.toLong())
-                    }
-                }
-                
-                // CRITIQUE: Envoyer coordonnées NÉGATIVES pour forcer POINTER_PRESSED = 0
-                // LibretroDroid calcule: POINTER_PRESSED = (X >= 0 && Y >= 0) ? 1 : 0
-                // Si on ne fait pas ça, les coordonnées restent en mémoire et POINTER_PRESSED reste à 1!
-                retroView.sendMotionEvent(
-                    com.swordfish.libretrodroid.LibretroDroid.MOTION_SOURCE_POINTER,
-                    -1f,  // X négatif → pointerScreenXAxis < 0
-                    -1f,  // Y négatif → pointerScreenYAxis < 0
-                    actualPort
-                )
-                Log.d(TAG, "[ZAPPER] Touch UP - POINTER reset to (-1, -1), POINTER_PRESSED now FALSE")
-                
-                // Release MOUSE BUTTON LEFT
-                retroView.sendMouseButton(
-                    com.swordfish.libretrodroid.LibretroDroid.MOUSE_BUTTON_LEFT,
-                    false,  // Released
-                    actualPort
-                )
-                Log.i(TAG, "[ZAPPER] MOUSE_BUTTON_LEFT released on port $actualPort")
-                
-                return true
-            }
-            
-            else -> return false
+            Log.e(TAG, "HandleZapperUseCase not initialized")
+            return false
         }
     }
     
     /**
      * Charge les variables de core (DIP switches et Core Options) et applique les valeurs sauvegardées
+     * Délègue au LoadCoreVariablesUseCase
      */
     private fun loadCoreVariables() {
-        try {
-            // Extraire le coreId AVANT de récupérer les variables pour vérifier la cohérence
-            val expectedCoreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
-            Log.i(TAG, "Loading variables for core: $expectedCoreId")
-            
-            // Récupérer les variables depuis le core LibretroDroid
-            val variables = retroView.getVariables()
-            Log.i(TAG, "Retrieved ${variables.size} variables from core")
-            
-            // Vérifier que les variables correspondent au core attendu
-            if (variables.isNotEmpty()) {
-                val firstKey = variables.firstOrNull()?.key ?: ""
-                Log.i(TAG, "First variable key: $firstKey (expected prefix: $expectedCoreId)")
-            }
-            
-            // Parser les variables
-            val parsed = CoreVariableManager.parseVariables(variables)
-            
-            // Filtrer pour ne garder que les variables du core actuel
-            val filtered = CoreVariableManager.filterVariablesForCore(parsed, expectedCoreId)
-            
-            allCoreVariables.clear()
-            allCoreVariables.addAll(filtered)
-            
-            // Séparer DIP switches et Core Options
-            dipSwitches.clear()
-            dipSwitches.addAll(CoreVariableManager.getDipSwitches(filtered))
-            coreOptions.clear()
-            coreOptions.addAll(CoreVariableManager.getCoreOptions(filtered))
-            
-            Log.i(TAG, "Parsed: ${dipSwitches.size} DIP switches, ${coreOptions.size} core options")
-            
-            // Extraire le coreId depuis le chemin du fichier
-            val coreId = currentCoreFilePath?.let { CoreVariableManager.extractCoreId(it) } ?: "unknown"
-            val gameId = File(romPath).nameWithoutExtension
-            
-            // Charger les valeurs sauvegardées
-            val savedValues = CoreVariableManager.loadVariables(this, gameId, coreId)
-            
-            if (savedValues.isNotEmpty()) {
-                // Appliquer les valeurs sauvegardées
-                val updatedVariables = CoreVariableManager.applyLoadedValues(filtered, savedValues)
-                allCoreVariables.clear()
-                allCoreVariables.addAll(updatedVariables)
-                dipSwitches.clear()
-                dipSwitches.addAll(CoreVariableManager.getDipSwitches(updatedVariables))
-                coreOptions.clear()
-                coreOptions.addAll(CoreVariableManager.getCoreOptions(updatedVariables))
-                
-                // Appliquer au core LibretroDroid
-                val libretroVars = CoreVariableManager.toLibretroVariables(updatedVariables)
-                retroView.updateVariables(*libretroVars)
-                Log.i(TAG, "Applied ${savedValues.size} saved variables to core")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading core variables", e)
+        if (::loadCoreVariablesUseCase.isInitialized) {
+            loadCoreVariablesUseCase.loadCoreVariables(romPath)
+        } else {
+            Log.e(TAG, "LoadCoreVariablesUseCase not initialized")
         }
     }
     
     /**
      * Take a screenshot of the current game
      */
+    // Fonction takeScreenshot déplacée vers TakeScreenshotUseCase
     private fun takeScreenshot() {
-        lifecycleScope.launch {
-            try {
-                var screenshotBitmap: android.graphics.Bitmap? = null
-                
-                // Capture screenshot from GL thread
-                retroView.queueEvent {
-                    try {
-                        val width = retroView.width
-                        val height = retroView.height
-                        screenshotBitmap = ScreenshotManager.captureScreenshotGL(width, height)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to capture screenshot from GL", e)
-                    }
-                }
-                
-                // Wait a bit for GL thread to finish
-                kotlinx.coroutines.delay(100)
-                
-                screenshotBitmap?.let { bitmap ->
-                    val result = ScreenshotManager.saveScreenshot(bitmap, console, screenshotGameId)
-                    
-                    runOnUiThread {
-                        if (result != null) {
-                            Toast.makeText(this@RetroArchEmulatorActivity, 
-                                "Screenshot saved", Toast.LENGTH_SHORT).show()
-                            Log.i(TAG, "Screenshot saved: ${result.screenshotPath}")
-                            result.thumbnailPath?.let { thumb ->
-                                Log.i(TAG, "Thumbnail saved: $thumb")
-                            }
-                        } else {
-                            Toast.makeText(this@RetroArchEmulatorActivity, 
-                                "Failed to save screenshot", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                } ?: run {
-                    runOnUiThread {
-                        Toast.makeText(this@RetroArchEmulatorActivity, 
-                            "Failed to capture screenshot", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Screenshot error", e)
-                runOnUiThread {
-                    Toast.makeText(this@RetroArchEmulatorActivity, 
-                        "Screenshot error: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
+        takeScreenshotUseCase.takeScreenshot(retroView, console, screenshotGameId)
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i(TAG, "🟢 RetroArchEmulatorActivity.onCreate() STARTED")
         
-        setupFullscreenMode()
+        val receivedRomPath = intent.getStringExtra("romPath")
+        Log.i(TAG, "📥 Intent received - romPath: $receivedRomPath")
+        Log.i(TAG, "📥 Intent received - gameName: ${intent.getStringExtra("gameName")}")
+        Log.i(TAG, "📥 Intent received - console: ${intent.getStringExtra("console")}")
+        Log.i(TAG, "📥 Intent received - loadSlot: ${intent.getIntExtra("loadSlot", -1)}")
         
-        romPath = intent.getStringExtra("romPath") ?: run {
-            Log.e(TAG, "No ROM path provided")
+        romPath = receivedRomPath ?: run {
+            Log.e(TAG, "❌ No ROM path provided in Intent")
             Toast.makeText(this, "Error: No ROM path", Toast.LENGTH_LONG).show()
             finish()
             return
         }
         
         // Log du chemin ROM pour déboguer les caractères spéciaux
-        Log.i(TAG, "ROM path received (handles special chars): $romPath")
+        Log.i(TAG, "✅ ROM path validated (handles special chars): $romPath")
         
         console = intent.getStringExtra("console") ?: "psx"
         gameName = intent.getStringExtra("gameName") ?: "Game"
         gameCRC = intent.getStringExtra("gameCRC")  // Database CRC (may be null)
         val rawGameId = intent.getStringExtra("gameId") ?: gameName
-        screenshotGameId = ScreenshotRepository.sanitizeGameKey(rawGameId.ifBlank { gameName })
         val gameId = rawGameId  // legacy usage for config loading
+        // screenshotGameId sera initialisé après la création de takeScreenshotUseCase
         val loadSlot = intent.getIntExtra("loadSlot", 0)  // 0 = nouvelle partie, 1-5 = charger slot
         
         // Initialize ViewModel
@@ -1098,13 +430,24 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         Log.i(TAG, "  - gameName: $gameName")
         Log.i(TAG, "  - gameCRC (Resolved): $gameCRC")
         Log.i(TAG, "  - customConfigId (Resolved): $customConfigId")
+        Log.i(TAG, "  - Config file path: /storage/emulated/0/RetroPlay-Data/config/games/${customConfigId ?: gameCRC ?: "UNKNOWN"}.cfg")
         
+        // CRITIQUE: Initialiser prefs AVANT applyPerGameConfig() qui l'utilise
+        prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
+        
+        // Charger la config (sans appliquer Rewind/RunAhead car les managers ne sont pas encore initialisés)
+        // Les settings seront appliqués APRÈS l'initialisation des managers (ligne 1094-1095)
+        // Note: Use gameName for config (like saves system), not customConfigId
+        // Note: coreFilePath will be set later after core is loaded, so we pass null for now
+        // The config will use fallback "retroplay.cfg" until core is loaded
         retroPlayConfig = EmulatorConfigHelper.applyPerGameConfig(
-            customConfigId,
+            customConfigId,  // Still passed for compatibility, but gameName is used for config
             gameName,
             console,
-            rewindManager,
-            runAheadManager
+            null,  // rewindManager pas encore initialisé
+            null,  // runAheadManager pas encore initialisé
+            prefs,
+            null   // coreFilePath pas encore disponible (sera mis à jour après chargement du core)
         )
 
         // Load Game Metadata (Async) for Info Dialog
@@ -1130,22 +473,59 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
 
         
-        // Détecter les jeux Zapper AVANT la création de GLRetroViewData
-        isZapperGame = ZapperGameDetector.isZapperGame(gameName, console)
-        if (isZapperGame) {
-            Log.i(TAG, "[ZAPPER] Zapper game detected EARLY: $gameName")
-            
-            // Chiller utilise le port 0 (Port 1 NES), les autres jeux utilisent le port 1 (Port 2 NES)
-            val normalizedName = gameName.lowercase().replace(Regex("[^a-z0-9]"), "")
-            if (normalizedName.contains("chiller")) {
-                zapperPort = 0  // Port 1 NES
-                Log.i(TAG, "[ZAPPER] Chiller detected - using port 0 (Port 1 NES)")
-            } else {
-                zapperPort = 1  // Port 2 NES (défaut)
-                Log.i(TAG, "[ZAPPER] Standard Zapper game - using port 1 (Port 2 NES)")
+        // Configuration Périphériques (Zapper/Lightgun/Guncon/etc): UNIQUEMENT basée sur la configuration manuelle des ports
+        // Plus de détection automatique - l'utilisateur configure manuellement via le menu
+        // Supporte: Zapper (258), Lightgun/Guncon (4), SuperScope (260), Menacer (4), Mouse (2), etc.
+        
+        // Vérifier configuration manuelle (SharedPreferences - controller ports)
+        // Priority: console_config then compose_gamepad_settings (comme dans ControllerHelper)
+        val consoleConfigPrefs = getSharedPreferences("console_config", Context.MODE_PRIVATE)
+        for (port in 0..3) {
+            val portKey = "controller_port_${console}_port${port}"
+            // Priority: console_config then compose_gamepad_settings
+            var controllerType = consoleConfigPrefs.getInt(portKey, -1)
+            if (controllerType == -1) {
+                controllerType = prefs.getInt(portKey, -1)
             }
-            
-            // Recommandation mode panoramique pour meilleure précision
+            // Détecter tous les périphériques qui nécessitent le touchscreen (Zapper, Lightgun, Guncon, SuperScope, Menacer)
+            if (controllerType == 258 || // RETRO_DEVICE_ZAPPER (NES)
+                controllerType == 4 ||   // RETRO_DEVICE_LIGHTGUN (PSX Guncon, Genesis Menacer, etc.)
+                controllerType == 260) { // RETRO_DEVICE_SUPERSCOPE (SNES)
+                isZapperGame = true
+                zapperPort = port
+                val deviceName = when (controllerType) {
+                    258 -> "Zapper"
+                    4 -> "Lightgun/Guncon"
+                    260 -> "SuperScope"
+                    else -> "Type $controllerType"
+                }
+                Log.i(TAG, "[PERIPHERAL] $deviceName configured manually on port $port (from ${if (consoleConfigPrefs.getInt(portKey, -1) == controllerType) "console_config" else "compose_gamepad_settings"})")
+                break
+            }
+        }
+        
+        // Vérifier configuration per-game (RetroPlayConfigManager) - optionnel
+        if (!isZapperGame && gameName.isNotEmpty()) {
+            val effectiveConfig = RetroPlayConfigManager.getEffectiveConfig(console, gameName)
+            if (effectiveConfig.zapperEnabled) {
+                isZapperGame = true
+                zapperPort = effectiveConfig.zapperPort
+                Log.i(TAG, "[ZAPPER] Zapper enabled in per-game config (port: $zapperPort)")
+            }
+        }
+        
+        // Vérifier configuration globale (RetroPlayConfigManager) - optionnel
+        if (!isZapperGame) {
+            val globalConfig = RetroPlayConfigManager.loadConfig(console)
+            if (globalConfig.zapperEnabled) {
+                isZapperGame = true
+                zapperPort = globalConfig.zapperPort
+                Log.i(TAG, "[ZAPPER] Zapper enabled in global config (port: $zapperPort)")
+            }
+        }
+        
+        // Recommandation mode panoramique pour meilleure précision (si zapper activé)
+        if (isZapperGame) {
             val configuration = resources.configuration
             val isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
             if (isPortrait) {
@@ -1160,15 +540,24 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         Log.i(TAG, "🟢 NativeComposeEmulator starting: $gameName ($console) from $romPath" + 
                 if (loadSlot > 0) " [LOAD SLOT $loadSlot]" else " [NEW GAME]")
         
-        // === DÉTECTION DE CRASH (SANS FALLBACK AUTOMATIQUE) ===
-        val crashPrefs = getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
-        val lastGamePath = crashPrefs.getString(KEY_LAST_GAME, null)
-        val lastCoreAttempted = crashPrefs.getString(KEY_LAST_CORE, null)
-        val lastTimestamp = crashPrefs.getLong(KEY_TIMESTAMP, 0)
-        val currentTime = System.currentTimeMillis()
+        // Note: prefs est maintenant initialisé plus tôt (avant applyPerGameConfig)
         
-        // Charger les SharedPreferences
-        prefs = getSharedPreferences("compose_gamepad_settings", Context.MODE_PRIVATE)
+        // Initialize FullscreenSetupUseCase (après prefs)
+        fullscreenSetupUseCase = FullscreenSetupUseCase(this, prefs)
+        fullscreenSetupUseCase.setupFullscreenMode()
+        
+        // Initialize Managers
+        overlayManager = OverlayManager(this, prefs)
+        coreManager = CoreManager(this)
+        
+        // Use Cases
+        takeScreenshotUseCase = TakeScreenshotUseCase(this, lifecycleScope)
+        
+        // Note: saveStateUseCase sera initialisé après la création de retroView
+        
+        // Sanitize gameId pour les screenshots (doit être après l'initialisation de takeScreenshotUseCase)
+        val rawGameIdForScreenshot = intent.getStringExtra("gameId") ?: gameName
+        screenshotGameId = takeScreenshotUseCase.sanitizeGameId(rawGameIdForScreenshot, gameName)
         
         // Initialiser le système d'autoconfig RetroArch (P0 - Priorité Critique)
         autoconfigManager = com.retroplay.input.AutoconfigManager(this)
@@ -1241,33 +630,45 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         val savedVariant = GamePadLayoutManager.loadVariant(prefs, console)
         Log.i(TAG, "Loaded saved gamepad variant: $savedVariant for console: $console")
         
+        // Charger le core via CoreManager
+        try {
+            if (::coreManager.isInitialized) {
+                loadCoreResult = coreManager.loadCore(console, romPath, gameName)
+            } else {
+                Log.e(TAG, "CoreManager not initialized")
+                // Fallback: utiliser LoadCoreUseCase directement
+                val loadCoreUseCase = LoadCoreUseCase(this)
+                loadCoreResult = loadCoreUseCase.loadCore(console, romPath, gameName)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ CRITICAL: Failed to load core", e)
+            Toast.makeText(this, "Error: Failed to load core for $console", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        
+        // CRITIQUE: Vérifier que loadCoreResult n'est pas null
+        val coreResult = loadCoreResult ?: run {
+            Log.e(TAG, "❌ CRITICAL: loadCoreResult is null")
+            Toast.makeText(this, "Error: Core loading failed", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        
+        Log.i(TAG, "✅ Core loaded result: $coreResult")
+        Log.i(TAG, "   - Core Path: ${coreResult.coreFilePath}")
+        Log.i(TAG, "   - Failed Core Name: ${coreResult.failedCoreName}")
+        Log.i(TAG, "   - Should Show Error: ${coreResult.shouldShowErrorDialog}")
+        
+        // Gérer l'affichage du dialog d'erreur si crash détecté
+        if (coreResult.shouldShowErrorDialog) {
+            failedCoreName = coreResult.failedCoreName ?: ""
+            dialogStateManager.openCoreErrorDialog()
+        }
+        
         // Créer GLRetroView avec GLRetroViewData
         val data = com.swordfish.libretrodroid.GLRetroViewData(this).apply {
-            // Utiliser le core normal (avec override si défini)
-            val selectedCore = getCorePath(console)
-            
-            // Vérifier si le dernier lancement a crashé (même jeu, moins de 5s)
-            val wasCrash = lastGamePath == romPath && 
-                           lastCoreAttempted != null && 
-                           (currentTime - lastTimestamp) < CRASH_TIMEOUT_MS
-            
-            // N'afficher le dialog QUE si le core est IDENTIQUE au core qui a crashé
-            // Si l'utilisateur a changé le core manuellement, ne pas afficher le dialog
-            if (wasCrash && lastCoreAttempted == selectedCore) {
-                Log.w(TAG, "⚠️ CRASH DETECTED on previous attempt with core: $lastCoreAttempted")
-                // Extraire le nom du core pour l'affichage (nom lisible)
-                failedCoreName = getCoreDisplayName(lastCoreAttempted)
-                // Nettoyer les prefs pour ne pas re-afficher le dialog
-                crashPrefs.edit().clear().apply()
-                // Afficher le dialog d'erreur
-                showCoreErrorDialog.value = true
-            } else if (wasCrash && lastCoreAttempted != selectedCore) {
-                // L'utilisateur a déjà changé le core manuellement, juste nettoyer les prefs
-                Log.i(TAG, "✓ User manually changed core from $lastCoreAttempted to $selectedCore")
-                crashPrefs.edit().clear().apply()
-            }
-            
-            coreFilePath = selectedCore
+            coreFilePath = coreResult.coreFilePath
             
             // Gérer l'extraction des ROMs depuis les archives (.zip, .7z)
             // FCEUmm (NES) et la plupart des cores ne peuvent pas charger directement les ZIP
@@ -1302,6 +703,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                             "ngp" -> listOf(".ngp")
                             "wonderswancolor" -> listOf(".ws", ".wsc")
                             "pce" -> listOf(".pce")
+
                             else -> emptyList()
                         }
                         
@@ -1355,22 +757,13 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             }
             
             // Sauvegarder le core actuel pour le cleanup
-            this@RetroArchEmulatorActivity.currentCoreFilePath = selectedCore
-            
-            // Sauvegarder la tentative actuelle pour détecter un crash futur
-            crashPrefs.edit().apply {
-                putString(KEY_LAST_GAME, romPath)
-                putString(KEY_LAST_CORE, selectedCore)
-                putLong(KEY_TIMESTAMP, currentTime)
-                apply()
-            }
-            Log.i(TAG, "📝 Core logged: $selectedCore for $gameName")
+            this@RetroArchEmulatorActivity.currentCoreFilePath = coreResult.coreFilePath
             
             // System directory (BIOS)
-            systemDirectory = "/storage/emulated/0/GameLibrary-Data/data/bios"
+            systemDirectory = com.retroplay.helpers.GameLibraryPaths.BIOS_DIR
             
             // Saves directory (SHARED)
-            val sharedSavesDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console")
+            val sharedSavesDir = File(com.retroplay.helpers.GameLibraryPaths.getSavesDirForConsole(console))
             if (!sharedSavesDir.exists()) sharedSavesDir.mkdirs()
             savesDirectory = sharedSavesDir.absolutePath
             
@@ -1380,6 +773,17 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             // Options
             rumbleEventsEnabled = true
             preferLowLatencyAudio = true
+            
+            // Fix pour les cores avec rendu hardware (Dreamcast/Flycast, N64, PSX, NDS)
+            // Lemuroid utilise skipDuplicateFrames = false pour ces cores car ils ont
+            // des problèmes de rendu spécifiques avec le filtrage de frames dupliquées
+            skipDuplicateFrames = when (console.lowercase()) {
+
+                "n64" -> false  // Mupen64/Parallel64 (hardware rendering)  
+                "psx", "ps1" -> false  // PCSX ReARMed (peut utiliser hardware rendering)
+                else -> true  // Par défaut: activer le filtrage pour better performance
+            }
+            Log.i(TAG, "[INIT] skipDuplicateFrames = $skipDuplicateFrames for console: $console")
 
             // Configuration des variables de core via l'API officielle LibretroDroid
             val corePrefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this@RetroArchEmulatorActivity)
@@ -1391,7 +795,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             val isMupen64Plus = actualCoreFile.contains("mupen64plus")
 
             // Configuration des variables selon la console
-            Log.i(TAG, "[INIT] Configuring core variables for console: '$console', isZapperGame=$isZapperGame")
+            Log.i(TAG, "[INIT] Configuring core variables for console: '$console', isZapperGame=$isZapperGame, zapperPort=$zapperPort")
             when (console) {
                 "n64" -> {
                     // Lire depuis console_config (comme ConsoleConfigActivity)
@@ -1525,7 +929,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     CoreConfigManager.createDefaultConfigIfNeeded(this@RetroArchEmulatorActivity, "FCEUmm", CoreConfigManager.getDefaultConfig("fceumm"))
                     
                     // Charger la config depuis le .cfg
-                    val config = CoreConfigManager.loadConfig(this@RetroArchEmulatorActivity, "FCEUmm")
+                    val config = CoreConfigManager.loadConfig(this@RetroArchEmulatorActivity, "FCEUmm").toMutableMap()
                     
                     if (config.isNotEmpty()) {
                         // Convertir Map<String, String> en Array<Variable>
@@ -1597,6 +1001,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                         Log.w(TAG, "[ARCADE] Failed to set FBNeo variables: ${e.message}")
                     }
                 }
+
                 else -> {
                     // Pour toutes les autres consoles sans configuration spécifique,
                     // initialiser un tableau vide pour éviter les crashes de segfault
@@ -1613,15 +1018,154 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         }
         
         retroView = GLRetroView(this, data)
+        
+        // Initialize InputManager (après retroView)
+        inputManager = InputManager(retroView)
+        
+        // Initialize SaveStateUseCase after retroView is created
+        saveStateUseCase = SaveStateUseCase(this, lifecycleScope, retroView, console, gameName)
+        saveStateUseCase.setCallbacks(object : SaveStateUseCase.SaveStateCallbacks {
+            override suspend fun <T> runOnGLThread(block: () -> T): T = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+                retroView.queueEvent {
+                    try {
+                        val result = block()
+                        continuation.resume(result)
+                    } catch (e: Exception) {
+                        continuation.resumeWithException(e)
+                    }
+                }
+            }
+            
+            override fun runOnUiThread(action: Runnable) {
+                this@RetroArchEmulatorActivity.runOnUiThread(action)
+            }
+            
+            override fun showToast(message: String, duration: Int) {
+                Toast.makeText(this@RetroArchEmulatorActivity, message, duration).show()
+            }
+        })
+        
+        // Initialize HandleHotkeyUseCase
+        handleHotkeyUseCase = HandleHotkeyUseCase(this, lifecycleScope, retroView, prefs)
+        handleHotkeyUseCase.setCallbacks(object : HandleHotkeyUseCase.HotkeyCallbacks {
+            override fun runOnUiThread(action: Runnable) {
+                this@RetroArchEmulatorActivity.runOnUiThread(action)
+            }
+            
+            override fun showToast(message: String, duration: Int) {
+                Toast.makeText(this@RetroArchEmulatorActivity, message, duration).show()
+            }
+            
+            override fun getCurrentSaveSlot(): Int = currentSaveSlot.value
+            override fun setCurrentSaveSlot(slot: Int) { currentSaveSlot.value = slot }
+            override fun saveGameState(slot: Int) { this@RetroArchEmulatorActivity.saveGameState(slot) }
+            override fun loadGameState(slot: Int) { this@RetroArchEmulatorActivity.loadGameState(slot) }
+            override fun getFastForwardRatio(): Int = fastForwardRatio
+            override fun isFastForwardActive(): Boolean = isFastForwardActive.value
+            override fun setFastForwardActive(active: Boolean) { isFastForwardActive.value = active }
+            override fun isAudioMuted(): Boolean = audioMuted.value
+            override fun setAudioMuted(muted: Boolean) { audioMuted.value = muted }
+            override fun getCurrentShader(): com.retroplay.shader.ShaderManager.ShaderPreset = currentShader.value
+            override fun setCurrentShader(shader: com.retroplay.shader.ShaderManager.ShaderPreset) { currentShader.value = shader }
+            override fun isPaused(): Boolean = isPaused
+            override fun setPaused(paused: Boolean) { isPaused = paused }
+            override fun beginRewind(): Boolean = this@RetroArchEmulatorActivity.beginRewind()
+            override fun endRewind() { this@RetroArchEmulatorActivity.endRewind() }
+            override fun notifyRewindUnavailable() { this@RetroArchEmulatorActivity.notifyRewindUnavailable() }
+        })
+        
+        // Initialize EmulatorControlsUseCase
+        emulatorControlsUseCase = EmulatorControlsUseCase(this, retroView, prefs)
+        emulatorControlsUseCase.setCallbacks(object : EmulatorControlsUseCase.ControlsCallbacks {
+            override fun runOnUiThread(action: Runnable) {
+                this@RetroArchEmulatorActivity.runOnUiThread(action)
+            }
+            
+            override fun showToast(message: String, duration: Int) {
+                Toast.makeText(this@RetroArchEmulatorActivity, message, duration).show()
+            }
+            
+            override fun getFastForwardRatio(): Int = fastForwardRatio
+            override fun isFastForwardActive(): MutableState<Boolean> = isFastForwardActive
+            override fun isAudioMuted(): MutableState<Boolean> = audioMuted
+            override fun isQuickActionsBarVisible(): MutableState<Boolean> = quickActionsBarVisible
+            override fun getGameViewBounds(): MutableState<androidx.compose.ui.geometry.Rect?> {
+                // Créer un MutableState si gameViewBoundsForAspectRatio est null
+                if (gameViewBoundsForAspectRatio == null) {
+                    gameViewBoundsForAspectRatio = mutableStateOf(null)
+                }
+                return gameViewBoundsForAspectRatio!!
+            }
+        })
+        
+        // Initialize HandleZapperUseCase
+        handleZapperUseCase = HandleZapperUseCase(this, retroView, prefs, console, customConfigId, gameName)
+        handleZapperUseCase.setCallbacks(object : HandleZapperUseCase.ZapperCallbacks {
+            override fun runOnUiThread(action: Runnable) {
+                this@RetroArchEmulatorActivity.runOnUiThread(action)
+            }
+            override fun showToast(message: String, duration: Int) {
+                Toast.makeText(this@RetroArchEmulatorActivity, message, duration).show()
+            }
+            override fun getCrosshairMode(): MutableState<CrosshairMode> = crosshairMode
+            override fun getResources(): android.content.res.Resources = resources
+        })
+        
+        // Initialize CorePathResolverUseCase
+        corePathResolverUseCase = CorePathResolverUseCase(this, prefs)
+        
+        // Initialize LoadCoreVariablesUseCase
+        loadCoreVariablesUseCase = LoadCoreVariablesUseCase(this, retroView)
+        loadCoreVariablesUseCase.setCallbacks(object : LoadCoreVariablesUseCase.CoreVariablesCallbacks {
+            override fun getCurrentCoreFilePath(): String? = currentCoreFilePath
+            override fun getGameId(): String = gameName
+            override fun getAllCoreVariables(): MutableList<CoreVariable> = allCoreVariables
+            override fun getDipSwitches(): MutableList<CoreVariable> = dipSwitches
+            override fun getCoreOptions(): MutableList<CoreVariable> = coreOptions
+        })
+        
+        // Initialize CheatApplier (must be before CheatManagerUseCase)
+        cheatApplier = com.retroplay.cheat.CheatApplier(retroView)
+        
+        // Initialize CheatManagerUseCase
+        cheatManagerUseCase = CheatManagerUseCase(this, cheatApplier)
+        cheatManagerUseCase.setCallbacks(object : CheatManagerUseCase.CheatManagerCallbacks {
+            override fun getLoadedCheats(): MutableList<com.retroplay.cheat.CheatManager.Cheat> = loadedCheats
+            override fun setCheatFile(file: File?) { cheatFile.value = file }
+            override fun runOnUiThread(action: Runnable) {
+                this@RetroArchEmulatorActivity.runOnUiThread(action)
+            }
+            override fun showToast(message: String, duration: Int) {
+                Toast.makeText(this@RetroArchEmulatorActivity, message, duration).show()
+            }
+        })
+        
+        // Initialize ConfigFileHandlerUseCase (gère les overlays .cfg, pas les configs de core)
+        configFileHandlerUseCase = ConfigFileHandlerUseCase(this, prefs, console)
+        configFileHandlerUseCase.setCallbacks(object : ConfigFileHandlerUseCase.ConfigFileCallbacks {
+            override fun showToast(message: String, duration: Int) {
+                Toast.makeText(this@RetroArchEmulatorActivity, message, duration).show()
+            }
+        })
+        
+        // Initialize ActivityLifecycleUseCase
+        activityLifecycleUseCase = ActivityLifecycleUseCase()
+        activityLifecycleUseCase.setCallbacks(object : ActivityLifecycleUseCase.LifecycleCallbacks {
+            override fun finishActivity() {
+                finish()
+            }
+        })
+        
         rewindManager = RewindManager(retroView, lifecycleScope)
         runAheadManager = com.retroplay.runahead.RunAheadManager(retroView)
         
         // Initialize Native Managers (Radial/Zapper support)
         nativeControllerManager = com.retroplay.input.NativeControllerManager(this, retroView)
-        zapperManager = com.retroplay.input.ZapperManager(this, retroView)
+        // zapperManager = com.retroplay.input.ZapperManager(this, retroView)
         
-        // Use EmulatorConfigHelper for configuration
-        EmulatorConfigHelper.applyRewindSettings(retroPlayConfig, rewindManager, gameCRC, gameName, console)
+        // CRITIQUE: Appliquer les settings Rewind/RunAhead APRÈS l'initialisation des managers
+        // (Les managers sont maintenant initialisés ligne 1121-1122)
+        EmulatorConfigHelper.applyRewindSettings(retroPlayConfig, rewindManager, gameCRC, gameName, console, prefs)
         EmulatorConfigHelper.applyRunAheadSettings(retroPlayConfig, runAheadManager)
         
         lifecycle.addObserver(retroView)
@@ -1642,7 +1186,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                         }
                         
                         // Configure controllers after first frame is rendered (game is loaded and running)
-                        if (!controllerConfigurationDone && !showCoreErrorDialog.value) {
+                        if (!controllerConfigurationDone && !dialogStateManager.showCoreErrorDialog.value) {
                             controllerConfigurationDone = true
                             ControllerHelper.configureControllersAfterGameLoaded(
                                 this@RetroArchEmulatorActivity,
@@ -1651,7 +1195,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                                 prefs,
                                 isZapperGame,
                                 zapperPort,
-                                showCoreErrorDialog.value
+                                dialogStateManager.showCoreErrorDialog.value
                             )
                         }
                     }
@@ -1690,16 +1234,20 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     val needsUserAction = errorCode == GLRetroView.ERROR_LOAD_GAME || 
                                          errorCode == GLRetroView.ERROR_LOAD_LIBRARY
                     
-                    if (needsUserAction) {
-                        val selectedCore = data.coreFilePath ?: "unknown"
-                        Log.w(TAG, "⚠️ Core $selectedCore failed to load game")
-                        
-                        // Extraire le nom du core pour l'affichage (nom lisible)
-                        failedCoreName = getCoreDisplayName(selectedCore)
-                        
-                        // Afficher le dialog d'erreur
-                        runOnUiThread {
-                            showCoreErrorDialog.value = true
+                    if (needsUserAction && loadCoreResult != null) {
+                        val selectedCore = loadCoreResult?.coreFilePath
+                        if (selectedCore != null) {
+                            Log.w(TAG, "⚠️ Core $selectedCore failed to load game")
+                            
+                            // Extraire le nom du core pour l'affichage (nom lisible)
+                            failedCoreName = getCoreDisplayName(selectedCore)
+                            
+                            // Afficher le dialog d'erreur
+                            runOnUiThread {
+                                dialogStateManager.openCoreErrorDialog()
+                            }
+                        } else {
+                            Log.e(TAG, "❌ loadCoreResult.coreFilePath is null")
                         }
                     }
                 }
@@ -1714,19 +1262,26 @@ class RetroArchEmulatorActivity : ComponentActivity() {
             try {
                 // Vérifier si le dialog d'erreur est affiché
                 // Si oui, le jeu n'est PAS chargé correctement, ne pas déclarer le succès
-                if (!showCoreErrorDialog.value) {
-                    // Succès ! Le jeu ne crashe pas avec ce core
-                    Log.i(TAG, "✅ SUCCESS: Game running successfully with core: ${data.coreFilePath}")
-                    
-                    // Nettoyer les infos de crash
-                    crashPrefs.edit().clear().apply()
+                if (!dialogStateManager.showCoreErrorDialog.value && loadCoreResult != null) {
+                    val corePath = loadCoreResult?.coreFilePath
+                    if (corePath != null) {
+                        // Succès ! Le jeu ne crashe pas avec ce core
+                        Log.i(TAG, "✅ SUCCESS: Game running successfully with core: $corePath")
+                        
+                        // Nettoyer les infos de crash
+                        if (::coreManager.isInitialized) {
+                            coreManager.clearCrashPreferences()
+                        }
+                    } else {
+                        Log.w(TAG, "⚠️ loadCoreResult.coreFilePath is null, cannot declare success")
+                    }
                 } else {
                     Log.w(TAG, "⚠️ Error dialog is showing, not declaring success")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error in success detection: ${e.message}")
             }
-        }, CRASH_TIMEOUT_MS)
+        }, 2000L) // 2 secondes pour considérer un crash (CRASH_TIMEOUT_MS)
         
         // Configurer le type de contrôleur pour PSX (DualShock pour analog sticks)
         // TEMPORAIREMENT DÉSACTIVÉ pour tester si c'est la cause du crash
@@ -1764,33 +1319,81 @@ class RetroArchEmulatorActivity : ComponentActivity() {
         // Voir lifecycleScope.launch { retroView.getGLRetroEvents().collect { ... } } ci-dessus (ligne 1753-1763)
         // La fonction configureControllersAfterGameLoaded() gère à la fois les contrôleurs et les extensions N64
 
-        // Initialiser le CheatApplier
-        cheatApplier = com.retroplay.cheat.CheatApplier(retroView)
+        // Initialiser ApplyCheatUseCase (cheatApplier already initialized above)
+        applyCheatUseCase = ApplyCheatUseCase(this, cheatApplier)
         
         // === CHARGER LES DIP SWITCHES ET CORE OPTIONS ===
-        // Attendre que le core expose ses variables (certains cores comme MAME prennent du temps)
-        // Délai réduit à 2 secondes pour s'assurer que le core est complètement initialisé
+        // Attendre que le core expose ses variables (certains cores prennent du temps)
+        // Flycast (Dreamcast) nécessite plus de temps pour charger le CHD et initialiser le hardware rendering
+        val coreVariablesDelay = when (console.lowercase()) {
+
+            else -> 2000L  // Standard delay for other cores
+        }
+        
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             lifecycleScope.launch {
                 try {
                     loadCoreVariables()
+                    Log.i(TAG, "[CORE_VARS] Loaded after ${coreVariablesDelay}ms delay for console: $console")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to load core variables: ${e.message}")
                 }
             }
-        }, 2000)
+        }, coreVariablesDelay)
         
         // Charger la save depuis le slot demandé (si loadSlot > 0)
         // IMPORTANT : Différer le chargement pour laisser le core s'initialiser
+        // NES nécessite plus de temps que les autres consoles pour s'initialiser complètement
         if (loadSlot > 0) {
+            // Délai adaptatif selon la console
+            val saveLoadDelay = when (console.lowercase()) {
+                "nes" -> 3500L  // NES nécessite plus de temps pour éviter l'écran noir
+                "psx", "psp" -> 3000L  // PSX/PSP sont plus lents
+                else -> 2500L  // Autres consoles
+            }
+            
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 lifecycleScope.launch {
-                    val saveFile = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$loadSlot/$gameName.state")
-                    if (saveFile.exists()) {
+                    // Structure : saves/{console}/{gameName}/slot{slot}.state
+                    val gameDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console/$gameName")
+                    val expectedSaveFile = File(gameDir, "slot$loadSlot.state")
+                    
+                    Log.i(TAG, "[SAVE] Looking for save state:")
+                    Log.i(TAG, "  - Console: $console")
+                    Log.i(TAG, "  - Slot: $loadSlot")
+                    Log.i(TAG, "  - Game name: $gameName")
+                    Log.i(TAG, "  - Expected path: ${expectedSaveFile.absolutePath}")
+                    Log.i(TAG, "  - Game dir exists: ${gameDir.exists()}")
+                    
+                    // Vérifier si le répertoire existe et lister son contenu pour déboguer
+                    if (gameDir.exists()) {
+                        val files = gameDir.listFiles()
+                        Log.i(TAG, "  - Files in game dir: ${files?.size ?: 0}")
+                        files?.forEach { file ->
+                            Log.i(TAG, "    - ${file.name} (${file.length()} bytes)")
+                        }
+                    }
+                    
+                    // Essayer d'abord avec le nom exact
+                    var saveFile: File? = if (expectedSaveFile.exists()) expectedSaveFile else null
+                    
+                    // Si pas trouvé, chercher le premier fichier slot{slot}.state dans le répertoire
+                    if (saveFile == null && gameDir.exists()) {
+                        val stateFiles = gameDir.listFiles { _, name -> name.startsWith("slot$loadSlot") && name.endsWith(".state") }
+                        if (stateFiles != null && stateFiles.isNotEmpty()) {
+                            saveFile = stateFiles[0]  // Prendre le premier fichier slot{slot}.state trouvé
+                            Log.w(TAG, "[SAVE] Exact match not found, using first slot$loadSlot.state file: ${saveFile.name}")
+                        }
+                    }
+                    
+                    if (saveFile != null && saveFile.exists()) {
                         try {
                             // CRITIQUE: Appel JNI doit être sur GL Thread
                             val stateBytes = saveFile.readBytes()
-                            runOnGLThread { retroView.unserializeState(stateBytes) }
+                            runOnGLThread { 
+                                retroView.unserializeState(stateBytes)
+                                Log.i(TAG, "[$console] Save state unserialized successfully on GL thread")
+                            }
                             Log.i(TAG, "[$console] Save state loaded from slot $loadSlot: ${saveFile.absolutePath}")
                             Toast.makeText(this@RetroArchEmulatorActivity, "[$console] Loaded from Slot $loadSlot", Toast.LENGTH_SHORT).show()
                         } catch (e: Exception) {
@@ -1798,11 +1401,11 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                             Toast.makeText(this@RetroArchEmulatorActivity, "[$console] Error loading save", Toast.LENGTH_SHORT).show()
                         }
                     } else {
-                        Log.w(TAG, "[$console] No save found in slot $loadSlot")
+                        Log.w(TAG, "[$console] No save found in slot $loadSlot (checked: ${expectedSaveFile.absolutePath})")
                         Toast.makeText(this@RetroArchEmulatorActivity, "[$console] No save in Slot $loadSlot", Toast.LENGTH_SHORT).show()
                     }
                 }
-            }, 2000)  // Attendre 2 secondes pour que le core s'initialise complètement
+            }, saveLoadDelay)  // Délai adaptatif selon la console
         }
         
         // Charger et appliquer les codes de triche activés APRÈS le chargement complet du jeu
@@ -1825,22 +1428,23 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 gameName = gameName,
                 romPath = romPath,
                 prefs = prefs,
-                showMainMenu = showMainMenu,
-                showGamePadSettings = showGamePadSettings,
-                showQuickMenu = showQuickMenu,
-                showGameInfoDialog = showGameInfoDialog,
-                showCheatsDialog = showCheatsDialog,
-                showSmartConfigDialog = showSmartConfigDialog,
-                showPerGameConfigDialog = showPerGameConfigDialog,
-                showCfgBrowser = showCfgBrowser,
-                showTurboSettings = showTurboSettings,
-                showQuickTurbo = showQuickTurbo,
+                showMainMenu = dialogStateManager.showMainMenu,
+                showGamePadSettings = dialogStateManager.showGamePadSettings,
+                showQuickMenu = dialogStateManager.showQuickMenu,
+                showGameInfoDialog = dialogStateManager.showGameInfoDialog,
+                showCheatsDialog = dialogStateManager.showCheatsDialog,
+                showSmartConfigDialog = dialogStateManager.showSmartConfigDialog,
+                showPerGameConfigDialog = dialogStateManager.showPerGameConfigDialog,
+                showCfgBrowser = dialogStateManager.showCfgBrowser,
+                showTurboSettings = dialogStateManager.showTurboSettings,
+                showQuickTurbo = dialogStateManager.showQuickTurbo,
                 gameInfo = gameInfo.value,
                 cheatFile = cheatFile.value,
                 gameCRC = gameCRC,
+                coreFilePath = currentCoreFilePath,  // Pass core file path for config file name
 
                 loadedCheats = loadedCheats,
-                overlaysVisible = overlaysVisible,
+                overlaysVisible = dialogStateManager.overlaysVisible,
                 initialVariant = savedVariant,
                 cheatApplier = cheatApplier,
                 onVariantChanged = { newVariant ->
@@ -1863,13 +1467,41 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     val isLandscapeForSettings = this@RetroArchEmulatorActivity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
                     val orientationForSettings = if (isLandscapeForSettings) "landscape" else "portrait"
                     val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, orientationForSettings)
+                    
+                    // CRITIQUE: Utiliser zapperPort de l'Activity (configuré depuis RetroPlayConfigManager ou détection)
+                    // au lieu de lightgunSettings.lightgunPort qui vient des paramètres overlay
+                    val effectiveZapperPort = if (isZapperGame) zapperPort else lightgunSettings.lightgunPort
+                    
+                    // Charger les paramètres zapper depuis RetroPlayConfigManager si disponible
+                    val effectiveConfig = if (gameName.isNotEmpty() && isZapperGame) {
+                        RetroPlayConfigManager.getEffectiveConfig(console, gameName)
+                    } else if (isZapperGame) {
+                        RetroPlayConfigManager.loadConfig(console)
+                    } else {
+                        null
+                    }
+                    
+                    val triggerOnTouch = effectiveConfig?.zapperTriggerOnTouch ?: lightgunSettings.lightgunTriggerOnTouch
+                    val allowOffscreen = effectiveConfig?.zapperAllowOffscreen ?: lightgunSettings.lightgunAllowOffscreen
+                    val triggerDelay = effectiveConfig?.zapperTriggerDelay ?: lightgunSettings.lightgunTriggerDelay
+                    val pulseDuration = effectiveConfig?.zapperPulseDuration ?: 16  // Default 16ms (1 frame) si pas configuré
+                    
+                    Log.d(TAG, "[ZAPPER] handleZapperTouch called: port=$effectiveZapperPort (from ${if (isZapperGame) "zapperPort" else "lightgunSettings"}), triggerOnTouch=$triggerOnTouch, triggerDelay=$triggerDelay, pulseDuration=$pulseDuration")
+                    
+                    // CRITIQUE: Log supplémentaire pour Chiller (port 0)
+                    if (effectiveZapperPort == 0) {
+                        Log.i(TAG, "[ZAPPER] Chiller mode: Using port 0 (Port 1 NES) for zapper touch")
+                        Log.i(TAG, "[ZAPPER] Chiller config: triggerOnTouch=$triggerOnTouch, allowOffscreen=$allowOffscreen, triggerDelay=$triggerDelay, pulseDuration=$pulseDuration")
+                    }
+                    
                     handleZapperTouch(
                         event, 
                         gameViewBounds.value, 
-                        lightgunSettings.lightgunTriggerOnTouch, 
-                        lightgunSettings.lightgunAllowOffscreen,
-                        lightgunSettings.lightgunTriggerDelay,
-                        lightgunSettings.lightgunPort
+                        triggerOnTouch, 
+                        allowOffscreen,
+                        triggerDelay,
+                        effectiveZapperPort,
+                        pulseDuration
                     )
                 },
                 onLoadState = { slot ->
@@ -1885,17 +1517,21 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     handleLightgunAction(action)
                 },
                 onTurboSettings = {
-                    showTurboSettings.value = true
+                    dialogStateManager.openTurboSettings()
                 },
                 onSmartConfig = {
-                    showSmartConfigDialog.value = true
+                    dialogStateManager.openSmartConfigDialog()
                 },
                 onPerGameConfig = {
                     if (customConfigId != null) {
                         perGameConfigCRC = customConfigId
                         perGameConfigGameName = gameName
-                        showPerGameConfigDialog.value = true
+                        dialogStateManager.openPerGameConfigDialog()
                     }
+                },
+                onZapperConfigChanged = {
+                    // Appliquer la config zapper au runtime après changement de config per-game
+                    applyZapperConfig()
                 },
                 configId = customConfigId,
                 // Quick Wins callbacks
@@ -1906,22 +1542,31 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     endRewind()
                 },
                 onToggleFastForward = {
-                    toggleFastForward()
+                    handleHotkey("toggle_fast_forward")
                 },
                 onToggleAudioMute = {
-                    toggleAudioMute()
+                    handleHotkey("audio_mute_toggle")
                 },
                 onCycleShader = {
-                    cycleShader()
+                    handleHotkey("shader_next")
                 },
                 onToggleQuickActionsBar = {
                     toggleQuickActionsBar()
                 },
                 onConfigureZapper = {
-                    ControllerHelper.configureZapperManually(this@RetroArchEmulatorActivity, retroView)
+                    ControllerHelper.configureZapperManually(
+                        this@RetroArchEmulatorActivity, 
+                        retroView,
+                        gameName,
+                        if (isZapperGame) zapperPort else null
+                    )
                 },
                 onToggleCrosshairMode = {
-                    toggleCrosshairMode()  // Cycle crosshair mode (RetroPlay/FCEUmm/Both/None)
+                    if (::handleZapperUseCase.isInitialized) {
+                        handleZapperUseCase.toggleCrosshairMode()
+                    } else {
+                        toggleCrosshairMode()  // Fallback si handleZapperUseCase pas initialisé
+                    }
                 },
                 isFastForwardActive = isFastForwardActive.value,
                 audioMuted = audioMuted.value,
@@ -1930,12 +1575,12 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 quickActionsBarAutoHideEnabled = quickActionsBarAutoHideEnabled,
                 quickActionsBarAutoHideTimer = quickActionsBarAutoHideTimer,
                 crosshairMode = crosshairMode.value,
-                showDipSwitchDialog = showDipSwitchDialog,
-                showCoreOptionsDialog = showCoreOptionsDialog,
+                showDipSwitchDialog = dialogStateManager.showDipSwitchDialog,
+                showCoreOptionsDialog = dialogStateManager.showCoreOptionsDialog,
                 dipSwitches = dipSwitches,
                 coreOptions = coreOptions,
-                showDiskSwapperDialog = showDiskSwapperDialog,
-                showN64ExtensionsDialog = showN64ExtensionsDialog,
+                showDiskSwapperDialog = dialogStateManager.showDiskSwapperDialog,
+                showN64ExtensionsDialog = dialogStateManager.showN64ExtensionsDialog,
                 n64ExtensionsInfo = n64ExtensionsInfo,
                 availableDisks = availableDisks.intValue,
                 currentDisk = currentDisk.intValue,
@@ -1954,7 +1599,7 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     // Afficher le file browser custom au lieu du SAF Android
                     // Le SAF ne montre pas les .cfg car ils ne sont pas indexés dans MediaStore
                     // Le browser custom lit directement le FS avec MANAGE_EXTERNAL_STORAGE
-                    showCfgBrowser.value = true
+                    dialogStateManager.openCfgBrowser()
                 },
                 // Callbacks pour RetroArchSettingsDialog
                 onShaderChanged = { shaderName ->
@@ -1991,17 +1636,17 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                     Log.i(TAG, "[AUDIO] Mute changed to: $muted")
                 },
                 onVsyncChanged = { enabled: Boolean ->
-                    val config = RetroPlayConfigManager.loadConfig()
-                    RetroPlayConfigManager.saveConfig(config.copy(videoVsync = enabled))
+                    val config = RetroPlayConfigManager.loadConfig(console)
+                    RetroPlayConfigManager.saveConfig(console, config.copy(videoVsync = enabled))
                     // Note: VSync est appliqué au prochain chargement de ROM
                     Log.i(TAG, "[VIDEO] VSync changed to: $enabled")
                 },
                 onRewindEnabledChanged = { enabled: Boolean ->
-                    val config = RetroPlayConfigManager.loadConfig()
+                    val config = RetroPlayConfigManager.loadConfig(console)
                     val newConfig = config.copy(rewindEnable = enabled)
-                    RetroPlayConfigManager.saveConfig(newConfig)
+                    RetroPlayConfigManager.saveConfig(console, newConfig)
                     retroPlayConfig = newConfig
-                    EmulatorConfigHelper.applyRewindSettings(newConfig, rewindManager, gameCRC, gameName, console)
+                    EmulatorConfigHelper.applyRewindSettings(newConfig, rewindManager, gameCRC, gameName, console, prefs)
                     Log.i(TAG, "[REWIND] Enabled changed to: $enabled")
                 },
                 onAspectRatioChanged = onAspectRatioChangedCallback,
@@ -2029,116 +1674,14 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     }
     
     private fun getCorePath(console: String): String {
-        // Vérifier s'il y a un override de core pour ce jeu spécifique
         val gameName = intent.getStringExtra("gameName") ?: ""
         val romPath = intent.getStringExtra("romPath") ?: ""
-        
-        // Construire le chemin relatif du jeu (ex: "fbneo/sega/afighter.zip")
-        val relativePath = if (romPath.contains("/GameLibrary-Data/")) {
-            romPath.substringAfter("/GameLibrary-Data/")
+        return if (::corePathResolverUseCase.isInitialized) {
+            corePathResolverUseCase.getCorePath(console, gameName, romPath)
         } else {
-            ""
+            Log.e(TAG, "CorePathResolverUseCase not initialized")
+            "fceumm_libretro_android.so" // Fallback
         }
-        
-        // Vérifier l'override
-        var coreFileName: String? = null
-        if (relativePath.isNotEmpty()) {
-            val overrideManager = CoreOverrideManager.getInstance()
-            val overrideCoreId = overrideManager.getCoreOverride(relativePath)
-            
-            if (overrideCoreId != null) {
-                Log.i(TAG, "Using core override for $gameName: $overrideCoreId")
-                // Mapper le coreId vers le fichier .so
-                coreFileName = when (overrideCoreId.lowercase()) {
-                    "mame2010" -> "mame2010_libretro_android.so"
-                    "mame2003_plus" -> "mame2003_plus_libretro_android.so"
-                    "mame2003" -> "mame2003_libretro_android.so"
-                    "fbneo" -> "fbneo_libretro_android.so"
-                    "fceumm" -> "fceumm_libretro_android.so"
-                    "mesen" -> "mesen_libretro_android.so"
-                    "snes9x" -> "snes9x_libretro_android.so"
-                    "parallel_n64" -> "parallel_n64_libretro_android.so"
-                    "mupen64plus_next" -> "mupen64plus_next_libretro_android.so"
-                    "mupen64plus_next_gles3" -> "mupen64plus_next_libretro_android.so"
-                    "mupen64plus_next_gles2" -> "mupen64plus_next_gles2_libretro_android.so"
-                    "gambatte" -> "gambatte_libretro_android.so"
-                    "mgba" -> "libmgba_libretro_android.so"
-                    "pcsx_rearmed" -> "pcsx_rearmed_libretro_android.so"
-                    "ppsspp" -> "ppsspp_libretro_android.so"
-                    "genesis_plus_gx" -> "genesis_plus_gx_libretro_android.so"
-                    "picodrive" -> "picodrive_libretro_android.so"
-                    "mednafen_wswan" -> "mednafen_wswan_libretro_android.so"
-                    "wonderswancolor" -> "mednafen_wswan_libretro_android.so"
-                    "wonderswan" -> "mednafen_wswan_libretro_android.so"
-                    "ws" -> "mednafen_wswan_libretro_android.so"
-                    "wsc" -> "mednafen_wswan_libretro_android.so"
-                    "mednafen_ngp" -> "mednafen_ngp_libretro_android.so"
-                    "mednafen_pce" -> "mednafen_pce_libretro_android.so"
-                    "mednafen_lynx" -> "mednafen_lynx_libretro_android.so"
-                    else -> null
-                }
-            }
-        }
-        
-        // Si pas d'override, utiliser la logique par défaut basée sur la console
-        if (coreFileName == null) {
-            // Pour les sous-consoles (ex: fbneo/sega), utiliser le parent (fbneo)
-            val consoleKey = if (console.contains("/")) {
-                console.substringBefore("/").lowercase()
-            } else {
-                console.lowercase()
-            }
-            
-            coreFileName = when (consoleKey) {
-                // Nintendo
-                "nes", "famicom", "fc" -> "fceumm_libretro_android.so"
-                "snes", "sfc", "superfamicom", "super famicom" -> "snes9x_libretro_android.so"
-                "n64" -> "parallel_n64_libretro_android.so"
-                "gb", "gbc" -> "gambatte_libretro_android.so"
-                "gba" -> "libmgba_libretro_android.so"
-                
-                // Sony
-                "psx", "ps1", "playstation" -> "pcsx_rearmed_libretro_android.so"
-                "psp" -> "ppsspp_libretro_android.so"
-                
-                // Sega
-                "genesis", "megadrive", "md" -> "genesis_plus_gx_libretro_android.so"
-                "scd", "segacd" -> "genesis_plus_gx_libretro_android.so"
-                "mastersystem", "sms", "segasms" -> "genesis_plus_gx_libretro_android.so"
-                "gamegear", "gg", "segagg" -> "genesis_plus_gx_libretro_android.so"
-                "32x", "sega32x" -> "picodrive_libretro_android.so"
-                
-                // Atari
-                "atari2600", "atari", "a2600" -> "stella2014_libretro_android.so"
-                "atari5200", "a5200" -> "a5200_libretro_android.so"
-                "atari7800", "a7800" -> "prosystem_libretro_android.so"
-                "lynx", "atarilynx" -> "mednafen_lynx_libretro_android.so"
-                
-                // Other
-                "ngp", "ngc", "neogeopocket" -> "mednafen_ngp_libretro_android.so"
-                "ws", "wsc", "wonderswan", "wonderswancolor" -> "mednafen_wswan_libretro_android.so"
-                "pce", "turbografx", "pcengine" -> "mednafen_pce_libretro_android.so"
-                "arcade" -> "mame2003_plus_libretro_android.so"
-                "mame" -> "mame2010_libretro_android.so"
-                "fbneo", "neogeo", "cps1", "cps2" -> "fbneo_libretro_android.so"
-                
-                else -> {
-                    Log.w(TAG, "No native core for console: $console, using fceumm fallback")
-                    "fceumm_libretro_android.so"
-                }
-            }
-        }
-        
-        // Vérifier si le core est téléchargé dans RetroPlay-Data/cores/
-        val downloadedCorePath = CoreDownloader.getCorePathByFileName(this, coreFileName)
-        if (downloadedCorePath != null) {
-            Log.i(TAG, "Using downloaded core: $downloadedCorePath")
-            return downloadedCorePath
-        }
-        
-        // Sinon, utiliser le core embarqué (juste le nom du fichier)
-        Log.i(TAG, "Using embedded core: $coreFileName")
-        return coreFileName
     }
     
     /**
@@ -2146,76 +1689,37 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * Si le premier core crash, on essaie le suivant automatiquement
      */
     private fun getCoreFallbacks(console: String): List<String> {
-        val consoleKey = if (console.contains("/")) {
-            console.substringBefore("/").lowercase()
+        val gameName = intent.getStringExtra("gameName") ?: ""
+        val romPath = intent.getStringExtra("romPath") ?: ""
+        return if (::corePathResolverUseCase.isInitialized) {
+            corePathResolverUseCase.getCoreFallbacks(console, gameName, romPath)
         } else {
-            console.lowercase()
-        }
-        
-        return when (consoleKey) {
-            // Arcade: FBNeo (plus compatible) → MAME2003+ → MAME2003 → MAME2010
-            "arcade" -> listOf(
-                "fbneo_libretro_android.so",
-                "mame2003_plus_libretro_android.so",
-                "mame2003_libretro_android.so",
-                "mame2010_libretro_android.so"
-            )
-            "mame" -> listOf(
-                "mame2003_plus_libretro_android.so",
-                "mame2003_libretro_android.so",
-                "mame2010_libretro_android.so",
-                "fbneo_libretro_android.so"
-            )
-            "fbneo", "neogeo", "cps1", "cps2" -> listOf(
-                "fbneo_libretro_android.so",
-                "mame2003_plus_libretro_android.so"
-            )
-            
-            // N64: ParaLLEl (performant) → Mupen64Plus (compatible)
-            "n64" -> listOf(
-                "parallel_n64_libretro_android.so",
-                "mupen64plus_next_libretro_android.so"
-            )
-            
-            // Pour les autres consoles, un seul core disponible
-            else -> listOf(getCorePath(console))
+            Log.e(TAG, "CorePathResolverUseCase not initialized")
+            listOf(getCorePath(console))
         }
     }
     
     // Charger et appliquer les codes de triche au démarrage
     private fun loadAndApplyCheats() {
-        try {
-            val cheatManager = com.retroplay.cheat.CheatManager(this)
-            loadedCheats.clear()
-            loadedCheats.addAll(cheatManager.loadCheatsForGame(console, gameName, romPath))
-            
-            if (loadedCheats.isNotEmpty()) {
-                val enabledCount = loadedCheats.count { it.enabled }
-                if (enabledCount > 0) {
-                    Log.i(TAG, "[$console] Loading $enabledCount active cheat(s) for $gameName")
-                    cheatApplier.applyCheatsList(loadedCheats)
-                    
-                    runOnUiThread {
-                        Toast.makeText(this, "[$console] $enabledCount cheat(s) active", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    Log.d(TAG, "[$console] No active cheats for $gameName")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading cheats", e)
+        // Utiliser ApplyCheatUseCase pour charger et appliquer les cheats
+        val (result, cheats) = applyCheatUseCase.loadAndApplyCheats(console, gameName, romPath)
+        
+        // Synchroniser loadedCheats avec les cheats chargés (pour la sauvegarde et l'UI)
+        loadedCheats.clear()
+        loadedCheats.addAll(cheats)
+        
+        if (!result.success) {
+            Log.e(TAG, "Failed to apply cheats: ${result.errorMessage}")
+        } else if (result.enabledCount > 0) {
+            Log.i(TAG, "[$console] Successfully applied ${result.enabledCount} cheat(s) for $gameName")
+        } else if (result.loadedCount > 0) {
+            Log.d(TAG, "[$console] Loaded ${result.loadedCount} cheat(s) for $gameName (none enabled)")
         }
     }
     
     // Sauvegarder l'état des cheats (enabled/disabled) dans le fichier .cht
     private fun saveCheatStates() {
-        try {
-            val cheatManager = com.retroplay.cheat.CheatManager(this)
-            cheatManager.saveEnabledCheats(console, gameName, loadedCheats)
-            Log.i(TAG, "[$console] Saved cheat states for $gameName")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving cheat states", e)
-        }
+        applyCheatUseCase.saveCheatStates(console, gameName, loadedCheats)
     }
     
     /**
@@ -2235,110 +1739,31 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     
     // Sauvegarder l'état du jeu dans un slot (organisé par console/slot)
     private fun saveGameState(slot: Int) {
-        lifecycleScope.launch {
-            try {
-                // Vérifier que le core est chargé avant de sauvegarder
-                if (!retroView.isGameLoaded()) {
-                    Log.w(TAG, "[$console] Cannot save state: game not loaded yet")
-                    runOnUiThread {
-                        Toast.makeText(this@RetroArchEmulatorActivity, "Game not ready for saving", Toast.LENGTH_SHORT).show()
-                    }
-                    return@launch
-                }
-                
-                // Structure : saves/{console}/slot{slot}/{gameName}.state
-                val slotDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot")
-                if (!slotDir.exists()) {
-                    slotDir.mkdirs()
-                }
-                
-                val saveFile = File(slotDir, "${gameName}.state")
-                // CRITIQUE: Appel JNI doit être sur GL Thread
-                val stateData = runOnGLThread { retroView.serializeState() }
-                
-                // Vérifier que les données sont valides
-                if (stateData.isEmpty()) {
-                    Log.w(TAG, "[$console] serializeState returned empty data")
-                    runOnUiThread {
-                        Toast.makeText(this@RetroArchEmulatorActivity, "Save failed: empty state", Toast.LENGTH_SHORT).show()
-                    }
-                    return@launch
-                }
-                
-                saveFile.writeBytes(stateData)
-                
-                Log.i(TAG, "[$console] Game state saved to slot $slot: ${saveFile.absolutePath}")
-                runOnUiThread {
-                    Toast.makeText(this@RetroArchEmulatorActivity, "[$console] Saved to Slot $slot", Toast.LENGTH_SHORT).show()
-                    // Capture screenshot for slot thumbnail
-                    captureSlotThumbnail(slot)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error saving game state to slot $slot", e)
-                runOnUiThread {
-                    Toast.makeText(this@RetroArchEmulatorActivity, "Error saving game", Toast.LENGTH_SHORT).show()
-                }
-            }
+        if (::saveStateUseCase.isInitialized) {
+            saveStateUseCase.saveGameState(slot)
+        } else {
+            Log.e(TAG, "SaveStateUseCase not initialized")
+            Toast.makeText(this, "Save system not ready", Toast.LENGTH_SHORT).show()
         }
     }
     
     // Charger l'état du jeu depuis un slot (organisé par console/slot)
     private fun loadGameState(slot: Int) {
-        lifecycleScope.launch {
-            try {
-                // Structure : saves/{console}/slot{slot}/{gameName}.state
-                val saveFile = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot/${gameName}.state")
-                if (saveFile.exists()) {
-                    // CRITIQUE: Appel JNI doit être sur GL Thread
-                    val stateBytes = saveFile.readBytes()
-                    runOnGLThread { retroView.unserializeState(stateBytes) }
-                    Log.i(TAG, "[$console] Game state loaded from slot $slot: ${saveFile.absolutePath}")
-                    runOnUiThread {
-                        Toast.makeText(this@RetroArchEmulatorActivity, "[$console] Loaded from Slot $slot", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    Log.w(TAG, "No save state found for slot $slot in $console")
-                    runOnUiThread {
-                        Toast.makeText(this@RetroArchEmulatorActivity, "[$console] No save in Slot $slot", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error loading game state from slot $slot", e)
-                runOnUiThread {
-                    Toast.makeText(this@RetroArchEmulatorActivity, "Error loading game", Toast.LENGTH_SHORT).show()
-                }
-            }
+        if (::saveStateUseCase.isInitialized) {
+            saveStateUseCase.loadGameState(slot)
+        } else {
+            Log.e(TAG, "SaveStateUseCase not initialized")
+            Toast.makeText(this, "Load system not ready", Toast.LENGTH_SHORT).show()
         }
     }
     
     // Supprimer une sauvegarde (slot)
     private fun deleteSaveSlot(console: String, gameName: String, slot: Int) {
-        try {
-            val slotDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot")
-            val saveFile = File(slotDir, "${gameName}.state")
-            val thumbnailFile = File(slotDir, "thumbnail.png")
-            
-            var deleted = false
-            if (saveFile.exists()) {
-                saveFile.delete()
-                deleted = true
-                Log.i(TAG, "[$console] Deleted save file: ${saveFile.absolutePath}")
-            }
-            if (thumbnailFile.exists()) {
-                thumbnailFile.delete()
-                Log.i(TAG, "[$console] Deleted thumbnail: ${thumbnailFile.absolutePath}")
-            }
-            
-            if (deleted) {
-                runOnUiThread {
-                    Toast.makeText(this, "[$console] Slot $slot supprimé", Toast.LENGTH_SHORT).show()
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error deleting save slot $slot", e)
-            runOnUiThread {
-                Toast.makeText(this, "Erreur lors de la suppression", Toast.LENGTH_SHORT).show()
-            }
+        if (::saveStateUseCase.isInitialized) {
+            saveStateUseCase.deleteSaveSlot(slot)
+        } else {
+            Log.e(TAG, "SaveStateUseCase not initialized")
+            Toast.makeText(this, "Delete system not ready", Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -2372,145 +1797,19 @@ class RetroArchEmulatorActivity : ComponentActivity() {
     
     // Gérer les hotkeys RetroArch
     private fun handleHotkey(action: String) {
-        Log.i(TAG, "Hotkey triggered: $action")
-        when (action) {
-            // Save/Load states
-            "save_state" -> {
-                saveGameState(currentSaveSlot.value)
-            }
-            "load_state" -> {
-                loadGameState(currentSaveSlot.value)
-            }
-            "state_slot_increase" -> {
-                // Augmenter le slot (0-9, cycle à 0 après 9)
-                currentSaveSlot.value = (currentSaveSlot.value + 1) % 10
-                Log.i(TAG, "State slot increased to: ${currentSaveSlot.value}")
-                runOnUiThread {
-                    Toast.makeText(this, "Slot ${currentSaveSlot.value}", Toast.LENGTH_SHORT).show()
-                }
-            }
-            "state_slot_decrease" -> {
-                // Diminuer le slot (9-0, cycle à 9 après 0)
-                currentSaveSlot.value = if (currentSaveSlot.value == 0) 9 else currentSaveSlot.value - 1
-                Log.i(TAG, "State slot decreased to: ${currentSaveSlot.value}")
-                runOnUiThread {
-                    Toast.makeText(this, "Slot ${currentSaveSlot.value}", Toast.LENGTH_SHORT).show()
-                }
-            }
-            
-            // Fast forward
-            "toggle_fast_forward" -> {
-                toggleFastForward()
-            }
-            "hold_fast_forward" -> {
-                // Hold fast forward (maintenir pour accélérer)
-                retroView.frameSpeed = fastForwardRatio
-                isFastForwardActive.value = true
-                Log.i(TAG, "[FAST_FORWARD] Hold: ${fastForwardRatio}x")
-            }
-            
-            // Audio mute
-            "audio_mute_toggle" -> {
-                toggleAudioMute()
-            }
-            
-            // Shader cycle
-            "shader_next" -> {
-                cycleShader()
-            }
-            
-            "shader_prev" -> {
-                cycleShaderBackward()
-            }
-            
-            // Rewind (nécessite support du core)
-            "rewind" -> {
-                if (beginRewind()) {
-                    lifecycleScope.launch {
-                        delay(250)
-                        endRewind()
-                    }
-                }
-            }
-            
-            // Reset
-            "reset" -> {
-                retroView.reset()
-                Log.i(TAG, "Game reset")
-                runOnUiThread {
-                    Toast.makeText(this, "Game Reset", Toast.LENGTH_SHORT).show()
-                }
-            }
-            
-            // Pause toggle
-            "pause_toggle" -> {
-                isPaused = !isPaused
-                if (isPaused) {
-                    retroView.onPause()
-                    Log.i(TAG, "Game paused")
-                    runOnUiThread {
-                        Toast.makeText(this, "Game Paused", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    retroView.onResume()
-                    Log.i(TAG, "Game resumed")
-                    runOnUiThread {
-                        Toast.makeText(this, "Game Resumed", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            
-            // Screenshot
-            "screenshot" -> {
-                Log.i(TAG, "Screenshot (not implemented yet)")
-                runOnUiThread {
-                    Toast.makeText(this, "Screenshot not implemented", Toast.LENGTH_SHORT).show()
-                }
-            }
-            
-            
-            // Slow motion
-            "toggle_slowmotion" -> {
-                // LibretroDroid frameSpeed est un Int (pas de valeurs < 1)
-                Log.i(TAG, "Slow motion (not supported - frameSpeed must be >= 1)")
-                runOnUiThread {
-                    Toast.makeText(this, "Slow motion not supported", Toast.LENGTH_SHORT).show()
-                }
-            }
-            
-            // Frame advance
-            "frame_advance" -> {
-                // Frame advance = pause + resume (1 frame) + pause
-                // LibretroDroid va rendre 1 frame puis se re-pauser
-                if (!isPaused) {
-                    retroView.onPause()
-                    isPaused = true
-                }
-                // Resume pour 1 frame, puis re-pause via handler
-                retroView.onResume()
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    retroView.onPause()
-                }, 16)  // ~1 frame à 60fps
-                Log.i(TAG, "Frame advance (1 frame)")
-                runOnUiThread {
-                    Toast.makeText(this, "Frame +1", Toast.LENGTH_SHORT).show()
-                }
-            }
-            
-            else -> {
-                Log.w(TAG, "Unknown hotkey: $action")
-            }
+        if (::handleHotkeyUseCase.isInitialized) {
+            handleHotkeyUseCase.handleHotkey(action)
+        } else {
+            Log.e(TAG, "HandleHotkeyUseCase not initialized")
+            Toast.makeText(this, "Hotkey system not ready", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun handleHotkeyChange(action: String, pressed: Boolean) {
-        if (action != "rewind") {
-            return
-        }
-        if (pressed) {
-            beginRewind()
+        if (::handleHotkeyUseCase.isInitialized) {
+            handleHotkeyUseCase.handleHotkeyChange(action, pressed)
         } else {
-            endRewind()
+            Log.e(TAG, "HandleHotkeyUseCase not initialized")
         }
     }
 
@@ -2533,110 +1832,52 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * Convertit le nom de l'action en ID numérique et envoie l'action au port lightgun configuré
      */
     fun handleLightgunAction(action: String) {
-        // Charger les settings lightgun pour obtenir le port (selon orientation)
-        val isLandscapeForSettings = this.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-        val orientationForSettings = if (isLandscapeForSettings) "landscape" else "portrait"
-        val lightgunSettings = com.retroplay.overlay.models.OverlayPreferenceManager.loadAdvancedSettings(prefs, console, orientationForSettings)
-        val port = lightgunSettings.lightgunPort
-        
-        // Convertir le nom de l'action en ID numérique RetroArch
-        val actionId = com.retroplay.overlay.models.RetroArchButtonMapping.lightgunActionToId(action)
-        
-        if (actionId == 0) {
-            Log.w(TAG, "[LIGHTGUN] Unknown lightgun action: $action")
-            return
+        if (::handleZapperUseCase.isInitialized) {
+            handleZapperUseCase.handleLightgunAction(action)
+        } else {
+            Log.e(TAG, "HandleZapperUseCase not initialized")
+            Toast.makeText(this, "Zapper system not ready", Toast.LENGTH_SHORT).show()
         }
-        
-        // Envoyer l'action au port lightgun
-        sendLightgunAction(actionId, port)
-        Log.i(TAG, "[LIGHTGUN] Action '$action' (id=$actionId) sent to port ${port + 1}")
     }
     
     /**
      * Capture a screenshot and save it as a thumbnail for the save slot
      */
     private fun captureSlotThumbnail(slot: Int) {
-        if (retroView == null) return
-        
-        retroView.queueEvent {
-            try {
-                val width = retroView.width
-                val height = retroView.height
-                if (width <= 0 || height <= 0) return@queueEvent
-                
-                val screenshotBitmap = ScreenshotManager.captureScreenshotGL(width, height)
-                if (screenshotBitmap != null) {
-                    // Save thumbnail in the slot directory
-                    val slotDir = File("/storage/emulated/0/GameLibrary-Data/saves/$console/slot$slot")
-                    if (!slotDir.exists()) {
-                        slotDir.mkdirs()
-                    }
-                    
-                    val thumbnailFile = File(slotDir, "thumbnail.png")
-                    FileOutputStream(thumbnailFile).use { out ->
-                        screenshotBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
-                    }
-                    
-                    Log.i(TAG, "[$console] Slot $slot thumbnail saved: ${thumbnailFile.absolutePath}")
-                    screenshotBitmap.recycle()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to capture slot thumbnail", e)
-            }
+        if (::saveStateUseCase.isInitialized) {
+            saveStateUseCase.captureSlotThumbnail(slot)
+        } else {
+            Log.w(TAG, "SaveStateUseCase not initialized, cannot capture thumbnail")
         }
     }
     
     // Quick Win #1: Fast Forward Toggle
     private fun toggleFastForward() {
-        isFastForwardActive.value = !isFastForwardActive.value
-        val speed = if (isFastForwardActive.value) fastForwardRatio else 1
-        retroView.frameSpeed = speed
-        Log.i(TAG, "[FAST_FORWARD] ${if (isFastForwardActive.value) "ENABLED (${fastForwardRatio}x)" else "DISABLED (1x)"}")
-        
-        // Sauvegarder l'état dans SharedPreferences
-        prefs.edit().putBoolean("emulation_fast_forward_active", isFastForwardActive.value).apply()
-        
-        runOnUiThread {
-            Toast.makeText(
-                this,
-                if (isFastForwardActive.value) "Fast Forward: ${fastForwardRatio}x" else "Normal Speed",
-                Toast.LENGTH_SHORT
-            ).show()
+        if (::emulatorControlsUseCase.isInitialized) {
+            emulatorControlsUseCase.toggleFastForward()
+        } else {
+            Log.e(TAG, "EmulatorControlsUseCase not initialized")
+            Toast.makeText(this, "Controls system not ready", Toast.LENGTH_SHORT).show()
         }
     }
     
     // Quick Win #2: Audio Mute Toggle
     private fun toggleAudioMute() {
-        audioMuted.value = !audioMuted.value
-        retroView.audioEnabled = !audioMuted.value
-        Log.i(TAG, "[AUDIO] ${if (audioMuted.value) "MUTED" else "UNMUTED"}")
-        
-        // Sauvegarder l'état dans SharedPreferences
-        prefs.edit().putBoolean("emulation_audio_muted", audioMuted.value).apply()
-        
-        runOnUiThread {
-            Toast.makeText(
-                this,
-                if (audioMuted.value) "Audio Muted" else "Audio Unmuted",
-                Toast.LENGTH_SHORT
-            ).show()
+        if (::emulatorControlsUseCase.isInitialized) {
+            emulatorControlsUseCase.toggleAudioMute()
+        } else {
+            Log.e(TAG, "EmulatorControlsUseCase not initialized")
+            Toast.makeText(this, "Controls system not ready", Toast.LENGTH_SHORT).show()
         }
     }
     
     // QuickActionsBar Visibility Toggle
     private fun toggleQuickActionsBar() {
-        quickActionsBarVisible.value = !quickActionsBarVisible.value
-        Log.i(TAG, "[QUICK_ACTIONS_BAR] ${if (quickActionsBarVisible.value) "VISIBLE" else "HIDDEN"}")
-        
-        // Sauvegarder l'état dans SharedPreferences
-        prefs.edit().putBoolean("emulation_quick_actions_bar_visible", quickActionsBarVisible.value).apply()
-        
-        runOnUiThread {
-            Toast.makeText(
-                this,
-                if (quickActionsBarVisible.value) "Quick Actions Bar Visible" else "Quick Actions Bar Hidden",
-                Toast.LENGTH_SHORT
-            ).show()
+        if (::emulatorControlsUseCase.isInitialized) {
+            emulatorControlsUseCase.toggleQuickActionsBar()
+        } else {
+            Log.e(TAG, "EmulatorControlsUseCase not initialized")
+            Toast.makeText(this, "Controls system not ready", Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -2645,132 +1886,19 @@ class RetroArchEmulatorActivity : ComponentActivity() {
      * @param aspectRatioString Aspect ratio sélectionné ("AUTO", "4:3", "16:9", etc.)
      */
     fun applyAspectRatio(aspectRatioString: String) {
-        if (aspectRatioString == "AUTO") {
-            // Mode AUTO: utiliser l'aspect ratio du core (viewport plein écran)
-            runOnUiThread {
-                retroView.viewport = android.graphics.RectF(0f, 0f, 1f, 1f)
-                Log.i(TAG, "[ASPECT_RATIO] Reset to AUTO (core default)")
-            }
-            return
-        }
-        
-        // Convertir le string en float (ex: "4:3" -> 1.333f)
-        val targetAspectRatio = when (aspectRatioString) {
-            "4:3" -> 4f / 3f
-            "16:9" -> 16f / 9f
-            "16:10" -> 16f / 10f
-            "1:1" -> 1f / 1f
-            "21:9" -> 21f / 9f
-            else -> {
-                Log.w(TAG, "[ASPECT_RATIO] Unknown ratio: $aspectRatioString, using AUTO")
-                runOnUiThread {
-                    retroView.viewport = android.graphics.RectF(0f, 0f, 1f, 1f)
-                }
-                return
-            }
-        }
-        
-        // Récupérer les bounds du GLRetroView
-        val bounds = gameViewBoundsForAspectRatio?.value
-        if (bounds == null) {
-            // Retry après un court délai si bounds pas disponible
-            Log.w(TAG, "[ASPECT_RATIO] GLRetroView bounds not available yet, will retry")
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        if (::emulatorControlsUseCase.isInitialized) {
+            emulatorControlsUseCase.applyAspectRatio(aspectRatioString, console) {
+                // Retry callback
                 applyAspectRatio(aspectRatioString)
-            }, 100)
-            return
-        }
-        
-        val screenWidth = bounds.width
-        val screenHeight = bounds.height
-        val screenAspectRatio = screenWidth / screenHeight
-        
-        // Calculer le viewport avec letterboxing
-        val viewport = if (screenAspectRatio > targetAspectRatio) {
-            // Écran plus large que le ratio cible → Bandes noires à gauche/droite
-            val gameWidth = screenHeight * targetAspectRatio
-            val letterboxWidth = (screenWidth - gameWidth) / 2f
-            val left = letterboxWidth / screenWidth
-            val right = 1f - left
-            android.graphics.RectF(left, 0f, right, 1f)
+            }
         } else {
-            // Écran plus haut que le ratio cible → Bandes noires en haut/bas
-            val gameHeight = screenWidth / targetAspectRatio
-            val letterboxHeight = (screenHeight - gameHeight) / 2f
-            val top = letterboxHeight / screenHeight
-            val bottom = 1f - top
-            android.graphics.RectF(0f, top, 1f, bottom)
-        }
-        
-        // Appliquer le viewport
-        runOnUiThread {
-            retroView.viewport = viewport
-            Log.i(TAG, "[ASPECT_RATIO] Applied $aspectRatioString (${targetAspectRatio}): viewport=(${viewport.left}, ${viewport.top}, ${viewport.right}, ${viewport.bottom})")
+            Log.e(TAG, "EmulatorControlsUseCase not initialized")
+            Toast.makeText(this, "Controls system not ready", Toast.LENGTH_SHORT).show()
         }
     }
     
-    // Quick Win #4: Shader Cycle (Next shader)
-    private fun cycleShader() {
-        // Calculate next shader on Main Thread (safe)
-        val nextShader = com.retroplay.shader.ShaderManager.getNextShader(currentShader.value)
-        // Update state immediately for UI response
-        currentShader.value = nextShader
-        
-        // Save preference
-        prefs.edit().putString("emulation_shader_preset", nextShader.name).apply()
-
-        // Apply to RetroView on GL Thread (CRITICAL: Context must be valid)
-        try {
-            if (::retroView.isInitialized) {
-                retroView.queueEvent {
-                    try {
-                        val shaderConfig = com.retroplay.shader.ShaderManager.getShaderConfig(nextShader)
-                        retroView.shader = shaderConfig
-                        Log.i(TAG, "[SHADER] Cycle Applied (GL Thread): ${nextShader.displayName}")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "[SHADER] Error setting shader on GLThread", e)
-                    }
-                }
-            } else {
-                Log.w(TAG, "[SHADER] Loop skipped - retroView not initialized")
-            }
-
-            // Show Toast on UI Thread
-            runOnUiThread {
-                Toast.makeText(
-                    this,
-                    "Shader: ${nextShader.displayName}",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "[SHADER] Error scheduling shader update", e)
-            Toast.makeText(this, "Shader Error", Toast.LENGTH_SHORT).show()
-        }
-    }
-    
-    /**
-     * Cycle vers le shader précédent
-     */
-    private fun cycleShaderBackward() {
-        currentShader.value = com.retroplay.shader.ShaderManager.getPreviousShader(currentShader.value)
-        val shaderConfig = com.retroplay.shader.ShaderManager.getShaderConfig(currentShader.value)
-        retroView.shader = shaderConfig
-        
-        Log.i(TAG, "[SHADER] Switched to (prev): ${currentShader.value.displayName}")
-        Log.i(TAG, "[SHADER] ShaderConfig type: ${shaderConfig.javaClass.simpleName}")
-        
-        // Sauvegarder dans SharedPreferences
-        prefs.edit().putString("emulation_shader_preset", currentShader.value.name).apply()
-        
-        runOnUiThread {
-            Toast.makeText(
-                this,
-                "Shader: ${currentShader.value.displayName}",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
+    // Quick Win #4: Shader Cycle (Next/Prev shader)
+    // Délégué à HandleHotkeyUseCase via handleHotkey("shader_next") ou handleHotkey("shader_prev")
     
     // Toggle Crosshair Mode (Cycle entre RetroPlay / FCEUmm / Both / None)
     private fun toggleCrosshairMode() {
@@ -2798,6 +1926,25 @@ class RetroArchEmulatorActivity : ComponentActivity() {
                 "Crosshair: ${crosshairMode.value.displayName}",
                 Toast.LENGTH_SHORT
             ).show()
+        }
+    }
+    
+    /**
+     * Applique la config zapper au runtime (appelé après changement de config per-game)
+     * Applique la configuration sauvegardée pour les jeux zapper NES
+     */
+    private fun applyZapperConfig() {
+        if (console == "nes" && isZapperGame) {
+            try {
+                val config = CoreConfigManager.loadConfig(this, "FCEUmm").toMutableMap()
+                
+                // Appliquer au core sans redémarrer
+                val nesVariables = config.map { (key, value) -> com.swordfish.libretrodroid.Variable(key, value) }.toTypedArray()
+                retroView.updateVariables(*nesVariables)
+                Log.i(TAG, "[ZAPPER] Applied zapper config from FCEUmm.cfg")
+            } catch (e: Exception) {
+                Log.e(TAG, "[ZAPPER] Failed to apply zapper config: ${e.message}", e)
+            }
         }
     }
     

@@ -101,6 +101,7 @@ class GLRetroView(
             data.coreFilePath,
             data.systemDirectory,
             data.savesDirectory,
+            context.filesDir.absolutePath,
             data.variables,
             buildShader(data.shader),
             getDefaultRefreshRate(),

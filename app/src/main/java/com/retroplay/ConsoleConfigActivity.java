@@ -16,6 +16,9 @@ import com.google.android.material.button.MaterialButton;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import com.retroplay.helpers.ConsoleNameHelper;
+import com.retroplay.helpers.GameLibraryPaths;
+import com.retroplay.ConsoleNameMapper;
 
 public class ConsoleConfigActivity extends AppCompatActivity {
 
@@ -86,10 +89,13 @@ public class ConsoleConfigActivity extends AppCompatActivity {
         setContentView(R.layout.activity_console_config);
 
         // Get console from intent
-        currentConsole = getIntent().getStringExtra("console");
-        if (currentConsole == null) {
-            currentConsole = "nes";
+        String rawConsole = getIntent().getStringExtra("console");
+        if (rawConsole == null) {
+            rawConsole = "nes";
         }
+
+        // Normalize console name using central mapper
+        currentConsole = ConsoleNameMapper.normalizeToCanonical(rawConsole);
 
         // Initialize SharedPreferences
         prefs = getSharedPreferences("console_config", Context.MODE_PRIVATE);
@@ -472,15 +478,7 @@ public class ConsoleConfigActivity extends AppCompatActivity {
     }
 
     private String getDefaultCore() {
-        switch (currentConsole) {
-            case "snes":
-                return "snes9x";
-            case "n64":
-                return "parallel_n64";
-            case "nes":
-            default:
-                return "fceumm";
-        }
+        return ConsoleNameHelper.getDefaultCore(currentConsole);
     }
 
     /**
@@ -521,8 +519,9 @@ public class ConsoleConfigActivity extends AppCompatActivity {
 
     private static String readCoreFromConsoleJson(String console) {
         try {
-            java.io.File consoleJsonFile = new java.io.File(
-                    "/storage/emulated/0/GameLibrary-Data/" + console + "/console.json");
+            // Use centralized path from GameLibraryPaths
+            String configPath = GameLibraryPaths.getConsoleConfigPath(console);
+            java.io.File consoleJsonFile = new java.io.File(configPath);
 
             if (consoleJsonFile.exists()) {
                 java.io.FileInputStream fis = new java.io.FileInputStream(consoleJsonFile);
@@ -547,120 +546,7 @@ public class ConsoleConfigActivity extends AppCompatActivity {
     }
 
     private static String getDefaultCoreStatic(String console) {
-        switch (console.toLowerCase()) {
-            // Nintendo consoles
-            case "nes":
-            case "famicom":
-                return "fceumm";
-            case "snes":
-            case "sfc":
-                return "snes9x";
-            case "n64":
-                return "parallel_n64";
-            case "gb":
-                return "gambatte";
-            case "gbc":
-                return "gambatte";
-            case "gba":
-                return "mgba";
-            case "nds":
-            case "ds":
-                return "melonds";
-
-            // Sega consoles
-            case "genesis":
-            case "megadrive":
-            case "md":
-                return "genesis_plus_gx";
-            case "mastersystem":
-            case "sms":
-                return "genesis_plus_gx";
-            case "gamegear":
-            case "gg":
-                return "genesis_plus_gx";
-            case "sega32x":
-            case "32x":
-                return "picodrive";
-            case "segacd":
-            case "megacd":
-                return "genesis_plus_gx";
-            case "saturn":
-                return "yabause";
-            case "dreamcast":
-            case "dc":
-                return "flycast";
-
-            // Sony consoles
-            case "ps1":
-            case "psx":
-            case "playstation":
-                return "pcsx_rearmed";
-            case "psp":
-                return "ppsspp";
-
-            // Atari
-            case "atari2600":
-            case "2600":
-                return "stella2014";
-            case "atari5200":
-            case "5200":
-                return "a5200";
-            case "atari7800":
-            case "7800":
-                return "prosystem";
-            case "lynx":
-                return "handy";
-            case "jaguar":
-                return "virtualjaguar";
-
-            // Other systems
-            case "3do":
-                return "opera";
-
-            // Arcade
-            case "arcade":
-                return "fbneo";
-            case "mame":
-                return "mame2010";
-            case "fbneo":
-                return "fbneo";
-            case "cps1":
-                return "fbalpha2012_cps1";
-            case "cps2":
-                return "fbalpha2012_cps2";
-            case "cps3":
-                return "fbneo";
-
-            case "neogeo":
-                return "fbneo";
-            case "ngp":
-                return "mednafen_ngp";
-            case "wonderswan":
-            case "ws":
-            case "wsc":
-                return "mednafen_wswan";
-            case "pcengine":
-            case "turbografx":
-            case "pce":
-                return "mednafen_pce";
-            case "virtualboy":
-            case "vb":
-                return "beetle_vb";
-            case "colecovision":
-            case "coleco":
-                return "gearcoleco";
-            case "dos":
-                return "dosbox_pure";
-            case "amiga":
-                return "puae";
-            case "c64":
-            case "commodore64":
-                return "vice_x64";
-
-            // Default
-            default:
-                return "auto";
-        }
+        return ConsoleNameHelper.getDefaultCore(console);
     }
 
     /**

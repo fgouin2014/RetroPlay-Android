@@ -12,18 +12,10 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Activity pour afficher tous les jeux favoris, toutes consoles confondues
@@ -42,14 +34,6 @@ public class FavoritesActivity extends AppCompatActivity implements GameAdapter.
     private List<Game> favoriteGames = new ArrayList<>();
     private GameAdapter adapter;
     private FavoritesManager favoritesManager;
-    
-    private static final String[] CONSOLE_IDS = {
-        "nes", "snes", "n64", "gba", "gbc", "gb",
-        "genesis", "segacd", "sega32x", "gamegear", "mastersystem",
-        "psx", "psp",
-        "atari2600", "atari7800", "lynx",
-        "nds", "3do", "jaguar", "ngp", "ws", "pce", "arcade", "mame2003"
-    };
     
     private String currentSort = "A-Z"; // A-Z, Z-A, CONSOLE
 
@@ -104,33 +88,27 @@ public class FavoritesActivity extends AppCompatActivity implements GameAdapter.
         emptyState.setVisibility(View.GONE);
         
         new Thread(() -> {
-            List<Game> allFavorites = new ArrayList<>();
-            Set<String> favoriteKeys = favoritesManager.getFavoriteKeys();
+            // Utiliser LoadFavoritesUseCase pour charger les favoris depuis toutes les consoles
+            android.content.SharedPreferences prefs = getSharedPreferences("game_library_prefs", MODE_PRIVATE);
+            com.retroplay.usecases.LoadFavoritesUseCase loadFavoritesUseCase = 
+                new com.retroplay.usecases.LoadFavoritesUseCase(this, prefs);
+            com.retroplay.usecases.LoadFavoritesUseCase.LoadFavoritesResult result = 
+                loadFavoritesUseCase.loadAllFavorites();
             
-            Log.i(TAG, "Loading favorites: " + favoriteKeys.size() + " favorite keys found");
+            List<Game> allFavorites = result.favorites;
             
-            // Pour chaque console, charger les jeux et filtrer les favoris
-            for (String consoleId : CONSOLE_IDS) {
-                try {
-                    List<Game> consoleGames = loadGamesForConsole(consoleId);
-                    
-                    // Filtrer les favoris pour cette console
-                    for (Game game : consoleGames) {
-                        if (favoritesManager.isFavorite(game)) {
-                            game.setFavorite(true);
-                            allFavorites.add(game);
-                            Log.d(TAG, "Found favorite: " + game.getName() + " (" + consoleId + ")");
-                        }
-                    }
-                } catch (Exception e) {
-                    Log.w(TAG, "Could not load games for console: " + consoleId, e);
-                }
+            if (!result.success) {
+                Log.e(TAG, "Failed to load favorites: " + result.errorMessage);
+                allFavorites = new ArrayList<>();
             }
             
-            Log.i(TAG, "Total favorites loaded: " + allFavorites.size());
+            // Créer une variable finale pour la lambda
+            final List<Game> finalFavorites = allFavorites;
+            
+            Log.i(TAG, "Total favorites loaded: " + finalFavorites.size());
             
             runOnUiThread(() -> {
-                favoriteGames = allFavorites;
+                favoriteGames = finalFavorites;
                 sortGames();
                 
                 adapter = new GameAdapter(favoriteGames, this);
@@ -149,53 +127,6 @@ public class FavoritesActivity extends AppCompatActivity implements GameAdapter.
                 }
             });
         }).start();
-    }
-    
-    private List<Game> loadGamesForConsole(String consoleId) throws Exception {
-        List<Game> games = new ArrayList<>();
-        
-        String urlString = "http://localhost:7777/gamedata/" + consoleId + "/gamelist.json";
-        URL url = new URL(urlString);
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setRequestMethod("GET");
-        conn.setConnectTimeout(3000);
-        conn.setReadTimeout(3000);
-        
-        int responseCode = conn.getResponseCode();
-        if (responseCode != 200) {
-            throw new Exception("HTTP error: " + responseCode);
-        }
-        
-        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-        StringBuilder response = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            response.append(line);
-        }
-        reader.close();
-        conn.disconnect();
-        
-        // Parse JSON
-        JSONObject jsonObj = new JSONObject(response.toString());
-        JSONArray arr = jsonObj.getJSONArray("games");
-        
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject obj = arr.getJSONObject(i);
-            Game game = new Game(
-                obj.getString("id"),
-                obj.getString("name"),
-                obj.getString("path"),
-                obj.getString("desc"),
-                obj.getString("releasedate"),
-                obj.getString("genre"),
-                obj.getString("players")
-            );
-            game.setConsole(consoleId);
-            game.initializePaths(null);
-            games.add(game);
-        }
-        
-        return games;
     }
     
     private void toggleSort() {

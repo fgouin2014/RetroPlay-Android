@@ -1,5 +1,6 @@
 package com.retroplay
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,9 +28,12 @@ fun CoreOptionsDialog(
     onDismiss: () -> Unit
 ) {
     // État local pour les modifications
-    val modifiedValues = remember {
+    // CRITIQUE: Utiliser remember(coreOptions) pour réinitialiser si coreOptions change
+    val modifiedValues = remember(coreOptions) {
         mutableStateMapOf<String, String>().apply {
-            coreOptions.forEach { putAll(mapOf(it.key to it.currentValue)) }
+            coreOptions.forEach { opt ->
+                put(opt.key, opt.currentValue)
+            }
         }
     }
     
@@ -66,9 +71,11 @@ fun CoreOptionsDialog(
                     )
                 } else {
                     coreOptions.forEach { option ->
+                        val displayValue = modifiedValues[option.key] ?: option.currentValue
+                        
                         CoreOptionItem(
                             option = option,
-                            currentValue = modifiedValues[option.key] ?: option.currentValue,
+                            currentValue = displayValue,
                             onValueChange = { newValue ->
                                 modifiedValues[option.key] = newValue
                             }
@@ -146,56 +153,91 @@ private fun CoreOptionItem(
             }
         } else {
             // Dropdown pour les valeurs multiples
-            var expanded by remember { mutableStateOf(false) }
-            
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { expanded = true },
-                    shape = MaterialTheme.shapes.small,
-                    color = Color(0xFF3C3C3C)
-                ) {
+            if (option.possibleValues.isEmpty()) {
+                // Option sans valeurs possibles - afficher en lecture seule
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = currentValue,
-                            color = Color.White,
-                            fontSize = 14.sp
+                            text = currentValue.ifEmpty { "N/A" },
+                            color = Color(0xFF888888),
+                            fontSize = 14.sp,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontStyle = FontStyle.Italic
+                            )
                         )
                         Text(
-                            text = "▼",
-                            color = Color(0xFF4CAF50),
+                            text = "(Read-only)",
+                            color = Color(0xFF666666),
                             fontSize = 12.sp
                         )
                     }
                 }
+            } else {
+                // Dropdown normal avec valeurs possibles
+                var expanded by remember { mutableStateOf(false) }
                 
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF3C3C3C))
-                ) {
-                    option.possibleValues.forEach { value ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = value,
-                                    color = if (value == currentValue) Color(0xFF4CAF50) else Color.White
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expanded = true },
+                        shape = MaterialTheme.shapes.small,
+                        color = Color(0xFF3C3C3C)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = currentValue.ifEmpty { "N/A" },
+                                color = Color.White,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "▼",
+                                color = Color(0xFF4CAF50),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                    
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1E1E1E))  // Fond plus foncé pour meilleur contraste
+                    ) {
+                        option.possibleValues.forEach { value ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = value,
+                                        color = if (value == currentValue) Color(0xFF4CAF50) else Color.White,  // Texte blanc sur fond foncé
+                                        fontSize = 14.sp
+                                    )
+                                },
+                                onClick = {
+                                    onValueChange(value)
+                                    expanded = false
+                                },
+                                colors = MenuDefaults.itemColors(
+                                    textColor = Color.White,
+                                    leadingIconColor = Color.White,
+                                    trailingIconColor = Color.White,
+                                    disabledTextColor = Color(0xFF666666),
+                                    disabledLeadingIconColor = Color(0xFF666666),
+                                    disabledTrailingIconColor = Color(0xFF666666)
                                 )
-                            },
-                            onClick = {
-                                onValueChange(value)
-                                expanded = false
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }

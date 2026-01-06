@@ -1,5 +1,6 @@
 package com.retroplay
 
+import android.util.Log
 import android.view.MotionEvent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,8 +40,11 @@ fun ZapperCrosshair(
                 isTouching = event.actionMasked == MotionEvent.ACTION_DOWN || 
                              event.actionMasked == MotionEvent.ACTION_MOVE
                 
-                // Envoyer l'événement au handler
-                onTouch(event)
+                // Envoyer l'événement au handler et RETOURNER sa valeur
+                // CRITIQUE: Retourner la valeur pour que le pointerInteropFilter consomme ou laisse passer l'événement
+                val handled = onTouch(event)
+                Log.d("ZapperCrosshair", "[CROSSHAIR] Touch event: action=${event.actionMasked}, handled=$handled")
+                handled
             }
     ) {
         // Afficher le réticule uniquement quand l'utilisateur touche l'écran ET que visible=true

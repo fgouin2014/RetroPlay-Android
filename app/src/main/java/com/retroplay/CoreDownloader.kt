@@ -50,7 +50,9 @@ object CoreDownloader {
             CoreInfo("mupen64plus_next", "mupen64plus_next_libretro_android.so", "Nintendo - N64 (Mupen64Plus Next)"),
             CoreInfo("mupen64plus_next_gles2", "mupen64plus_next_gles2_libretro_android.so", "Nintendo - N64 (Mupen64Plus GLES2)"),
             CoreInfo("gambatte", "gambatte_libretro_android.so", "Nintendo - GB/GBC (Gambatte)"),
-            CoreInfo("mgba", "libmgba_libretro_android.so", "Nintendo - GBA (mGBA)"),
+            CoreInfo("mgba", "mgba_libretro_android.so", "Nintendo - GBA (mGBA)"),
+            CoreInfo("melonds", "melonds_libretro_android.so", "Nintendo - DS (melonDS)"),
+            CoreInfo("desmume", "desmume_libretro_android.so", "Nintendo - DS (DeSmuME)"),
             
             // Sega
             CoreInfo("genesis_plus_gx", "genesis_plus_gx_libretro_android.so", "Sega - Genesis/MD/MS/GG (Genesis Plus GX)"),
@@ -78,7 +80,7 @@ object CoreDownloader {
             CoreInfo("mednafen_pce", "mednafen_pce_libretro_android.so", "NEC - PC Engine / TurboGrafx-16 (Mednafen)"),
             CoreInfo("mednafen_ngp", "mednafen_ngp_libretro_android.so", "SNK - Neo Geo Pocket (Mednafen)"),
             CoreInfo("mednafen_wswan", "mednafen_wswan_libretro_android.so", "Bandai - WonderSwan (Mednafen)"),
-            CoreInfo("flycast", "flycast_libretro_android.so", "Sega - Dreamcast (Flycast)"),
+
             
             // Commodore
             CoreInfo("vice_x64", "vice_x64_libretro_android.so", "Commodore - 64 (VICE x64)"),
@@ -203,12 +205,25 @@ object CoreDownloader {
     }
     
     /**
-     * Vérifie si un core est déjà installé
+     * Vérifie si un core est déjà installé (téléchargé ou intégré)
      */
     fun isCoreInstalled(context: Context, coreInfo: CoreInfo): Boolean {
+        // 1. Vérifier si téléchargé
         val coresDir = File(getCoresDirectory(context))
         val coreFile = File(coresDir, coreInfo.fileName)
-        return coreFile.exists()
+        if (coreFile.exists()) return true
+
+        // 2. Vérifier si intégré (bibliothèque native de l'app)
+        return isCoreEmbedded(context, coreInfo)
+    }
+
+    /**
+     * Vérifie si un core est intégré à l'application (lib native)
+     */
+    fun isCoreEmbedded(context: Context, coreInfo: CoreInfo): Boolean {
+        val nativeLibraryDir = context.applicationInfo.nativeLibraryDir
+        val nativeFile = File(nativeLibraryDir, coreInfo.fileName)
+        return nativeFile.exists()
     }
     
     /**
@@ -236,18 +251,34 @@ object CoreDownloader {
      * @return Chemin absolu vers le .so ou null si non installé
      */
     fun getCorePath(context: Context, coreInfo: CoreInfo): String? {
+        // 1. Priorité aux cores téléchargés
         val coresDir = File(getCoresDirectory(context))
         val coreFile = File(coresDir, coreInfo.fileName)
-        return if (coreFile.exists()) coreFile.absolutePath else null
+        if (coreFile.exists()) return coreFile.absolutePath
+
+        // 2. Fallback aux cores intégrés
+        val nativeLibraryDir = context.applicationInfo.nativeLibraryDir
+        val nativeFile = File(nativeLibraryDir, coreInfo.fileName)
+        if (nativeFile.exists()) return nativeFile.absolutePath
+
+        return null
     }
     
     /**
      * Obtient le chemin complet vers un core par son nom de fichier
      */
     fun getCorePathByFileName(context: Context, fileName: String): String? {
+        // 1. Priorité aux cores téléchargés
         val coresDir = File(getCoresDirectory(context))
         val coreFile = File(coresDir, fileName)
-        return if (coreFile.exists()) coreFile.absolutePath else null
+        if (coreFile.exists()) return coreFile.absolutePath
+
+        // 2. Fallback aux cores intégrés
+        val nativeLibraryDir = context.applicationInfo.nativeLibraryDir
+        val nativeFile = File(nativeLibraryDir, fileName)
+        if (nativeFile.exists()) return nativeFile.absolutePath
+
+        return null
     }
     
     data class CoreInfo(

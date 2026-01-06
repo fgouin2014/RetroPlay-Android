@@ -44,6 +44,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.retroplay.CoreSelector
 import com.retroplay.CoreSelectorDialog
 import com.retroplay.CoreVariable
+import com.retroplay.CoreOptionsDialog
 import com.retroplay.CrosshairMode
 import com.retroplay.GamePadLayoutManager
 import com.retroplay.QuickTurboMenu
@@ -69,6 +70,7 @@ import com.retroplay.ui.dialogs.EmulationSettingsDialog
 
 import com.retroplay.ui.dialogs.CoreErrorDialog
 import com.retroplay.ui.dialogs.GamePadSettingsDialog
+import com.retroplay.ui.dialogs.UnifiedSettingsDialog
 import com.retroplay.ui.dialogs.QuickActionsMenu
 import com.retroplay.ui.dialogs.QuickMenuDialog
 import com.retroplay.ui.dialogs.SlotSelectionDialog
@@ -132,6 +134,7 @@ fun ComposeEmulatorScreen(
     onConfigureZapper: () -> Unit = {},  // TEST: Configure Zapper manuellement
     onToggleCrosshairMode: () -> Unit = {},  // Toggle Crosshair mode (RetroPlay/FCEUmm/Both/None)
     isFastForwardActive: Boolean = false,
+    coreFilePath: String? = null,  // Optional core file path for config file name
     audioMuted: Boolean = false,
     currentShaderName: String = "None",
     quickActionsBarVisible: Boolean = true,
@@ -162,6 +165,7 @@ fun ComposeEmulatorScreen(
     onSmartConfig: () -> Unit = {},
     onPerGameConfig: () -> Unit = {},
     onDipSwitches: () -> Unit = {},
+    onZapperConfigChanged: (() -> Unit)? = null,  // Callback pour appliquer config zapper au runtime
     onCoreOptions: () -> Unit = {},
     onDiskSwapper: () -> Unit = {}
 ) {
@@ -693,7 +697,6 @@ fun ComposeEmulatorScreen(
                 // États locaux pour les sous-menus
                 var showSaveSlots by remember { mutableStateOf(false) }
                 var showLoadSlots by remember { mutableStateOf(false) }
-                var showCheatCodes by remember { mutableStateOf(false) }
                 var showCoreSelector by remember { mutableStateOf(false) }
                 var showRestartDialog by remember { mutableStateOf(false) }
                 var selectedCoreForRestart by remember { mutableStateOf<String?>(null) }
@@ -871,7 +874,7 @@ fun ComposeEmulatorScreen(
                         },
                         hasGameInfo = (gameCRC?.isNotEmpty() == true),
                         hasDipSwitches = dipSwitches.isNotEmpty(),
-                        hasCoreOptions = coreOptions.isNotEmpty(),
+                        hasCoreOptions = true, // All libretro cores support core options
                         availableDisks = availableDisks
                     )
                 }
@@ -1006,8 +1009,12 @@ fun ComposeEmulatorScreen(
                 }
                 
                 if (showGamePadSettings.value) {
-                    GamePadSettingsDialog(
+                    UnifiedSettingsDialog(
                         console = console,
+                        gameCRC = gameCRC,
+                        gameName = gameName,
+                        romPath = romPath,  // CRITIQUE: Passer romPath pour extraire le gameId correct
+                        coreFilePath = coreFilePath,  // Pass core file path for config file name
                         onDismiss = { 
                             showGamePadSettings.value = false
                             // Force reload settings to ensure persistence
@@ -1018,8 +1025,12 @@ fun ComposeEmulatorScreen(
                                 // Re-apply shader to ensure it takes effect after resume
                                 // Using currentShaderName to trigger the update in Activity
                                 onShaderChanged(currentShaderName)
-                                Log.i("ComposeEmulator", "GamePadSettings closed: Resumed retroView and re-applied shader")
+                                Log.i("ComposeEmulator", "UnifiedSettings closed: Resumed retroView and re-applied shader")
                             }
+                        },
+                        onZapperConfigChanged = {
+                            // Callback pour appliquer la config zapper au runtime
+                            onZapperConfigChanged?.invoke()
                         },
                         context = retroView.context,
                         prefs = prefs,
@@ -1073,7 +1084,39 @@ fun ComposeEmulatorScreen(
                                 }
                             }
                         },
-
+                        coreOptions = coreOptions.toList(),
+                        onCoreOptionsChanged = { modifiedValues ->
+                            android.util.Log.i("ComposeEmulator", "📥 Received ${modifiedValues.size} core option values to apply")
+                            modifiedValues.forEach { (key, value) ->
+                                android.util.Log.d("ComposeEmulator", "  - $key = $value")
+                            }
+                            
+                            // Créer les variables Libretro directement depuis modifiedValues (pas besoin de mettre à jour coreOptions)
+                            val updatedVars = coreOptions.map { opt ->
+                                if (modifiedValues.containsKey(opt.key)) {
+                                    opt.copy(currentValue = modifiedValues[opt.key]!!)
+                                } else {
+                                    opt
+                                }
+                            }
+                            val libretroVars = com.retroplay.CoreVariableManager.toLibretroVariables(updatedVars)
+                            
+                            android.util.Log.i("ComposeEmulator", "🔄 Calling retroView.updateVariables() with ${libretroVars.size} variables")
+                            try {
+                                // Mettre à jour les variables - elles seront appliquées au prochain cycle de rendu
+                                // Note: updateVariables() peut être appelé depuis n'importe quel thread
+                                retroView.updateVariables(*libretroVars)
+                                android.util.Log.i("ComposeEmulator", "✅ Successfully applied core options to runtime")
+                                
+                                // IMPORTANT: Ne PAS mettre à jour coreOptions ici pour éviter de réinitialiser l'UI
+                                // Les valeurs sont appliquées au runtime, mais l'UI reste inchangée
+                                // Cela permet à l'utilisateur de continuer à modifier les valeurs dans l'UI
+                            } catch (e: Exception) {
+                                android.util.Log.e("ComposeEmulator", "❌ Error applying core options: ${e.message}", e)
+                            }
+                            
+                            android.util.Log.i("ComposeEmulator", "✅ Core options applied to runtime (UI unchanged)")
+                        }
                     )
                 }
                 
@@ -1104,9 +1147,9 @@ fun ComposeEmulatorScreen(
                     )
                 }
                 
-                if (showCheatCodes) {
+                if (showCheatsDialog.value) {
                     val cheatManager = remember { com.retroplay.cheat.CheatManager(retroView.context) }
-                    var cheats by remember(showCheatCodes) { 
+                    var cheats by remember(showCheatsDialog.value) { 
                         mutableStateOf(cheatManager.loadCheatsForGame(console, gameName, romPath)) 
                     }
                     var showAddCheatDialog by remember { mutableStateOf(false) }
@@ -1115,7 +1158,7 @@ fun ComposeEmulatorScreen(
                         gameName = gameName,
                         console = console,
                         cheats = cheats,
-                        onDismiss = { showCheatCodes = false },
+                        onDismiss = { showCheatsDialog.value = false },
                         onCheatsChanged = { updatedCheats ->
                             cheats = updatedCheats
                             cheatManager.saveEnabledCheats(console, gameName, updatedCheats)
@@ -1224,6 +1267,7 @@ fun ComposeEmulatorScreen(
                     GameInfoDialog(
                         gameInfo = gameInfo,
                         gameCRC = gameCRC,
+                        configId = configId,
                         console = console,
                         cheatFile = cheatFile,
                         onDismiss = { showGameInfoDialog.value = false },
@@ -1239,6 +1283,16 @@ fun ComposeEmulatorScreen(
                     )
                 }
 
+                // SmartConfigDialog is now integrated in UnifiedSettingsDialog -> Emulation tab
+                // Redirect showSmartConfigDialog to UnifiedSettingsDialog
+                if (showSmartConfigDialog.value) {
+                    showSmartConfigDialog.value = false
+                    showGamePadSettings.value = true
+                    // TODO: Auto-select Emulation tab when opening from SmartConfig
+                }
+                
+                // Keep old SmartConfigDialog code commented for reference (can be removed later)
+                /*
                 if (showSmartConfigDialog.value) {
                     SmartConfigDialog(
                         onDismiss = { showSmartConfigDialog.value = false },
@@ -1251,14 +1305,14 @@ fun ComposeEmulatorScreen(
                         }
                     )
                 }
+                */
 
+                // PerGameConfigDialog is now integrated in UnifiedSettingsDialog -> Emulation tab (toggle Global/Per-Game)
+                // Redirect showPerGameConfigDialog to UnifiedSettingsDialog
                 if (showPerGameConfigDialog.value && gameCRC != null) {
-                    PerGameConfigDialog(
-                        gameCRC = gameCRC,
-                        gameName = gameName ?: "Unknown Game",
-                        onDismiss = { showPerGameConfigDialog.value = false },
-                        onSave = { /* Configuration saved */ }
-                    )
+                    showPerGameConfigDialog.value = false
+                    showGamePadSettings.value = true
+                    // TODO: Auto-select Emulation tab and set Per-Game mode when opening from PerGameConfig
                 }
 
                 if (showDiskSwapperDialog.value) {
@@ -1284,69 +1338,45 @@ fun ComposeEmulatorScreen(
                     )
                 }
                 
+                // Core Options Dialog (restored from previous working version)
                 if (showCoreOptionsDialog.value) {
-                    EmulationSettingsDialog(
-                        gameName = gameName ?: "",
-                        coreOptions = coreOptions,
-                        onApply = { values ->
-                            // 1. Separate Core Variables from Controller Ports
-                            // The dialog returns generic values map, but we know keys match CoreVariable keys
-                            val variableUpdates = mutableMapOf<String, String>()
-
-                            values.forEach { (key, value) ->
-                                // Core Variables
-                                if (coreOptions.any { it.key == key }) {
-                                    variableUpdates[key] = value
+                    CoreOptionsDialog(
+                        gameName = gameName,
+                        coreOptions = coreOptions.toList(),
+                        onApply = { modifiedValues ->
+                            // Apply core options changes to retroView
+                            val updatedVars = coreOptions.map { opt ->
+                                if (modifiedValues.containsKey(opt.key)) {
+                                    opt.copy(currentValue = modifiedValues[opt.key]!!)
+                                } else {
+                                    opt
                                 }
                             }
-
-                            // 2. Apply Core Variables
-                            if (variableUpdates.isNotEmpty()) {
-                                // Update in memory state
-                                val updatedList = coreOptions.map { variable ->
-                                    if (variableUpdates.containsKey(variable.key)) {
-                                        variable.copy(currentValue = variableUpdates[variable.key]!!)
-                                    } else {
-                                        variable
-                                    }
-                                }
-                                coreOptions.clear()
-                                coreOptions.addAll(updatedList)
-
-                                // Save to persistence
-                                // We need coreId. We can get it from currentCoreFilePath or passed props?
-                                // RetroArchEmulatorScreen has 'selectedCoreForRestart' but maybe not the raw ID.
-                                // However, CoreVariableManager needs context.
-                                val currentCoreId = com.retroplay.CoreVariableManager.extractCoreId(
-                                    (retroView.context as? com.retroplay.RetroArchEmulatorActivity)?.getCurrentCorePath() ?: "unknown"
+                            val libretroVars = com.retroplay.CoreVariableManager.toLibretroVariables(updatedVars)
+                            retroView.updateVariables(*libretroVars)
+                            
+                            // Sauvegarder les valeurs modifiées
+                            // Extraire le coreId depuis les variables (première variable qui a un préfixe core)
+                            val coreId = coreOptions.firstOrNull()?.key?.substringBefore("_")?.lowercase()?.let { prefix ->
+                                "${prefix}_libretro_android"
+                            } ?: "unknown"
+                            val gameId = java.io.File(gameName).nameWithoutExtension
+                            if (modifiedValues.isNotEmpty()) {
+                                com.retroplay.CoreVariableManager.saveVariables(
+                                    retroView.context,
+                                    gameId,
+                                    coreId,
+                                    modifiedValues
                                 )
-                                val gameId = java.io.File(romPath).nameWithoutExtension
-                                com.retroplay.CoreVariableManager.saveVariables(retroView.context, gameId, currentCoreId, variableUpdates)
-
-                                // Apply to running core
-                                retroView.updateVariables(*variableUpdates.map { com.swordfish.libretrodroid.Variable(it.key, it.value) }.toTypedArray())
-
-                                android.widget.Toast.makeText(retroView.context, "Core options applied!", android.widget.Toast.LENGTH_SHORT).show()
                             }
-
-                            // 3. Controller Ports
-                            // These are saved to SharedPreferences inside the Dialog, but we must apply them live
-                            // Use PROPER keys with console prefix
-                            val port1Type = prefs.getInt("${console}_port1_device_type", 1)
-                            val port2Type = prefs.getInt("${console}_port2_device_type", 1)
-
-                            try {
-                                retroView.setControllerType(0, port1Type)
-                                retroView.setControllerType(1, port2Type)
-                                android.util.Log.i("ComposeEmulator", "Applied controller types: Port1=$port1Type, Port2=$port2Type")
-                            } catch (e: Exception) {
-                                android.util.Log.e("ComposeEmulator", "Error applying controller types: ${e.message}")
-                            }
+                            
+                            // Update local list
+                            coreOptions.clear()
+                            coreOptions.addAll(updatedVars)
+                            
+                            android.util.Log.i("ComposeEmulator", "Applied ${modifiedValues.size} core option changes")
                         },
-                        onDismiss = { showCoreOptionsDialog.value = false },
-                        context = retroView.context,
-                        prefs = prefs,
-                        console = console
+                        onDismiss = { showCoreOptionsDialog.value = false }
                     )
                 }
         }

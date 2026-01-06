@@ -35,11 +35,23 @@
 void Environment::initialize(
     const std::string &requiredSystemDirectory,
     const std::string &requiredSavesDirectory,
+    const std::string &requiredCacheDirectory,
     retro_hw_get_current_framebuffer_t required_callback_get_current_framebuffer
 ) {
     callback_get_current_framebuffer = required_callback_get_current_framebuffer;
     systemDirectory = requiredSystemDirectory;
     savesDirectory = requiredSavesDirectory;
+    cacheDirectory = requiredCacheDirectory;
+
+    LOGI("Environment initialized with cacheDir: %s", cacheDirectory.c_str());
+
+    setenv("HOME", cacheDirectory.c_str(), 1);
+    setenv("TMPDIR", cacheDirectory.c_str(), 1);
+    setenv("XDG_CACHE_HOME", cacheDirectory.c_str(), 1);
+    setenv("XDG_RUNTIME_DIR", cacheDirectory.c_str(), 1);
+    setenv("ANDROID_CACHE", cacheDirectory.c_str(), 1);
+
+    LOGD("Environment variables HOME, TMPDIR, XDG_CACHE_HOME, XDG_RUNTIME_DIR, ANDROID_CACHE set to %s", cacheDirectory.c_str());
 }
 
 void Environment::deinitialize() {
@@ -51,6 +63,7 @@ void Environment::deinitialize() {
 
     savesDirectory = std::string();
     systemDirectory = std::string();
+    cacheDirectory = std::string();
     language = RETRO_LANGUAGE_ENGLISH;
 
     pixelFormat = RETRO_PIXEL_FORMAT_RGB565;
@@ -69,6 +82,7 @@ void Environment::deinitialize() {
 }
 
 void Environment::updateVariable(const std::string& key, const std::string& value) {
+    LOGD("Environment::updateVariable called for key: %s, value: %s", key.c_str(), value.c_str());
     auto current = variables[key];
     current.key = key;
 
@@ -76,11 +90,16 @@ void Environment::updateVariable(const std::string& key, const std::string& valu
         current.value = value;
         variables[key] = current;
         dirtyVariables = true;
+        LOGD("Environment::updateVariable stored new value: %s", value.c_str());
+    } else {
+        LOGD("Environment::updateVariable value unchanged: %s", value.c_str());
     }
 }
 
 bool Environment::environment_handle_set_variables(const struct retro_variable* received) {
     unsigned count = 0;
+
+
     while (received[count].key != nullptr) {
         LOGD("Received variable %s: %s", received[count].key, received[count].value);
 
@@ -96,8 +115,13 @@ bool Environment::environment_handle_set_variables(const struct retro_variable* 
         currentVariable.key = key;
         currentVariable.description = description;
 
+        LOGD("handle_set_variables: Key=%s, ExistingValue='%s', DefaultValue='%s'", key.c_str(), currentVariable.value.c_str(), value.c_str());
+
         if (currentVariable.value.empty()) {
+            LOGD("handle_set_variables: Existing value empty, using default");
             currentVariable.value = value;
+        } else {
+             LOGD("handle_set_variables: Keeping existing value");
         }
 
         variables[key] = currentVariable;
@@ -111,6 +135,9 @@ bool Environment::environment_handle_set_variables(const struct retro_variable* 
 
 bool Environment::environment_handle_get_variable(struct retro_variable* requested) {
     LOGD("Variable requested %s", requested->key);
+
+
+
     auto foundVariable = variables.find(std::string(requested->key));
 
     if (foundVariable == variables.end()) {
@@ -183,20 +210,36 @@ void Environment::callback_retro_log(enum retro_log_level level, const char *fmt
     va_list argptr;
     va_start(argptr, fmt);
 
+    // Format message to buffer first to check for content and avoid multiple vsnprintf calls affecting va_list
+    char buffer[4096];
+    vsnprintf(buffer, sizeof(buffer), fmt, argptr);
+    va_end(argptr);
+
+    // Enhanced logging for BIOS issues
+    bool isBiosLog = (strstr(buffer, "bios") != nullptr) || 
+                     (strstr(buffer, "BIOS") != nullptr) || 
+                     (strstr(buffer, "flash") != nullptr) || 
+                     (strstr(buffer, "boot") != nullptr) ||
+                     (strstr(buffer, "naomi") != nullptr);
+
+    if (isBiosLog) {
+         __android_log_print(ANDROID_LOG_ERROR, "LibretroBiosLog", "%s", buffer);
+    }
+
     switch (level) {
 #if VERBOSE_LOGGING
         case RETRO_LOG_DEBUG:
-            __android_log_vprint(ANDROID_LOG_DEBUG, MODULE_NAME_CORE, fmt, argptr);
+            __android_log_print(ANDROID_LOG_DEBUG, MODULE_NAME_CORE, "%s", buffer);
             break;
 #endif
         case RETRO_LOG_INFO:
-            __android_log_vprint(ANDROID_LOG_INFO, MODULE_NAME_CORE, fmt, argptr);
+            __android_log_print(ANDROID_LOG_INFO, MODULE_NAME_CORE, "%s", buffer);
             break;
         case RETRO_LOG_WARN:
-            __android_log_vprint(ANDROID_LOG_WARN, MODULE_NAME_CORE, fmt, argptr);
+            __android_log_print(ANDROID_LOG_WARN, MODULE_NAME_CORE, "%s", buffer);
             break;
         case RETRO_LOG_ERROR:
-            __android_log_vprint(ANDROID_LOG_ERROR, MODULE_NAME_CORE, fmt, argptr);
+            __android_log_print(ANDROID_LOG_ERROR, MODULE_NAME_CORE, "%s", buffer);
             break;
         default:
             // Log nothing in here.
@@ -304,6 +347,11 @@ bool Environment::handle_callback_environment(unsigned cmd, void *data) {
             LOGD("Called RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY");
             *(const char**) data = systemDirectory.c_str();
             return !systemDirectory.empty();
+
+        case RETRO_ENVIRONMENT_GET_CORE_ASSETS_DIRECTORY:
+            LOGD("Called RETRO_ENVIRONMENT_GET_CORE_ASSETS_DIRECTORY");
+            *(const char**) data = cacheDirectory.c_str();
+            return !cacheDirectory.empty();
 
         case RETRO_ENVIRONMENT_SET_ROTATION: {
             LOGD("Called RETRO_ENVIRONMENT_SET_ROTATION");

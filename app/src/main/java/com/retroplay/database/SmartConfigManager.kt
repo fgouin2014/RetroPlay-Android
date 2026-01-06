@@ -82,7 +82,7 @@ object SmartConfigManager {
             "genesis", "sms", "gg" -> 70      // ~70 KB
             "psx", "ps1", "playstation" -> 500 // ~500 KB
             "n64" -> 800                       // ~800 KB
-            "saturn", "dc", "dreamcast" -> 1000 // ~1 MB
+            "saturn" -> 1000 // ~1 MB
             "psp" -> 1200                      // ~1.2 MB
             else -> 200                        // Conservative default
         }
@@ -209,7 +209,7 @@ object SmartConfigManager {
             // Heavy consoles: large savestates (1-4 MB)
             "psx", "ps1", "playstation" -> 30  // ~2 captures/sec
             "n64" -> 45                         // ~1.3 captures/sec
-            "saturn", "dc", "dreamcast" -> 60   // ~1 capture/sec
+            "saturn" -> 60   // ~1 capture/sec
             "psp" -> 60                         // ~1 capture/sec
             
             // Default: conservative for unknown consoles

@@ -414,32 +414,9 @@ fun GamePadAdvancedSettings(
         )
     }
     
-    // Lightgun Port
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text("Lightgun Port", color = Color.White, fontSize = 14.sp)
-            Text("Port $lightgunPort", color = Color(0xFF00BCD4), fontSize = 14.sp)
-        }
-        Slider(
-            value = lightgunPort.toFloat(),
-            onValueChange = { onLightgunPortChanged(it.toInt()) },
-            valueRange = 0f..3f,
-            steps = 2,
-            colors = SliderDefaults.colors(
-                thumbColor = Color(0xFF00BCD4),
-                activeTrackColor = Color(0xFF00BCD4),
-                inactiveTrackColor = Color(0xFF444444)
-            )
-        )
-        Text(
-            "Controller port for lightgun (0-3)",
-            color = Color(0xFF888888),
-            fontSize = 11.sp
-        )
-    }
+    // Lightgun Port - REMOVED: Port is configured in Input tab (Controller Ports section)
+    // The port is already set via controller_port_{console}_port{N} in SharedPreferences
+    // This was redundant with the Input tab configuration
     
     // Trigger Delay
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {

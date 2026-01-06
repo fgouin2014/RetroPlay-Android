@@ -15,9 +15,10 @@ import java.util.List;
 public class LoadCoresUseCase {
     private static final String TAG = "LoadCoresUseCase";
     private static final String GAMELIBRARY_DIR = "/storage/emulated/0/GameLibrary-Data";
-    
+
     /**
      * Charge les cores disponibles depuis cores.json
+     * 
      * @param callback Callback appelé avec la liste des cores chargés
      */
     public void loadAvailableCores(LoadCoresCallback callback) {
@@ -30,19 +31,32 @@ public class LoadCoresUseCase {
                     fis.read(buffer);
                     fis.close();
                     String json = new String(buffer, "UTF-8");
-                    
+
                     JSONArray coresArray = new JSONArray(json);
                     List<String> tempCores = new ArrayList<>();
-                    
+
                     // Ajouter "auto" en premier
                     tempCores.add("auto");
-                    
+
                     for (int i = 0; i < coresArray.length(); i++) {
                         JSONObject core = coresArray.getJSONObject(i);
                         String coreName = core.getString("name");
-                        tempCores.add(coreName);
+                        if (!tempCores.contains(coreName)) {
+                            tempCores.add(coreName);
+                        }
                     }
-                    
+
+                    // Ensure critical cores are present even if missing from JSON
+                    List<String> criticalCores = java.util.Arrays.asList(
+                            "fbneo", "fceumm", "snes9x", "parallel_n64",
+                            "pcsx_rearmed", "genesis_plus_gx", "ppsspp");
+
+                    for (String core : criticalCores) {
+                        if (!tempCores.contains(core)) {
+                            tempCores.add(core);
+                        }
+                    }
+
                     callback.onCoresLoaded(tempCores);
                     Log.i(TAG, "Loaded " + tempCores.size() + " available cores from cores.json");
                 } else {
@@ -55,7 +69,7 @@ public class LoadCoresUseCase {
             }
         }).start();
     }
-    
+
     /**
      * Retourne la liste des cores de fallback
      */
@@ -69,7 +83,7 @@ public class LoadCoresUseCase {
         cores.add("mame2003");
         cores.add("fbalpha2012_cps1");
         cores.add("fbalpha2012_cps2");
-        cores.add("flycast");
+
         // Console cores
         cores.add("fceumm");
         cores.add("nestopia");
@@ -87,7 +101,7 @@ public class LoadCoresUseCase {
         cores.add("picodrive");
         return cores;
     }
-    
+
     /**
      * Interface pour le callback de chargement des cores
      */

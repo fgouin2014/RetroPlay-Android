@@ -225,28 +225,47 @@ class CoreManagerActivity : AppCompatActivity() {
         
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val core = cores[position]
-            val isInstalled = CoreDownloader.isCoreInstalled(this@CoreManagerActivity, core)
+            // Note: isCoreInstalled checks BOTH, so we check existence in filesDir manually for "Downloaded" status
+            val coresDir = java.io.File(CoreDownloader.getCoresDirectory(this@CoreManagerActivity))
+            val downloadedFile = java.io.File(coresDir, core.fileName)
+            val isTrulyDownloaded = downloadedFile.exists()
+            
+            val isEmbedded = CoreDownloader.isCoreEmbedded(this@CoreManagerActivity, core)
             
             holder.coreName.text = core.displayName
             holder.coreId.text = core.id
             holder.coreFileName.text = core.fileName
             
-            if (isInstalled) {
+            if (isTrulyDownloaded) {
+                // Core téléchargé (prioritaire)
                 holder.statusBadge.visibility = View.VISIBLE
-                holder.statusBadge.text = "INSTALLED"
+                holder.statusBadge.text = "UPDATED" // "Mise à jour"
                 holder.statusBadge.setBackgroundColor(0xFF4CAF50.toInt()) // Vert
                 holder.downloadButton.text = "DELETE"
                 holder.downloadButton.setBackgroundColor(0xFFF44336.toInt()) // Rouge
+                holder.downloadButton.isEnabled = true
+                
+                holder.downloadButton.setOnClickListener {
+                    deleteCore(core, position)
+                }
+            } else if (isEmbedded) {
+                // Core système (intégré)
+                holder.statusBadge.visibility = View.VISIBLE
+                holder.statusBadge.text = "SYSTEM"
+                holder.statusBadge.setBackgroundColor(0xFFF44336.toInt()) // Rouge (Demandé par user)
+                holder.downloadButton.text = "UPDATE"
+                holder.downloadButton.setBackgroundColor(0xFF4CAF50.toInt()) // Vert (Demandé par user)
+                
+                holder.downloadButton.setOnClickListener {
+                     downloadCore(core, position)
+                }
             } else {
+                // Ni l'un ni l'autre
                 holder.statusBadge.visibility = View.GONE
                 holder.downloadButton.text = "DOWNLOAD"
-                holder.downloadButton.setBackgroundColor(0xFF2196F3.toInt()) // Bleu
-            }
-            
-            holder.downloadButton.setOnClickListener {
-                if (isInstalled) {
-                    deleteCore(core, position)
-                } else {
+                holder.downloadButton.setBackgroundColor(0xFF4CAF50.toInt()) // Vert (Uniformisation)
+                
+                holder.downloadButton.setOnClickListener {
                     downloadCore(core, position)
                 }
             }

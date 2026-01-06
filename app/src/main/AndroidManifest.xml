@@ -43,7 +43,9 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.KITT"
         android:usesCleartextTraffic="true"
-        android:extractNativeLibs="true">
+        android:extractNativeLibs="true"
+        android:allowNativeHeapPointerTagging="false"
+        android:largeHeap="true">
         
                 <!-- SplashActivity (LAUNCHER) - Gère permissions et scan avant MainActivity -->
                 <activity

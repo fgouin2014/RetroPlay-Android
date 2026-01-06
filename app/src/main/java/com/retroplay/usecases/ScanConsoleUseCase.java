@@ -1,6 +1,7 @@
 package com.retroplay.usecases;
 
 import android.util.Log;
+import com.retroplay.helpers.GameLibraryPaths;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -18,7 +19,6 @@ import java.util.List;
  */
 public class ScanConsoleUseCase {
     private static final String TAG = "ScanConsoleUseCase";
-    private static final String GAMELIBRARY_DIR = "/storage/emulated/0/GameLibrary-Data";
     
     /**
      * Résultat d'un scan de console
@@ -60,7 +60,7 @@ public class ScanConsoleUseCase {
      */
     public boolean scanConsoleSilently(String consoleId, String extensionsStr) {
         try {
-            File consoleDir = new File(GAMELIBRARY_DIR + "/" + consoleId);
+            File consoleDir = new File(GameLibraryPaths.getRomsDirForConsole(consoleId));
             if (!consoleDir.exists() || !consoleDir.isDirectory()) {
                 return false;
             }
@@ -157,7 +157,7 @@ public class ScanConsoleUseCase {
         result.consoleName = consoleName;
         
         try {
-            File consoleDir = new File(GAMELIBRARY_DIR + "/" + consoleId);
+            File consoleDir = new File(GameLibraryPaths.getRomsDirForConsole(consoleId));
             if (!consoleDir.exists() || !consoleDir.isDirectory()) {
                 result.success = false;
                 return result;

@@ -171,8 +171,8 @@ public class Game implements java.io.Serializable {
         // Nettoyer le chemin (enlever "./" si présent)
         String cleanPath = path.startsWith("./") ? path.substring(2) : path;
         
-        // Construire le chemin local complet
-        String localPath = "/storage/emulated/0/GameLibrary-Data/" + consoleId + "/" + cleanPath;
+        // Construire le chemin local complet (ROMs dans /roms/{console}/)
+        String localPath = "/storage/emulated/0/GameLibrary-Data/roms/" + consoleId + "/" + cleanPath;
         
         // Vérifier que le fichier existe réellement avec ce chemin
         // Si le fichier n'existe pas, essayer de trouver le fichier réel en listant le répertoire
@@ -180,7 +180,7 @@ public class Game implements java.io.Serializable {
         if (!file.exists()) {
             // Le fichier n'existe pas avec ce chemin exact
             // Essayer de trouver le fichier en listant le répertoire (pour gérer les caractères spéciaux)
-            java.io.File consoleDir = new java.io.File("/storage/emulated/0/GameLibrary-Data/" + consoleId);
+            java.io.File consoleDir = new java.io.File("/storage/emulated/0/GameLibrary-Data/roms/" + consoleId);
             if (consoleDir.exists() && consoleDir.isDirectory()) {
                 // Extraire le nom de fichier depuis cleanPath
                 String fileName = cleanPath;
@@ -250,9 +250,9 @@ public class Game implements java.io.Serializable {
     public void initializePaths(ObbManager obbManager) {
         String baseName = getBaseNameFromPath(path);
         // Utiliser consoleId au lieu de "nes" hardcodé
-        // Chemins locaux pour les images
-        this.imagePath = "/storage/emulated/0/GameLibrary-Data/" + consoleId + "/media/box2d/" + baseName + ".png";
-        this.screenshotPath = "/storage/emulated/0/GameLibrary-Data/" + consoleId + "/media/screenshot/" + baseName + ".png";
+        // Chemins locaux pour les images (médias dans roms/{console}/media/)
+        this.imagePath = "/storage/emulated/0/GameLibrary-Data/roms/" + consoleId + "/media/box2d/" + baseName + ".png";
+        this.screenshotPath = "/storage/emulated/0/GameLibrary-Data/roms/" + consoleId + "/media/screenshot/" + baseName + ".png";
         
         // Debug: afficher les chemins générés
         System.out.println("Game: " + name);

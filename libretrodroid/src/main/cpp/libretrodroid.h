@@ -80,6 +80,7 @@ public:
         const std::string& soFilePath,
         const std::string& systemDir,
         const std::string& savesDir,
+        const std::string& cacheDir,
         std::vector<Variable> variables,
         const ShaderManager::Config& shaderConfig,
         float refreshRate,

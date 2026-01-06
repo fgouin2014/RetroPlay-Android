@@ -66,6 +66,7 @@ public:
     void initialize(
         const std::string &requiredSystemDirectory,
         const std::string &requiredSavesDirectory,
+        const std::string &requiredCacheDirectory,
         retro_hw_get_current_framebuffer_t required_callback_get_current_framebuffer
     );
 
@@ -127,6 +128,7 @@ private:
 
     std::string savesDirectory;
     std::string systemDirectory;
+    std::string cacheDirectory;
     retro_hw_get_current_framebuffer_t callback_get_current_framebuffer = nullptr;
     unsigned language = RETRO_LANGUAGE_ENGLISH;
     bool useVirtualFileSystem = false;

@@ -29,7 +29,7 @@ public class LibretroDroid {
     public static final int MOTION_SOURCE_ANALOG_LEFT = 1;
     public static final int MOTION_SOURCE_ANALOG_RIGHT = 2;
     public static final int MOTION_SOURCE_POINTER = 3;
-    
+
     // Mouse button constants (for Zapper/Lightgun)
     public static final int MOUSE_BUTTON_LEFT = 1;
     public static final int MOUSE_BUTTON_RIGHT = 2;
@@ -84,30 +84,35 @@ public class LibretroDroid {
     public static final int ERROR_GENERIC = -1;
 
     public static native void create(
-        int GLESVersion,
-        String coreFilePath,
-        String systemDir,
-        String savesDir,
-        Variable[] variables,
-        GLRetroShader shaderConfig,
-        float refreshRate,
-        boolean preferLowLatencyAudio,
-        boolean enableVirtualFileSystem,
-        boolean enableMicrophone,
-        boolean skipDuplicateFrames,
-        boolean enableAmbientMode,
-        String language
-    );
+            int GLESVersion,
+            String coreFilePath,
+            String systemDir,
+            String savesDir,
+            String cacheDir,
+            Variable[] variables,
+            GLRetroShader shaderConfig,
+            float refreshRate,
+            boolean preferLowLatencyAudio,
+            boolean enableVirtualFileSystem,
+            boolean enableMicrophone,
+            boolean skipDuplicateFrames,
+            boolean enableAmbientMode,
+            String language);
 
     public static native void loadGameFromPath(String gameFilePath);
+
     public static native void loadGameFromBytes(byte[] gameFileBytes);
+
     public static native void loadGameFromVirtualFiles(List<DetachedVirtualFile> virtualFiles);
+
     public static native void resume();
 
     public static native void onSurfaceCreated();
+
     public static native void onSurfaceChanged(int width, int height);
 
     public static native void pause();
+
     public static native void destroy();
 
     public static native void step(GLRetroView retroView);
@@ -115,83 +120,103 @@ public class LibretroDroid {
     public static native void reset();
 
     public static native void setRumbleEnabled(boolean enabled);
+
     public static native void setFrameSpeed(int speed);
+
     public static native void setAudioEnabled(boolean enabled);
+
     public static native void setShaderConfig(GLRetroShader shader);
+
     public static native void setViewport(float x, float y, float width, float height);
 
     public static native byte[] serializeState();
+
     public static native boolean unserializeState(byte[] state);
 
     public static native void setCheat(int index, boolean enable, String code);
+
     public static native void resetCheat();
 
     public static native byte[] serializeSRAM();
+
     public static native boolean unserializeSRAM(byte[] sram);
 
     public static native void updateVariable(Variable variable);
+
     public static native Variable[] getVariables();
 
     public static native int availableDisks();
+
     public static native int currentDisk();
+
     public static native void changeDisk(int index);
 
     public static native void onMotionEvent(int port, int motionSource, float xAxis, float yAxis);
+
     public static native void onTouchEvent(float xAxis, float yAxis);
-    
+
     /**
      * Send mouse button event to the core (for Zapper/Lightgun)
-     * @param port Controller port (0-15)
-     * @param button Mouse button (1 = left, 2 = right, 3 = middle)
+     * 
+     * @param port    Controller port (0-15)
+     * @param button  Mouse button (1 = left, 2 = right, 3 = middle)
      * @param pressed 1 if pressed, 0 if released
      */
     public static native void onMouseButton(int port, int button, int pressed);
 
     public static native void onKeyEvent(int port, int action, int keyCode);
-    
+
     /**
      * Show Inputs PHYSICAL: Vérifier si un bouton du gamepad physique est pressé
-     * @param port Port du gamepad (0-3)
+     * 
+     * @param port       Port du gamepad (0-3)
      * @param retroPadId RetroPad ID (RETRO_DEVICE_ID_JOYPAD_*)
      * @return true si le bouton est pressé sur le gamepad physique
      */
     public static native boolean isPhysicalButtonPressed(int port, int retroPadId);
-    
+
     /**
      * Set autoconfig mapping: RetroPad ID → AKEYCODE (from .cfg file)
      * Compatible RetroArch input_config_set_autoconfig_binds()
-     * @param port Controller port (0-3)
-     * @param retroPadId RETRO_DEVICE_ID_JOYPAD_* (e.g., RETRO_DEVICE_ID_JOYPAD_A = 8)
-     * @param keyCode Android AKEYCODE (e.g., AKEYCODE_BUTTON_A = 96)
+     * 
+     * @param port       Controller port (0-3)
+     * @param retroPadId RETRO_DEVICE_ID_JOYPAD_* (e.g., RETRO_DEVICE_ID_JOYPAD_A =
+     *                   8)
+     * @param keyCode    Android AKEYCODE (e.g., AKEYCODE_BUTTON_A = 96)
      */
     public static native void setAutoconfigMapping(int port, int retroPadId, int keyCode);
-    
+
     /**
      * Clear all autoconfig mappings for a port (reset to defaults)
+     * 
      * @param port Controller port (0-3)
      */
     public static native void clearAutoconfigMappings(int port);
 
     public static native void refreshAspectRatio();
-    
+
     /**
      * Get the aspect ratio of the currently loaded game
+     * 
      * @return Aspect ratio (width/height), e.g. 1.33 for 4:3
      */
     public static native float getAspectRatio();
-    
+
     /**
      * Get the game render width (from core geometry)
+     * 
      * @return Width in pixels, e.g. 256 for NES
      */
     public static native int getGameGeometryWidth();
-    
+
     /**
      * Get the game render height (from core geometry)
+     * 
      * @return Height in pixels, e.g. 240 for NES
      */
     public static native int getGameGeometryHeight();
 
     public static native Controller[][] getControllers();
+
     public static native void setControllerType(int port, int type);
 }

@@ -316,8 +316,8 @@ object GamePadLayoutManager {
         
         val advancedSettings = advancedSettingsState.value
         
-        // Choisir le layout approprié selon orientation
-        val layoutName = if (overlayPreference.autoRotate) {
+        // Choisir le layout par défaut selon l'orientation
+        val defaultLayoutName = if (overlayPreference.autoRotate) {
             if (isLandscape) overlayPreference.landscapeLayout else overlayPreference.portraitLayout
         } else {
             overlayPreference.landscapeLayout
@@ -336,13 +336,21 @@ object GamePadLayoutManager {
             return
         }
         
-        // Obtenir le layout spécifique
-        val layout = overlayConfig.layouts[layoutName]
+        // CRITIQUE: Smart Layout Resolution
+        // Si le layout demandé n'existe pas (ex: "portrait-A"), chercher le meilleur layout disponible
+        // au lieu de planter ou de ne rien afficher.
+        val resolvedLayoutName = resolveLayout(defaultLayoutName, overlayConfig.layouts.keys, isLandscape)
+        val layout = overlayConfig.layouts[resolvedLayoutName]
+        
         if (layout == null) {
             Box(modifier = modifier) {
-                Log.e(TAG, "Layout not found: $layoutName in ${overlayPreference.overlayName}")
+                Log.e(TAG, "Layout not found: $defaultLayoutName (resolved: $resolvedLayoutName) in ${overlayPreference.overlayName}")
             }
             return
+        }
+        
+        if (resolvedLayoutName != defaultLayoutName) {
+            Log.w(TAG, "⚠️ Layout fallback: Requested '$defaultLayoutName' -> Resolved '$resolvedLayoutName'")
         }
         
         // Afficher l'overlay avec TOUTES les options avancées
@@ -385,6 +393,52 @@ object GamePadLayoutManager {
             aspectAdjust = advancedSettings.aspectAdjust,
             modifier = modifier
         )
+    }
+    /**
+     * Résolution intelligente du layout
+     * Cherche le meilleur layout disponible si le layout demandé n'existe pas
+     */
+    private fun resolveLayout(
+        targetName: String,
+        availableLayouts: Set<String>,
+        isLandscape: Boolean
+    ): String {
+        // 1. Essai exact
+        if (availableLayouts.contains(targetName)) {
+            return targetName
+        }
+        
+        // 2. Recherche par orientation (smart fallback)
+        val keywords = if (isLandscape) {
+            listOf("landscape", "horizontal")
+        } else {
+            listOf("portrait", "vertical")
+        }
+        
+        // Chercher premier layout contenant un mot clé d'orientation
+        // Ex: "portrait-A" manquant -> trouver "portrait" ou "gba-portrait"
+        for (layout in availableLayouts) {
+            if (keywords.any { layout.contains(it, ignoreCase = true) }) {
+                return layout
+            }
+        }
+        
+        // 3. Fallback inverse (ex: on est en landscape mais que portrait dispo)
+        // Mieux vaut afficher un layout mal orienté que rien du tout
+        val inverseKeywords = if (isLandscape) {
+            listOf("portrait", "vertical")
+        } else {
+            listOf("landscape", "horizontal")
+        }
+        
+        for (layout in availableLayouts) {
+            if (inverseKeywords.any { layout.contains(it, ignoreCase = true) }) {
+                return layout
+            }
+        }
+
+        // 4. Dernier recours: le premier disponible
+        return availableLayouts.firstOrNull() ?: targetName
     }
 }
 

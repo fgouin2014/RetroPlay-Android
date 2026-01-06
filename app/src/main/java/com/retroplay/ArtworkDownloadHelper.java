@@ -17,7 +17,8 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Utilitaire pour télécharger et stocker les artworks Libretro dans GameLibrary-Data.
+ * Utilitaire pour télécharger et stocker les artworks Libretro dans
+ * GameLibrary-Data.
  */
 public final class ArtworkDownloadHelper {
     private static final String TAG = "ArtworkDownload";
@@ -108,7 +109,8 @@ public final class ArtworkDownloadHelper {
         }
     }
 
-    public static DownloadResult downloadArtwork(String consoleId, String baseName, boolean forceReplace, boolean skipIfExists) throws IOException {
+    public static DownloadResult downloadArtwork(String consoleId, String baseName, boolean forceReplace,
+            boolean skipIfExists) throws IOException {
         DownloadResult result = new DownloadResult();
 
         if (consoleId == null || baseName == null) {
@@ -128,12 +130,16 @@ public final class ArtworkDownloadHelper {
 
         // Boxart handling
         try {
+            // Utiliser GameLibraryPaths pour obtenir le bon chemin
+            // .../roms/{console}/media/box2d
+            String box2dDir = com.retroplay.helpers.GameLibraryPaths.getBox2dDirForConsole(consoleDir);
+
             handleArtworkDownload(result,
                     playlist,
                     consoleDir,
                     sanitizedBaseName,
                     "Named_Boxarts",
-                    new File(GAME_LIBRARY_BASE_DIR + "/" + consoleDir + "/media/box2d/" + fileName),
+                    new File(box2dDir + "/" + fileName),
                     new File(DOWNLOAD_BASE_DIR + "/" + consoleDir + "/media/box2d/" + fileName),
                     forceReplace,
                     skipIfExists);
@@ -153,10 +159,12 @@ public final class ArtworkDownloadHelper {
 
         if (!shouldSkipScreenshot || forceReplace) {
             try {
-                File downloadScreenshot = new File(DOWNLOAD_BASE_DIR + "/" + consoleDir + "/media/screenshots/" + fileName);
+                File downloadScreenshot = new File(
+                        DOWNLOAD_BASE_DIR + "/" + consoleDir + "/media/screenshots/" + fileName);
                 File mediaScreenshot = determineScreenshotTarget(consoleDir, fileName);
 
-                boolean downloaded = fetchArtwork(playlist, sanitizedBaseName, "Named_Snaps", downloadScreenshot, forceReplace);
+                boolean downloaded = fetchArtwork(playlist, sanitizedBaseName, "Named_Snaps", downloadScreenshot,
+                        forceReplace);
                 if (downloaded) {
                     result.screenshotDownloaded = true;
                     copyToMedia(downloadScreenshot, mediaScreenshot, forceReplace);
@@ -183,14 +191,14 @@ public final class ArtworkDownloadHelper {
     }
 
     private static void handleArtworkDownload(DownloadResult result,
-                                              String playlist,
-                                              String consoleDir,
-                                              String baseName,
-                                              String remoteFolder,
-                                              File mediaFile,
-                                              File downloadFile,
-                                              boolean forceReplace,
-                                              boolean skipIfExists) throws IOException {
+            String playlist,
+            String consoleDir,
+            String baseName,
+            String remoteFolder,
+            File mediaFile,
+            File downloadFile,
+            boolean forceReplace,
+            boolean skipIfExists) throws IOException {
         String fileName = baseName + ".png";
         boolean mediaExists = mediaFile.exists();
         boolean downloadExists = downloadFile.exists();
@@ -210,27 +218,27 @@ public final class ArtworkDownloadHelper {
     }
 
     private static boolean fetchArtwork(String playlist,
-                                        String baseName,
-                                        String remoteFolder,
-                                        File destination,
-                                        boolean forceReplace) throws IOException {
+            String baseName,
+            String remoteFolder,
+            File destination,
+            boolean forceReplace) throws IOException {
         String fileName = baseName + ".png";
         String encodedName = encodeFileName(fileName);
-        
+
         // Essayer d'abord avec l'URL principale
         String url = LIBRETRO_THUMB_BASE_URL + playlist + "/" + remoteFolder + "/" + encodedName;
         boolean success = tryDownloadArtwork(url, destination, forceReplace);
-        
+
         // Si échec, essayer l'URL alternative
         if (!success) {
             Log.d(TAG, "Primary URL failed, trying alternative: " + LIBRETRO_THUMB_ALT_URL);
             String altUrl = LIBRETRO_THUMB_ALT_URL + playlist + "/" + remoteFolder + "/" + encodedName;
             success = tryDownloadArtwork(altUrl, destination, forceReplace);
         }
-        
+
         return success;
     }
-    
+
     private static boolean tryDownloadArtwork(String url, File destination, boolean forceReplace) throws IOException {
         if (destination.exists()) {
             if (!forceReplace) {
@@ -258,7 +266,7 @@ public final class ArtworkDownloadHelper {
             }
 
             try (InputStream input = connection.getInputStream();
-                 OutputStream output = new FileOutputStream(destination)) {
+                    OutputStream output = new FileOutputStream(destination)) {
                 byte[] buffer = new byte[65536];
                 int bytesRead;
                 while ((bytesRead = input.read(buffer)) != -1) {
@@ -292,7 +300,7 @@ public final class ArtworkDownloadHelper {
         target.getParentFile().mkdirs();
 
         try (FileInputStream fis = new FileInputStream(source);
-             FileOutputStream fos = new FileOutputStream(target)) {
+                FileOutputStream fos = new FileOutputStream(target)) {
             byte[] buffer = new byte[65536];
             int bytesRead;
             while ((bytesRead = fis.read(buffer)) != -1) {
@@ -302,13 +310,10 @@ public final class ArtworkDownloadHelper {
     }
 
     private static boolean screenshotExistsInMedia(String consoleDir, String baseName) {
-        for (String dir : SCREENSHOT_DIRS) {
-            File file = new File(GAME_LIBRARY_BASE_DIR + "/" + consoleDir + "/" + dir + baseName + ".png");
-            if (file.exists()) {
-                return true;
-            }
-        }
-        return false;
+        // use standard path
+        String screenshotDir = com.retroplay.helpers.GameLibraryPaths.getScreenshotsDirForConsole(consoleDir);
+        File file = new File(screenshotDir + "/" + baseName + ".png");
+        return file.exists();
     }
 
     private static boolean screenshotExistsInDownload(String consoleDir, String baseName) {
@@ -317,13 +322,8 @@ public final class ArtworkDownloadHelper {
     }
 
     private static File determineScreenshotTarget(String consoleDir, String fileName) {
-        for (String dir : SCREENSHOT_DIRS) {
-            File folder = new File(GAME_LIBRARY_BASE_DIR + "/" + consoleDir + "/" + dir);
-            if (folder.exists() && folder.isDirectory()) {
-                return new File(folder, fileName);
-            }
-        }
-        return new File(GAME_LIBRARY_BASE_DIR + "/" + consoleDir + "/media/screenshots/" + fileName);
+        // Always use standard path for new downloads
+        return new File(com.retroplay.helpers.GameLibraryPaths.getScreenshotsDirForConsole(consoleDir), fileName);
     }
 
     private static String encodeFileName(String fileName) throws IOException {
@@ -333,7 +333,8 @@ public final class ArtworkDownloadHelper {
     }
 
     public static String getPlaylistName(String consoleId) {
-        if (consoleId == null) return null;
+        if (consoleId == null)
+            return null;
         String sanitized = consoleId.toLowerCase(Locale.US);
         int slashIndex = sanitized.indexOf('/');
         if (slashIndex >= 0) {

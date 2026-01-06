@@ -13,8 +13,10 @@ android {
         applicationId "com.retroplay"
         minSdk 24
         targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
+        
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
             compileOptions {
@@ -118,4 +120,16 @@ dependencies {
     // Dépendances supplémentaires pour lemuroid-touchinput
     implementation 'io.github.swordfish90:padkit:1.0.0-beta1'
     implementation 'com.fredporciuncula:flow-preferences:1.8.0'
+    
+    // === TESTS UNITAIRES ===
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:5.11.0'
+    testImplementation 'org.mockito:mockito-inline:5.2.0'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
+    testImplementation 'org.mockito.kotlin:mockito-kotlin:5.2.1'
+    
+    // === TESTS ANDROID ===
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4:1.5.4'
 }
